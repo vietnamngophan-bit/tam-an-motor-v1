@@ -21,6 +21,12 @@ const DEFAULT_SITE = {
   facebook_url: '',
   tiktok_url: '',
   youtube_url: '',
+  floating_primary_action: 'call',
+  floating_show_zalo: true,
+  floating_show_messenger: true,
+  floating_show_facebook: false,
+  floating_show_tiktok: false,
+  floating_show_chat: true,
   address: 'Cổng phụ KCN Nomura, Hải Phòng',
   map_embed_url: 'https://www.google.com/maps?q=C%E1%BB%95ng%20ph%E1%BB%A5%20KCN%20Nomura%20H%E1%BA%A3i%20Ph%C3%B2ng&output=embed',
   business_hours: 'Bán hàng: 08:00 – 21:00\nDịch vụ: 08:00 – 17:30',
@@ -163,8 +169,9 @@ async function productPayload(req) {
   const name = safeStr(b.name,160); if (!name) throw new Error('Tên xe là bắt buộc.');
   const category = CATEGORIES.some(([id])=>id===b.category) ? b.category : 'motor_new';
   const images = Array.isArray(b.images) ? b.images.filter(x=>typeof x==='string' && x).slice(0,30) : [];
-  const colors = Array.isArray(b.colors) ? b.colors.slice(0,20).map(c=>({ name:safeStr(c.name,60), hex:safeStr(c.hex,20)||'#d71920', images:Array.isArray(c.images)?c.images.filter(x=>typeof x==='string'&&x).slice(0,12):[] })).filter(c=>c.name) : [];
-  const versions = Array.isArray(b.versions) ? b.versions.slice(0,20).map(v=>({ name:safeStr(v.name,80), description:safeStr(v.description,500), price:asNumber(v.price), old_price:asNumber(v.old_price), colors:Array.isArray(v.colors)?v.colors.slice(0,20):[] })).filter(v=>v.name) : [];
+  const normalizeColor = c => ({ name:safeStr(c?.name,60), hex:safeStr(c?.hex,20)||'#d71920', images:Array.isArray(c?.images)?c.images.filter(x=>typeof x==='string'&&x).slice(0,12):[] });
+  const colors = Array.isArray(b.colors) ? b.colors.slice(0,20).map(normalizeColor).filter(c=>c.name) : [];
+  const versions = Array.isArray(b.versions) ? b.versions.slice(0,20).map(v=>({ name:safeStr(v?.name,80), description:safeStr(v?.description,500), price:asNumber(v?.price), old_price:asNumber(v?.old_price), colors:Array.isArray(v?.colors)?v.colors.slice(0,20).map(normalizeColor).filter(c=>c.name):[] })).filter(v=>v.name) : [];
   return { name, slug:slugify(b.slug || name), brand:safeStr(b.brand,80), category, status:['in_stock','incoming','reserved','sold'].includes(b.status)?b.status:'in_stock', price:asNumber(b.price), old_price:asNumber(b.old_price), year:asNumber(b.year), mileage:asNumber(b.mileage), engine:safeStr(b.engine,60), documents:safeStr(b.documents,300), description:safeStr(b.description,5000), installment_from:asNumber(b.installment_from), bad_debt_from:asNumber(b.bad_debt_from), images, colors, versions, featured:b.featured?1:0, published:b.published===false?0:1, sort_order:asNumber(b.sort_order)||0 };
 }
 async function sendLeadEmail(env, site, lead) {
@@ -196,7 +203,7 @@ async function publicApi(req, env, url) {
     if (status && ['in_stock','incoming','reserved','sold'].includes(status)) { sql+=' AND status=?'; binds.push(status); }
     const rows=(await env.DB.prepare(sql+' ORDER BY featured DESC,sort_order,id DESC').bind(...binds).all()).results||[];
     let data=rows.map(productOut);
-    if(search) data=data.filter(p=>fuzzy(`${p.name} ${p.brand||''} ${p.category} ${(p.colors||[]).map(c=>c.name).join(' ')}`,search));
+    if(search) data=data.filter(p=>{ const versionWords=(p.versions||[]).flatMap(v=>[v.name,...(v.colors||[]).map(c=>c.name)]); return fuzzy(`${p.name} ${p.brand||''} ${p.category} ${(p.colors||[]).map(c=>c.name).join(' ')} ${versionWords.join(' ')}`,search); });
     return json({ok:true,products:data});
   }
   if (url.pathname.startsWith('/api/products/')) {
