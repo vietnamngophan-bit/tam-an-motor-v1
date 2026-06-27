@@ -13,7 +13,7 @@
     {
       "binding": "DB",
       "database_name": "tam-an-db-v2",
-      "database_id": "REPLACE_WITH_NEW_D1_DATABASE_ID"
+      "database_id": "90b8f923-564c-4039-a3bf-bfc17e075923"
     }
   ],
   "r2_buckets": [
