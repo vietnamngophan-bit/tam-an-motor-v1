@@ -44,6 +44,7 @@ const DEFAULT_SITE = {
   installment_text: 'Điền thông tin để Tâm An tư vấn hồ sơ, khoản trả trước và mẫu xe phù hợp. Không cam kết duyệt khi chưa kiểm tra hồ sơ.',
   installment_image: '/assets/tam-an-promo.jpg',
   installment_docs: 'CCCD còn hiệu lực\nSố điện thoại chính chủ\nThông tin nơi ở hoặc nơi làm việc (khi cần)\nKhoản trả trước theo phương án đã tư vấn',
+  installment_down_payments: 'Từ 3 triệu\nTừ 5 triệu\nTừ 7 triệu\nTừ 10 triệu\nTheo tư vấn',
   installment_steps: 'Đăng ký tư vấn|Liên hệ hotline hoặc để lại thông tin trực tuyến.\nNộp hồ sơ|Nhân viên hướng dẫn giấy tờ theo từng trường hợp.\nThẩm định|Đơn vị tài chính kiểm tra hồ sơ theo quy trình.\nNhận xe|Hoàn tất thủ tục và bàn giao xe theo thoả thuận.',
   installment_faqs: 'Khi mua xe trả góp cần mang theo giấy tờ gì?|Tối thiểu cần CCCD và số điện thoại chính chủ. Tâm An sẽ hướng dẫn giấy tờ phù hợp từng hồ sơ.\nĐăng ký trả góp có phát sinh phí gì không?|Khoản phí, lãi và lịch trả được nhân viên tư vấn rõ trước khi khách quyết định.\nNợ xấu có mua trả góp được không?|Tâm An không cam kết duyệt khi chưa kiểm tra hồ sơ thực tế.\nThời gian thẩm định hồ sơ mất bao lâu?|Tùy thời điểm và hồ sơ. Nhân viên sẽ cập nhật kết quả ngay khi có phản hồi.',
   meta_pixel_id: '',
@@ -64,7 +65,7 @@ CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, slug 
 CREATE TABLE IF NOT EXISTS promotions (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, content TEXT, image_url TEXT, active INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS accessories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, price INTEGER, image_url TEXT, description TEXT, published INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS policies (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL, published INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS leads (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL DEFAULT 'consultation', name TEXT NOT NULL, phone TEXT NOT NULL, note TEXT, product_id INTEGER, status TEXT NOT NULL DEFAULT 'new', assigned_to INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS leads (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL DEFAULT 'consultation', name TEXT NOT NULL, phone TEXT NOT NULL, note TEXT, payment_plan TEXT, down_payment TEXT, product_id INTEGER, status TEXT NOT NULL DEFAULT 'new', assigned_to INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS conversations (id INTEGER PRIMARY KEY AUTOINCREMENT, visitor_key TEXT UNIQUE NOT NULL, visitor_name TEXT, status TEXT NOT NULL DEFAULT 'open', assigned_to INTEGER, ai_count INTEGER NOT NULL DEFAULT 0, ai_day TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS chat_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id INTEGER NOT NULL, sender_type TEXT NOT NULL, sender_name TEXT, body TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, actor_id INTEGER, actor_name TEXT, action TEXT NOT NULL, entity_type TEXT, entity_id TEXT, detail TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -82,11 +83,18 @@ function text(data, status = 200) { return new Response(data, { status, headers:
 function asNumber(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
 function parseJSON(v, fallback) { try { return v ? JSON.parse(v) : fallback; } catch { return fallback; } }
 function safeStr(v, max = 10000) { return String(v ?? '').trim().slice(0, max); }
+async function ensureLeadColumns(env) {
+  const info = await env.DB.prepare('PRAGMA table_info(leads)').all();
+  const cols = new Set((info.results || []).map(row => row.name));
+  if (!cols.has('payment_plan')) await env.DB.exec('ALTER TABLE leads ADD COLUMN payment_plan TEXT');
+  if (!cols.has('down_payment')) await env.DB.exec('ALTER TABLE leads ADD COLUMN down_payment TEXT');
+}
 function slugify(s) { return safeStr(s, 160).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/đ/g, 'd').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `xe-${Date.now()}`; }
 
 async function ensureSchema(env) {
   if (!initPromise) initPromise = (async () => {
     await env.DB.exec(SCHEMA);
+    await ensureLeadColumns(env);
     const existing = await env.DB.prepare('SELECT id FROM site_settings WHERE id=1').first();
     if (!existing) await env.DB.prepare('INSERT INTO site_settings (id,data) VALUES (1,?)').bind(JSON.stringify(DEFAULT_SITE)).run();
     const p = await env.DB.prepare('SELECT COUNT(*) c FROM policies').first();
@@ -162,7 +170,8 @@ async function productPayload(req) {
 async function sendLeadEmail(env, site, lead) {
   if (!env.RESEND_API_KEY || !env.NOTIFY_EMAIL) return;
   const subject = `[Tâm An] Yêu cầu mới: ${lead.type}`;
-  const html = `<h2>Khách để lại yêu cầu</h2><p><b>Họ tên:</b> ${escapeHtml(lead.name)}</p><p><b>SĐT:</b> ${escapeHtml(lead.phone)}</p><p><b>Nội dung:</b> ${escapeHtml(lead.note||'')}</p>`;
+  const planName = {cash:'Trả thẳng',installment:'Trả góp',bad_debt:'Hồ sơ có nợ xấu / cần kiểm tra'}[lead.payment_plan] || 'Chưa chọn';
+  const html = `<h2>Khách để lại yêu cầu</h2><p><b>Họ tên:</b> ${escapeHtml(lead.name)}</p><p><b>SĐT:</b> ${escapeHtml(lead.phone)}</p><p><b>Dự kiến thanh toán:</b> ${escapeHtml(planName)}${lead.down_payment ? ` — ${escapeHtml(lead.down_payment)}` : ''}</p><p><b>Nội dung:</b> ${escapeHtml(lead.note||'')}</p>`;
   try { await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${env.RESEND_API_KEY}`,'content-type':'application/json'},body:JSON.stringify({from:'Tâm An Website <onboarding@resend.dev>',to:[env.NOTIFY_EMAIL],subject,html})}); } catch {}
 }
 function escapeHtml(s) { return String(s||'').replace(/[&<>'"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m])); }
@@ -208,8 +217,12 @@ async function publicApi(req, env, url) {
   if (url.pathname === '/api/leads' && req.method==='POST') {
     const b=await req.json(); const name=safeStr(b.name,120), phone=safeStr(b.phone,40); if(!name||!phone)return json({ok:false,error:'Vui lòng nhập họ tên và số điện thoại.'},400);
     const note=safeStr(b.note,3000); const type=safeStr(b.type,80)||'consultation'; const productId=asNumber(b.product_id);
-    const r=await env.DB.prepare('INSERT INTO leads(type,name,phone,note,product_id) VALUES (?,?,?,?,?)').bind(type,name,phone,note,productId).run();
-    const site=await getSite(env); await sendLeadEmail(env,site,{type,name,phone,note});
+    const paymentPlan=['cash','installment','bad_debt'].includes(b.payment_plan) ? b.payment_plan : '';
+    const downPayment=paymentPlan==='installment' ? safeStr(b.down_payment,120) : '';
+    if (!paymentPlan) return json({ok:false,error:'Vui lòng chọn dự kiến thanh toán.'},400);
+    if (paymentPlan==='installment' && !downPayment) return json({ok:false,error:'Vui lòng chọn mức trả trước dự kiến.'},400);
+    const r=await env.DB.prepare('INSERT INTO leads(type,name,phone,note,payment_plan,down_payment,product_id) VALUES (?,?,?,?,?,?,?)').bind(type,name,phone,note,paymentPlan,downPayment,productId).run();
+    const site=await getSite(env); await sendLeadEmail(env,site,{type,name,phone,note,payment_plan:paymentPlan,down_payment:downPayment});
     return json({ok:true,id:r.meta.last_row_id,message:'Tâm An đã nhận thông tin. Nhân viên sẽ liên hệ sớm.'});
   }
   if (url.pathname === '/api/chat/start' && req.method==='POST') {
