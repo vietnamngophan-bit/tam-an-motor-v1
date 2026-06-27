@@ -35,3 +35,100 @@ body{background:var(--page-bg);font-size:var(--base-size);line-height:var(--body
 .lead-payment{display:inline-flex;align-items:center;gap:5px;margin-top:4px;padding:3px 7px;border-radius:999px;background:#fff0f1;color:#a71420;font-size:11px;font-weight:900;line-height:1.2}
 @keyframes paymentReveal{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:640px){.payment-intent-field,.down-payment-field{padding:13px}.field-help{font-size:11px}}
+
+/* ================================================================
+   V1.3.1 HOTFIX — MOBILE LAYOUT & VIETNAMESE TYPOGRAPHY
+   Prevents horizontal overflow, restores heading scale, and cleans
+   up the contact dock on small screens.
+   ================================================================ */
+
+/* The previous Theme Studio rule replaced all headline sizes with 1em.
+   These definitions restore the intended scale while retaining font choices. */
+.hero h1,
+.finance-hero h1 {
+  font-size: clamp(3.35rem, 7vw, 6.5rem) !important;
+  line-height: 1.14 !important;
+  letter-spacing: -0.04em !important;
+  text-wrap: balance;
+}
+.section h2 { font-size: clamp(2.45rem, 4vw, 4rem) !important; line-height: 1.12 !important; }
+.promo-copy h2 { font-size: clamp(2.7rem, 4vw, 4.2rem) !important; line-height: 1.1 !important; }
+.delivery-copy h2 { font-size: clamp(2.45rem, 4vw, 3.9rem) !important; line-height: 1.12 !important; }
+.product-content h2 { font-size: clamp(2.2rem, 3.4vw, 3.5rem) !important; line-height: 1.12 !important; }
+.admin-title { font-size: clamp(2.4rem, 5vw, 4.4rem) !important; line-height: 1.12 !important; }
+.login-card h1 { font-size: clamp(2.1rem, 4vw, 3.2rem) !important; line-height: 1.12 !important; }
+.policy-modal h2 { font-size: clamp(2.4rem, 5vw, 3.6rem) !important; line-height: 1.12 !important; }
+
+/* Never let a child create a horizontal scrollbar on phones. */
+html,
+body { width: 100%; max-width: 100%; overflow-x: hidden; }
+#app,
+.site-footer,
+.site-header,
+main,
+section,
+.container,
+.footer-grid,
+.footer-grid > *,
+.footer-brand,
+.footer-brand > * { min-width: 0; }
+.site-footer { width: 100%; overflow: hidden; }
+.site-footer p,
+.site-footer a,
+.footer-brand b,
+.footer-brand span { overflow-wrap: anywhere; word-break: normal; }
+
+/* Keep all footer content within the screen width and improve legibility. */
+.site-footer { padding: 48px 0 22px; }
+.footer-grid { align-items: start; }
+.footer-brand { align-items: flex-start; }
+.footer-brand img { flex: 0 0 auto; }
+.footer-brand b { display: block; font-size: 18px; line-height: 1.3; letter-spacing: .02em; }
+.footer-brand p { margin: 6px 0 0; }
+.footer p,
+.footer a { font-size: 14px; line-height: 1.65; }
+
+/* Avoid a cluttered vertical floating stack on phones. Social profiles remain in the footer. */
+@media (max-width: 640px) {
+  body { font-size: 16px; line-height: 1.62; }
+  .container { width: calc(100% - 28px); }
+
+  .hero-inner { min-height: 390px; padding: 56px 0 68px; align-items: flex-end; }
+  .hero h1,
+  .finance-hero h1 { font-size: clamp(2.55rem, 11.5vw, 3.65rem) !important; line-height: 1.18 !important; letter-spacing: -0.035em !important; }
+  .hero p,
+  .finance-hero p { font-size: 16px; line-height: 1.65; }
+  .eyebrow { font-size: 11px; letter-spacing: .12em; }
+  .section h2 { font-size: clamp(2rem, 9vw, 2.85rem) !important; line-height: 1.15 !important; }
+
+  .site-footer { padding: 36px 0 20px; }
+  .footer-grid { grid-template-columns: minmax(0, 1fr) !important; gap: 30px; }
+  .footer-brand { gap: 11px; }
+  .footer-brand img { width: 48px; height: 48px; border-radius: 14px; }
+  .footer-brand b { font-size: 17px; }
+  .footer h3 { font-size: 13px; margin-bottom: 12px; }
+  .footer p,
+  .footer a { font-size: 15px; line-height: 1.65; }
+  .footer-links { gap: 10px; }
+  .footer-bottom { display: grid; gap: 5px; margin-top: 26px; }
+
+  /* Keep only action-oriented contact buttons visible while on mobile. */
+  .floating { right: 12px; bottom: 12px; gap: 8px; align-items: end; }
+  .floating .float-facebook,
+  .floating .float-tiktok,
+  .floating .float-messenger { display: none !important; }
+  .float-btn { width: 50px; height: 50px; border-radius: 16px; }
+  .chat-launch { right: 72px; bottom: 12px; min-width: 112px; height: 52px; border-radius: 16px; }
+  .chat-panel { right: 12px; bottom: 74px; width: calc(100% - 24px); max-width: none; }
+
+  /* Forms and cards should not squeeze their fields horizontally. */
+  .form-grid,
+  .form-two,
+  .form-three,
+  .detail-grid,
+  .admin-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  input,
+  textarea,
+  select,
+  button { max-width: 100%; }
+}
