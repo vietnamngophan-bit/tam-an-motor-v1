@@ -280,7 +280,7 @@ function normalizedAiModel(site) {
 function conciseAiError(data, fallback = 'Gemini không phản hồi.') {
   const raw = safeStr(data?.error?.message || data?.message || fallback, 500);
   if (/reported as leaked|leaked/i.test(raw)) return 'API key Gemini đã bị Google khóa vì bị lộ. Hãy tạo key mới và cập nhật Secret GEMINI_API_KEY.';
-  if (/API key not valid|invalid api key|permission|unauthenticated|forbidden|403/i.test(raw)) return 'Gemini từ chối API key. Kiểm tra lại Secret GEMINI_API_KEY và quyền của key.';
+  if (/API key not valid|invalid api key|permission|unauthenticated|forbidden|403|invalid authentication credentials|oauth 2/i.test(raw)) return 'Gemini từ chối xác thực. Hãy tạo API key mới trong Google AI Studio, lưu vào Secret GEMINI_API_KEY và dùng bản Worker đã gửi key qua header x-goog-api-key.';
   if (/not found|404|model/i.test(raw)) return 'Model Gemini chưa hợp lệ. Đặt Model Gemini là gemini-3.1-flash-lite.';
   if (/quota|rate|429/i.test(raw)) return 'Gemini đang hết quota hoặc bị giới hạn tạm thời. Thử lại sau ít phút.';
   return raw || fallback;
@@ -301,9 +301,10 @@ async function callAi(env, site, prompt, conversation = null) {
   }
   if (!env.GEMINI_API_KEY) throw new Error('Chưa có Secret GEMINI_API_KEY trên Cloudflare Worker.');
   const model=normalizedAiModel(site);
-  // v1 is Gemini's stable API version. Send the API key only server-side from the Worker secret.
-  const endpoint=`https://generativelanguage.googleapis.com/v1/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`;
-  const r=await fetch(endpoint,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:.35,maxOutputTokens:240}})});
+  // Gemini auth keys created in AI Studio must be sent in x-goog-api-key.
+  // Do not put the key in the URL query string or use a Vertex/OAuth endpoint.
+  const endpoint=`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  const r=await fetch(endpoint,{method:'POST',headers:{'content-type':'application/json','x-goog-api-key':String(env.GEMINI_API_KEY).trim()},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:.35,maxOutputTokens:240}})});
   let data={}; try { data=await r.json(); } catch {}
   if(!r.ok) throw new Error(conciseAiError(data, `Gemini trả về lỗi ${r.status}.`));
   const out=safeStr(data?.candidates?.[0]?.content?.parts?.map(p=>p?.text||'').join('') || data?.text,1200);
