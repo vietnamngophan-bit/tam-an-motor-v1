@@ -15,6 +15,30 @@
     electric_used: 'Xe điện cũ'
   };
 
+
+  // 65 Google Fonts that render Vietnamese. Fonts are loaded on demand when selected.
+  const FONT_GROUPS = [
+    ['Sans hiện đại', ['Be Vietnam Pro','Inter','Manrope','Plus Jakarta Sans','DM Sans','Urbanist','Lexend','Archivo','Montserrat','Sora','Outfit','Figtree','Public Sans','Noto Sans','Nunito Sans','Mulish','Karla','Work Sans','IBM Plex Sans','Source Sans 3','Lato','Open Sans','Roboto','Cabin','Quicksand','Raleway','Barlow','Barlow Semi Condensed','Asap','Assistant','Rubik','Exo 2','Teko','Chakra Petch']],
+    ['Tiêu đề mạnh', ['Barlow Condensed','Roboto Condensed','Oswald','Space Grotesk','Bebas Neue','Anton','Saira Condensed','Kanit','League Spartan','Archivo Black','Black Ops One','Orbitron','Russo One','Fjalla One','Alfa Slab One']],
+    ['Serif premium', ['Noto Serif','Noto Serif Display','Source Serif 4','Merriweather','Playfair Display','Libre Baskerville','Cormorant Garamond','DM Serif Display','Fraunces','Lora','Crimson Pro','Bitter','Spectral','Prata','Bodoni Moda','Cormorant']]
+  ];
+  const FONT_CATALOG = FONT_GROUPS.flatMap(([, fonts]) => fonts);
+
+  function fontOptions(selected = '') {
+    return FONT_GROUPS.map(([label, fonts]) => `<optgroup label="${escapeHTML(label)}">${fonts.map(font => `<option value="${escapeHTML(font)}" ${font === selected ? 'selected' : ''}>${escapeHTML(font)}</option>`).join('')}</optgroup>`).join('');
+  }
+  function googleFontHref(font) {
+    return `https://fonts.googleapis.com/css2?family=${encodeURIComponent(font).replace(/%20/g, '+')}&display=swap`;
+  }
+  function ensureGoogleFont(font) {
+    if (!font || !FONT_CATALOG.includes(font)) return;
+    const id = `ta-font-${font.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    if (document.getElementById(id)) return;
+    const link = document.createElement('link');
+    link.id = id; link.rel = 'stylesheet'; link.href = googleFontHref(font);
+    document.head.appendChild(link);
+  }
+
   function escapeHTML(value = '') {
     return String(value).replace(/[&<>'"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[c]));
   }
@@ -71,9 +95,19 @@
   }
 
   function setSiteTheme(site) {
+    const bodyFont = site.body_font || 'Be Vietnam Pro';
+    const headingFont = site.heading_font || 'Barlow Condensed';
+    ensureGoogleFont(bodyFont); ensureGoogleFont(headingFont);
     document.documentElement.style.setProperty('--red', site.primary_color || '#c81924');
-    document.documentElement.style.setProperty('--body', `'${site.body_font || 'Be Vietnam Pro'}', Arial, sans-serif`);
-    document.documentElement.style.setProperty('--heading', `'${site.heading_font || 'Barlow Condensed'}', Arial, sans-serif`);
+    document.documentElement.style.setProperty('--accent', site.accent_color || '#ff6b76');
+    document.documentElement.style.setProperty('--page-bg', site.background_color || '#ffffff');
+    document.documentElement.style.setProperty('--ink', site.text_color || '#1b1214');
+    document.documentElement.style.setProperty('--body', `'${bodyFont}', Arial, sans-serif`);
+    document.documentElement.style.setProperty('--heading', `'${headingFont}', Arial, sans-serif`);
+    document.documentElement.style.setProperty('--base-size', `${Math.max(14, Math.min(20, Number(site.body_font_size || 16)))}px`);
+    document.documentElement.style.setProperty('--heading-scale', `${Math.max(.85, Math.min(1.35, Number(site.heading_scale || 1)))}`);
+    document.documentElement.style.setProperty('--body-leading', `${Math.max(1.35, Math.min(2, Number(site.body_line_height || 1.55)))}`);
+    document.documentElement.style.setProperty('--radius', `${Math.max(8, Math.min(32, Number(site.corner_radius || 22)))}px`);
     document.title = site.page_title || site.brand_name || 'Xe Máy Tâm An';
     $('#site-favicon').href = site.favicon_url || site.logo_url || '/assets/logo.jpg';
   }
@@ -115,7 +149,7 @@
     const links = [
       ['/#inventory', 'Kho xe', 'inventory'],
       ['/#promo', 'Khuyến mại', 'promo'],
-      ['/#accessories', 'Phụ kiện', 'accessories'],
+      ...(state.accessories?.length ? [['/#accessories', 'Phụ kiện', 'accessories']] : []),
       ['/tra-gop', 'Trả góp', 'finance'],
       ['/#showroom', 'Showroom', 'showroom']
     ];
@@ -130,16 +164,33 @@
     </header>`;
   }
 
+  function socialIcon(name) {
+    const icons = {
+      facebook: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 8h3V4h-3c-3.1 0-5 2-5 5.2V12H6v4h3v8h4v-8h3.3l.7-4H13V9.5c0-1 .4-1.5 1-1.5Z"/></svg>',
+      tiktok: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3v10.2a3.3 3.3 0 1 1-2.3-3.15V7.15A7.3 7.3 0 1 0 17 14V8.4c1.1 1.05 2.45 1.72 4 1.9V6.4c-2.05-.35-3.45-1.52-4-3.4H14Z"/></svg>',
+      youtube: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 12s0-3.15-.4-4.65a3 3 0 0 0-2.1-2.1C18 4.85 12 4.85 12 4.85s-6 0-7.5.4a3 3 0 0 0-2.1 2.1C2 8.85 2 12 2 12s0 3.15.4 4.65a3 3 0 0 0 2.1 2.1c1.5.4 7.5.4 7.5.4s6 0 7.5-.4a3 3 0 0 0 2.1-2.1C22 15.15 22 12 22 12Zm-12.1 3.8V8.2l6.2 3.8-6.2 3.8Z"/></svg>',
+      messenger: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.14 2 11.25c0 2.92 1.47 5.52 3.77 7.22V22l3.4-1.86c.9.25 1.85.39 2.83.39 5.52 0 10-4.14 10-9.28S17.52 2 12 2Zm1 12.47-2.55-2.72-4.98 2.72L11 8.65l2.55 2.72 4.98-2.72L13 14.47Z"/></svg>',
+      zalo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 3.4h17.2v13.1a4.1 4.1 0 0 1-4.1 4.1H9.2L5.1 23v-2.45a4.08 4.08 0 0 1-1.7-3.25V3.4Zm4.18 4.12v2.1h4.48l-4.65 5.5v1.37h8.18v-2.1h-4.8l4.8-5.68V7.52H7.58Z"/></svg>',
+      phone: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 2.9 4.7 4.8c-.7.7-1 1.7-.7 2.7 1.6 5.6 6 10 11.6 11.6 1 .3 2-.1 2.7-.7l1.9-1.9-3.8-3.8-1.5 1.5c-2.1-.9-3.8-2.6-4.7-4.7L11.7 8 7.9 4.2 6.6 2.9Z"/></svg>',
+      chat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H10l-5.3 3.5A.45.45 0 0 1 4 21.1V18a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm3 6v2h10V9H7Zm0 4v2h7v-2H7Z"/></svg>',
+      top: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.7 14.7 5.3-5.3 5.3 5.3 1.4-1.4L12 6.6l-6.7 6.7 1.4 1.4Z"/></svg>'
+    };
+    return icons[name] || '';
+  }
+  function socialLink(type, label, url, extra = '') {
+    if (!url) return '';
+    return `<a class="social social-${type} ${extra}" href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer" aria-label="${escapeHTML(label)}" title="${escapeHTML(label)}">${socialIcon(type)}<span class="sr-only">${escapeHTML(label)}</span></a>`;
+  }
   function footer() {
     const s = state.site;
     const social = [
-      ['Facebook', 'f', s.facebook_url], ['TikTok', '♪', s.tiktok_url], ['YouTube', '▶', s.youtube_url], ['Zalo', 'Z', s.zalo_url], ['Messenger', '✉', s.messenger_url]
-    ].filter(([, , url]) => url);
+      socialLink('facebook', 'Facebook', s.facebook_url), socialLink('tiktok', 'TikTok', s.tiktok_url), socialLink('youtube', 'YouTube', s.youtube_url), socialLink('zalo', 'Zalo', s.zalo_url), socialLink('messenger', 'Messenger', s.messenger_url)
+    ].filter(Boolean).join('');
     return `<footer class="site-footer"><div class="container footer-grid">
       <div><div class="footer-brand"><img src="${escapeHTML(s.logo_url || '/assets/logo.jpg')}" alt=""><div><b>${escapeHTML(s.brand_name)}</b><p>Chọn xe ưng ý. Lên đường an tâm.</p></div></div><p>${escapeHTML(s.address || '')}</p><p>${escapeHTML(s.hotline || '')}<br>${escapeHTML(s.support_email || '')}</p></div>
       <div><h3>Chính sách</h3><div class="footer-links">${state.policies.map(p => `<a href="#" data-policy="${escapeHTML(p.slug)}">${escapeHTML(p.title)}</a>`).join('')}</div></div>
       <div><h3>Giờ làm việc</h3><p style="white-space:pre-line">${escapeHTML(s.business_hours || '')}</p></div>
-      <div><h3>Kết nối</h3><div class="socials">${social.map(([name, icon, url]) => `<a class="social" href="${escapeHTML(url)}" target="_blank" rel="noopener" title="${name}">${icon}</a>`).join('')}</div></div>
+      <div><h3>Kết nối</h3><p class="footer-social-note">Dán link Facebook, TikTok, Zalo, YouTube trong Admin để biểu tượng hiển thị.</p><div class="socials">${social || '<span class="muted">Chưa gắn mạng xã hội.</span>'}</div></div>
     </div><div class="container footer-bottom"><span>© ${new Date().getFullYear()} ${escapeHTML(s.brand_name)}</span><span>Xe mới • Xe cũ • Xe điện</span></div></footer>`;
   }
 
@@ -154,6 +205,33 @@
       ${colors.length ? `<div class="color-dots">${colors.map(c => `<button class="color-dot preview-color" data-image="${escapeHTML(c.images?.[0] || productImage(product))}" style="background:${escapeHTML(c.hex || '#c81924')}" title="${escapeHTML(c.name)}"></button>`).join('')}</div>` : ''}
       <div class="product-cta"><button class="btn btn-ghost open-product" data-slug="${escapeHTML(product.slug)}">Xem chi tiết</button><button class="btn btn-primary lead-button" data-product="${product.id}" data-name="${escapeHTML(product.name)}">Giữ xe</button></div></div>
     </article>`;
+  }
+
+  function scrollToCurrentHash(behavior = 'auto') {
+    const hash = decodeURIComponent(location.hash || '');
+    if (!hash || hash === '#') return;
+    const target = document.querySelector(hash);
+    if (!target) return;
+    requestAnimationFrame(() => target.scrollIntoView({ behavior, block: 'start' }));
+  }
+
+  function bindHomeAnchorLinks() {
+    $$('a[href^="/#"], a[href^="#"]').forEach(link => {
+      link.addEventListener('click', event => {
+        const href = link.getAttribute('href') || '';
+        const hashIndex = href.indexOf('#');
+        const hash = hashIndex >= 0 ? href.slice(hashIndex) : '';
+        const target = hash ? document.querySelector(hash) : null;
+        // On the home page, the section exists now: smooth-scroll instead of relying on
+        // the browser anchor jump that happened before the SPA finished rendering.
+        if (target) {
+          event.preventDefault();
+          history.replaceState(null, '', `/${hash}`);
+          $('#mainNav')?.classList.remove('mobile-open');
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
   }
 
   function renderHome() {
@@ -173,10 +251,25 @@
       <section id="showroom" class="section section-soft"><div class="container showroom-grid"><div class="showroom-photo"><img src="${escapeHTML(s.showroom_image || '/assets/showroom.jpg')}" alt="Showroom"></div><div class="showroom-info"><div class="section-kicker">Đến showroom</div><h2>Ghé Tâm An, xem xe thật.</h2><div class="info-list"><div class="info-item"><b>Địa chỉ</b><span>${escapeHTML(s.address || '')}</span></div><div class="info-item"><b>Hotline</b><span>${escapeHTML(s.hotline || '')}</span></div><div class="info-item"><b>Giờ làm việc</b><span>${escapeHTML(s.business_hours || '')}</span></div></div><iframe class="map-frame" src="${escapeHTML(s.map_embed_url || '')}" loading="lazy"></iframe></div></div></section>
     </main>${footer()}${floatingButtons()}`;
     bindHomeEvents();
+    bindHomeAnchorLinks();
+    scrollToCurrentHash('auto');
   }
 
   function floatingButtons() {
-    return `<div class="floating"><a class="float-btn float-map" href="#showroom">⌖</a>${state.site.zalo_url ? `<a class="float-btn float-zalo" href="${escapeHTML(state.site.zalo_url)}" target="_blank" rel="noopener">Z</a>` : ''}${state.site.messenger_url ? `<a class="float-btn float-messenger" href="${escapeHTML(state.site.messenger_url)}" target="_blank" rel="noopener">M</a>` : ''}<button class="float-btn float-top" id="backTop">↑</button></div><button id="chatOpen" class="chat-launch">💬</button><div id="chatPanel" class="chat-panel"></div>`;
+    const s = state.site;
+    const callHref = `tel:${String(s.hotline || '').replace(/\s/g, '')}`;
+    const social = [
+      socialLink('zalo', 'Nhắn Zalo', s.zalo_url, 'float-btn'),
+      socialLink('messenger', 'Nhắn Messenger', s.messenger_url, 'float-btn'),
+      socialLink('facebook', 'Facebook', s.facebook_url, 'float-btn'),
+      socialLink('tiktok', 'TikTok', s.tiktok_url, 'float-btn')
+    ].filter(Boolean).join('');
+    return `<div class="floating" aria-label="Liên hệ nhanh">
+      <a class="float-btn float-call is-pulsing" href="${escapeHTML(callHref)}" aria-label="Gọi ${escapeHTML(s.hotline || '')}" title="Gọi ngay">${socialIcon('phone')}<span class="float-label">Gọi ngay</span></a>
+      ${social}
+      <button class="float-btn float-top" id="backTop" aria-label="Lên đầu trang" title="Lên đầu trang">${socialIcon('top')}</button>
+    </div>
+    <button id="chatOpen" class="chat-launch is-pulsing" aria-label="Chat trực tuyến" title="Chat trực tuyến">${socialIcon('chat')}<span class="chat-launch-text">Tư vấn</span></button><div id="chatPanel" class="chat-panel"></div>`;
   }
 
   function bindHomeEvents() {
@@ -288,7 +381,7 @@
     const steps = pipeRows(s.installment_steps || 'Đăng ký tư vấn|Liên hệ hotline hoặc để lại thông tin trực tuyến.\nNộp hồ sơ|Nhân viên hướng dẫn giấy tờ theo từng trường hợp.\nThẩm định|Đơn vị tài chính kiểm tra hồ sơ theo quy trình.\nNhận xe|Hoàn tất thủ tục và bàn giao xe theo thoả thuận.');
     const faqs = pipeRows(s.installment_faqs || 'Khi mua xe trả góp cần mang theo giấy tờ gì?|Tâm An sẽ hướng dẫn theo hồ sơ thực tế.');
     app.className = '';
-    app.innerHTML = `${nav('finance')}<main><section class="finance-hero" style="background-image:url('${escapeHTML(s.installment_image || s.hero_image || '/assets/tam-an-promo.jpg')}');background-size:cover;background-position:center"><div class="container"><div class="eyebrow">Tư vấn trả góp</div><h1>${multiline(s.installment_title || 'Mua xe rõ ràng.\nChọn phương án phù hợp.')}</h1><p>${escapeHTML(s.installment_text || '')}</p></div></section><section class="section"><div class="container finance-layout"><div><div class="section-kicker">Thủ tục mua trả góp</div><h2>Đơn giản, rõ ràng từng bước.</h2><div class="procedure" style="margin-top:22px">${steps.map((step,index) => `<div class="procedure-card"><div class="procedure-icon">${['①','②','③','④','⑤','⑥'][index] || '•'}</div><b>${escapeHTML(step[0])}</b><p>${escapeHTML(step[1] || '')}</p></div>`).join('')}</div><div class="admin-card"><h2>Giấy tờ thường cần</h2><div class="policy-content">${multiline(s.installment_docs || '')}</div></div><div class="admin-card"><h2>Câu hỏi thường gặp</h2><div id="faq" class="faq">${faqs.map(row => `<div class="faq-item"><button class="faq-q">${escapeHTML(row[0])}<span>⌄</span></button><div class="faq-a">${escapeHTML(row[1] || '')}</div></div>`).join('')}</div></div></div><aside class="finance-form"><div class="section-kicker">Đăng ký tư vấn trả góp</div><h2>Nhận tư vấn hồ sơ.</h2><p class="muted">Không cam kết duyệt khi chưa kiểm tra hồ sơ.</p><form id="financeLead" class="form-grid"><div class="field full"><label>Họ và tên *</label><input name="name" required></div><div class="field full"><label>Số điện thoại *</label><input name="phone" required inputmode="tel"></div><div class="field full"><label>Nhu cầu</label><textarea name="note"></textarea></div><div class="field full"><label><input type="checkbox" required> Tôi đồng ý để Tâm An liên hệ tư vấn.</label></div><div class="field full"><button class="btn btn-primary">Gửi thông tin</button></div></form></aside></div></section></main>${footer()}${floatingButtons()}`;
+    app.innerHTML = `${nav('finance')}<main><section class="finance-hero" style="background-image:url('${escapeHTML(s.installment_image || s.hero_image || '/assets/tam-an-promo.jpg')}');background-size:cover;background-position:center"><div class="container"><div class="eyebrow">Tư vấn trả góp</div><h1>${multiline(s.installment_title || 'Mua xe rõ ràng.\nChọn phương án phù hợp.')}</h1><p>${escapeHTML(s.installment_text || '')}</p></div></section><section class="section"><div class="container finance-layout"><div><div class="section-kicker">Thủ tục mua trả góp</div><h2>Đơn giản, rõ ràng từng bước.</h2><div class="procedure" style="margin-top:22px">${steps.map((step,index) => `<div class="procedure-card"><div class="procedure-icon">${['①','②','③','④','⑤','⑥'][index] || '•'}</div><b>${escapeHTML(step[0])}</b><p>${escapeHTML(step[1] || '')}</p></div>`).join('')}</div><div class="admin-card"><h2>Giấy tờ thường cần</h2><div class="policy-content">${multiline(s.installment_docs || '')}</div></div><div class="admin-card"><h2>Câu hỏi thường gặp</h2><div id="faq" class="faq">${faqs.map(row => `<div class="faq-item"><button class="faq-q">${escapeHTML(row[0])}<span>⌄</span></button><div class="faq-a">${escapeHTML(row[1] || '')}</div></div>`).join('')}</div></div></div><aside class="finance-form"><div class="section-kicker">Đăng ký tư vấn trả góp</div><h2>Nhận tư vấn hồ sơ.</h2><p class="muted">Không cam kết duyệt khi chưa kiểm tra hồ sơ.</p><form id="financeLead" class="form-grid"><div class="field full"><label>Họ và tên *</label><input name="name" required></div><div class="field full"><label>Số điện thoại *</label><input name="phone" required inputmode="tel"></div><div class="field full"><label>Nhu cầu</label><textarea name="note"></textarea></div><div class="field full"><label class="consent-control"><input class="consent-input" type="checkbox" required><span class="consent-box" aria-hidden="true">✓</span><span><b>Tôi đồng ý để Tâm An liên hệ tư vấn.</b><small>Thông tin chỉ dùng để phản hồi yêu cầu của bạn theo Chính sách bảo mật.</small></span></label></div><div class="field full"><button class="btn btn-primary">Gửi thông tin</button></div></form></aside></div></section></main>${footer()}${floatingButtons()}`;
     $('#menuBtn')?.addEventListener('click', () => $('#mainNav').classList.toggle('mobile-open'));
     $$('.faq-q').forEach(button => button.onclick = () => button.closest('.faq-item').classList.toggle('open'));
     $('#financeLead').onsubmit = async event => { event.preventDefault(); const form = new FormData(event.target); try { await request('/api/leads', { method:'POST', body:{ type:'installment', name:form.get('name'), phone:form.get('phone'), note:form.get('note') } }); trackEvent('Lead', { content_name: 'installment' }); notify('Đã gửi yêu cầu. Tâm An sẽ liên hệ sớm.'); event.target.reset(); } catch (error) { notify(error.message); } };
@@ -470,12 +563,57 @@
   }
   async function adminSite(main) {
     const data = await request('/api/admin/site'); const s = data.site;
-    const fonts = ['Be Vietnam Pro','Manrope','Inter','Plus Jakarta Sans','DM Sans','Urbanist','Lexend','Archivo','Montserrat','Barlow Condensed','Roboto Condensed','Oswald','Space Grotesk'];
-    main.innerHTML = `<h1 class="admin-title">Nội dung website</h1><p class="admin-sub">Sửa tiêu đề, chữ, ảnh, logo, favicon, font, màu, map, mạng xã hội, pixel và chatbot.</p><form id="siteForm" class="admin-product-form"><fieldset class="fieldset"><legend>Thương hiệu & giao diện</legend><div class="form-three"><div class="field"><label>Tên thương hiệu</label><input name="brand_name" value="${escapeHTML(s.brand_name || '')}"></div><div class="field"><label>Tiêu đề tab trình duyệt</label><input name="page_title" value="${escapeHTML(s.page_title || '')}"></div><div class="field"><label>Màu chủ đạo</label><input name="primary_color" type="color" value="${escapeHTML(s.primary_color || '#c81924')}"></div><div class="field"><label>Font nội dung</label><select name="body_font">${fonts.map(f => `<option ${f === s.body_font ? 'selected' : ''}>${f}</option>`).join('')}</select></div><div class="field"><label>Font tiêu đề</label><select name="heading_font">${fonts.map(f => `<option ${f === s.heading_font ? 'selected' : ''}>${f}</option>`).join('')}</select></div><div class="field"><label>Logo</label><input id="logoFile" type="file" accept="image/*"><input name="logo_url" value="${escapeHTML(s.logo_url || '')}"></div><div class="field"><label>Favicon / icon tab</label><input id="faviconFile" type="file" accept="image/*"><input name="favicon_url" value="${escapeHTML(s.favicon_url || '')}"></div></div></fieldset><fieldset class="fieldset"><legend>Trang chủ & ảnh</legend><div class="field"><label>Tiêu đề Hero</label><textarea name="hero_title">${escapeHTML(s.hero_title || '')}</textarea></div><div class="field"><label>Mô tả Hero</label><textarea name="hero_subtitle">${escapeHTML(s.hero_subtitle || '')}</textarea></div>${imageField('Ảnh Hero (riêng)', 'hero_image', s.hero_image)}${imageField('Ảnh Showroom (riêng)', 'showroom_image', s.showroom_image)}${imageField('Ảnh trang trả góp', 'installment_image', s.installment_image)}${imageField('Ảnh khuyến mại mặc định', 'promo_image', s.promo_image)}<div class="form-two"><div class="field"><label>Tiêu đề giao xe</label><input name="delivery_title" value="${escapeHTML(s.delivery_title || '')}"></div><div class="field"><label>Nội dung giao xe</label><textarea name="delivery_text">${escapeHTML(s.delivery_text || '')}</textarea></div></div></fieldset><fieldset class="fieldset"><legend>Liên hệ, Map & mạng xã hội</legend><div class="form-three"><div class="field"><label>Hotline</label><input name="hotline" value="${escapeHTML(s.hotline || '')}"></div><div class="field"><label>Email</label><input name="support_email" value="${escapeHTML(s.support_email || '')}"></div><div class="field"><label>Địa chỉ</label><input name="address" value="${escapeHTML(s.address || '')}"></div><div class="field"><label>Zalo URL</label><input name="zalo_url" value="${escapeHTML(s.zalo_url || '')}"></div><div class="field"><label>Messenger URL</label><input name="messenger_url" value="${escapeHTML(s.messenger_url || '')}"></div><div class="field"><label>Facebook URL</label><input name="facebook_url" value="${escapeHTML(s.facebook_url || '')}"></div><div class="field"><label>TikTok URL</label><input name="tiktok_url" value="${escapeHTML(s.tiktok_url || '')}"></div><div class="field"><label>YouTube URL</label><input name="youtube_url" value="${escapeHTML(s.youtube_url || '')}"></div><div class="field"><label>Google Map embed URL</label><input name="map_embed_url" value="${escapeHTML(s.map_embed_url || '')}"></div></div><div class="field"><label>Giờ làm việc</label><textarea name="business_hours">${escapeHTML(s.business_hours || '')}</textarea></div></fieldset><fieldset class="fieldset"><legend>Trả góp, Pixel & AI</legend><div class="field"><label>Tiêu đề trả góp</label><textarea name="installment_title">${escapeHTML(s.installment_title || '')}</textarea></div><div class="field"><label>Nội dung trả góp</label><textarea name="installment_text">${escapeHTML(s.installment_text || '')}</textarea></div><div class="field"><label>Giấy tờ / thủ tục</label><textarea name="installment_docs">${escapeHTML(s.installment_docs || '')}</textarea></div><div class="field"><label>Các bước thủ tục (mỗi dòng: Tiêu đề | Mô tả)</label><textarea name="installment_steps">${escapeHTML(s.installment_steps || '')}</textarea></div><div class="field"><label>Câu hỏi thường gặp (mỗi dòng: Câu hỏi | Trả lời)</label><textarea name="installment_faqs">${escapeHTML(s.installment_faqs || '')}</textarea></div><div class="form-two"><div class="field"><label>Facebook Pixel ID</label><input name="meta_pixel_id" value="${escapeHTML(s.meta_pixel_id || '')}"></div><div class="field"><label>TikTok Pixel ID</label><input name="tiktok_pixel_id" value="${escapeHTML(s.tiktok_pixel_id || '')}"></div><div class="field"><label>Tên chatbot</label><input name="ai_name" value="${escapeHTML(s.ai_name || 'Tâm An AI')}"></div><div class="field"><label>Nhà cung cấp bot</label><select name="ai_provider"><option value="gemini" ${s.ai_provider !== 'webhook' ? 'selected' : ''}>Gemini API</option><option value="webhook" ${s.ai_provider === 'webhook' ? 'selected' : ''}>Webhook / chatbot khác</option></select></div><div class="field"><label>Model Gemini</label><input name="ai_model" value="${escapeHTML(s.ai_model || 'gemini-2.0-flash-lite')}"></div></div><label><input name="ai_enabled" type="checkbox" ${s.ai_enabled ? 'checked' : ''}> Bật chatbot tự động</label><div class="field"><label>Lời chào chatbot</label><textarea name="ai_greeting">${escapeHTML(s.ai_greeting || '')}</textarea></div><p class="muted">Gemini dùng Secret <code>GEMINI_API_KEY</code>. Chế độ Webhook dùng Secret <code>AI_WEBHOOK_URL</code>; không dán API key vào đây.</p><div class="field"><label>Kiến thức chatbot</label><textarea name="ai_knowledge">${escapeHTML(s.ai_knowledge || '')}</textarea></div><div class="field"><label>Từ khoá chuyển nhân viên</label><input name="ai_handoff_words" value="${escapeHTML(s.ai_handoff_words || '')}"></div></fieldset><button class="btn btn-primary">Lưu thay đổi website</button></form>`;
+    main.innerHTML = `<h1 class="admin-title">Nội dung website</h1><p class="admin-sub">Chỉnh logo, ảnh, chữ, hơn 50 font, màu sắc, kích cỡ, mạng xã hội, pixel và chatbot ngay từ Admin.</p>
+    <form id="siteForm" class="admin-product-form">
+      <fieldset class="fieldset"><legend>Thương hiệu & Theme Studio</legend>
+        <div class="form-three">
+          <div class="field"><label>Tên thương hiệu</label><input name="brand_name" value="${escapeHTML(s.brand_name || '')}"></div>
+          <div class="field"><label>Tiêu đề tab trình duyệt</label><input name="page_title" value="${escapeHTML(s.page_title || '')}"></div>
+          <div class="field"><label>Màu chủ đạo</label><input name="primary_color" type="color" value="${escapeHTML(s.primary_color || '#c81924')}"></div>
+          <div class="field"><label>Màu nhấn</label><input name="accent_color" type="color" value="${escapeHTML(s.accent_color || '#ff6b76')}"></div>
+          <div class="field"><label>Màu nền</label><input name="background_color" type="color" value="${escapeHTML(s.background_color || '#ffffff')}"></div>
+          <div class="field"><label>Màu chữ</label><input name="text_color" type="color" value="${escapeHTML(s.text_color || '#1b1214')}"></div>
+          <div class="field"><label>Font nội dung (65 lựa chọn)</label><select name="body_font">${fontOptions(s.body_font || 'Be Vietnam Pro')}</select></div>
+          <div class="field"><label>Font tiêu đề (65 lựa chọn)</label><select name="heading_font">${fontOptions(s.heading_font || 'Barlow Condensed')}</select></div>
+          <div class="field"><label>Cỡ chữ nội dung: <output id="bodySizeOut">${escapeHTML(s.body_font_size || 16)}px</output></label><input name="body_font_size" id="bodySize" type="range" min="14" max="20" step="1" value="${escapeHTML(s.body_font_size || 16)}"></div>
+          <div class="field"><label>Tỷ lệ tiêu đề: <output id="headingScaleOut">${escapeHTML(s.heading_scale || 1)}x</output></label><input name="heading_scale" id="headingScale" type="range" min="0.85" max="1.35" step="0.05" value="${escapeHTML(s.heading_scale || 1)}"></div>
+          <div class="field"><label>Giãn dòng: <output id="lineHeightOut">${escapeHTML(s.body_line_height || 1.55)}</output></label><input name="body_line_height" id="lineHeight" type="range" min="1.35" max="2" step="0.05" value="${escapeHTML(s.body_line_height || 1.55)}"></div>
+          <div class="field"><label>Bo góc: <output id="radiusOut">${escapeHTML(s.corner_radius || 22)}px</output></label><input name="corner_radius" id="cornerRadius" type="range" min="8" max="32" step="1" value="${escapeHTML(s.corner_radius || 22)}"></div>
+          <div class="field"><label>Logo</label><input id="logoFile" type="file" accept="image/*"><input name="logo_url" value="${escapeHTML(s.logo_url || '')}"></div>
+          <div class="field"><label>Favicon / icon tab</label><input id="faviconFile" type="file" accept="image/*"><input name="favicon_url" value="${escapeHTML(s.favicon_url || '')}"></div>
+        </div>
+        <div class="theme-preview"><span class="theme-preview-kicker">XEM TRƯỚC THEME</span><h3 id="themePreviewTitle">Chọn xe ưng ý. Lên đường an tâm.</h3><p id="themePreviewText">Font, màu sắc, cỡ chữ và bo góc sẽ áp dụng toàn website sau khi bấm Lưu.</p><button type="button" class="btn btn-primary">Nút hành động</button></div>
+      </fieldset>
+      <fieldset class="fieldset"><legend>Trang chủ & ảnh</legend>
+        <div class="field"><label>Tiêu đề Hero</label><textarea name="hero_title">${escapeHTML(s.hero_title || '')}</textarea></div>
+        <div class="field"><label>Mô tả Hero</label><textarea name="hero_subtitle">${escapeHTML(s.hero_subtitle || '')}</textarea></div>
+        ${imageField('Ảnh Hero (riêng)', 'hero_image', s.hero_image)}${imageField('Ảnh Showroom (riêng)', 'showroom_image', s.showroom_image)}${imageField('Ảnh trang trả góp', 'installment_image', s.installment_image)}${imageField('Ảnh khuyến mại mặc định', 'promo_image', s.promo_image)}
+        <div class="form-two"><div class="field"><label>Tiêu đề giao xe</label><input name="delivery_title" value="${escapeHTML(s.delivery_title || '')}"></div><div class="field"><label>Nội dung giao xe</label><textarea name="delivery_text">${escapeHTML(s.delivery_text || '')}</textarea></div></div>
+      </fieldset>
+      <fieldset class="fieldset"><legend>Liên hệ, Map & mạng xã hội</legend>
+        <div class="form-three">
+          <div class="field"><label>Hotline</label><input name="hotline" value="${escapeHTML(s.hotline || '')}"></div><div class="field"><label>Email</label><input name="support_email" value="${escapeHTML(s.support_email || '')}"></div><div class="field"><label>Địa chỉ</label><input name="address" value="${escapeHTML(s.address || '')}"></div>
+          <div class="field"><label>Zalo URL</label><input name="zalo_url" placeholder="https://zalo.me/..." value="${escapeHTML(s.zalo_url || '')}"></div><div class="field"><label>Messenger URL</label><input name="messenger_url" placeholder="https://m.me/..." value="${escapeHTML(s.messenger_url || '')}"></div><div class="field"><label>Facebook URL</label><input name="facebook_url" placeholder="https://facebook.com/..." value="${escapeHTML(s.facebook_url || '')}"></div><div class="field"><label>TikTok URL</label><input name="tiktok_url" placeholder="https://tiktok.com/@..." value="${escapeHTML(s.tiktok_url || '')}"></div><div class="field"><label>YouTube URL</label><input name="youtube_url" placeholder="https://youtube.com/..." value="${escapeHTML(s.youtube_url || '')}"></div><div class="field"><label>Google Map embed URL</label><input name="map_embed_url" value="${escapeHTML(s.map_embed_url || '')}"></div>
+        </div><p class="muted">Biểu tượng Facebook, TikTok, YouTube, Zalo, Messenger tự hiện ở chân trang và thanh liên hệ ngay khi có link hợp lệ.</p><div class="field"><label>Giờ làm việc</label><textarea name="business_hours">${escapeHTML(s.business_hours || '')}</textarea></div>
+      </fieldset>
+      <fieldset class="fieldset"><legend>Trả góp, Pixel & AI</legend>
+        <div class="field"><label>Tiêu đề trả góp</label><textarea name="installment_title">${escapeHTML(s.installment_title || '')}</textarea></div><div class="field"><label>Nội dung trả góp</label><textarea name="installment_text">${escapeHTML(s.installment_text || '')}</textarea></div><div class="field"><label>Giấy tờ / thủ tục</label><textarea name="installment_docs">${escapeHTML(s.installment_docs || '')}</textarea></div><div class="field"><label>Các bước thủ tục (mỗi dòng: Tiêu đề | Mô tả)</label><textarea name="installment_steps">${escapeHTML(s.installment_steps || '')}</textarea></div><div class="field"><label>Câu hỏi thường gặp (mỗi dòng: Câu hỏi | Trả lời)</label><textarea name="installment_faqs">${escapeHTML(s.installment_faqs || '')}</textarea></div>
+        <div class="form-two"><div class="field"><label>Facebook Pixel ID</label><input name="meta_pixel_id" value="${escapeHTML(s.meta_pixel_id || '')}"></div><div class="field"><label>TikTok Pixel ID</label><input name="tiktok_pixel_id" value="${escapeHTML(s.tiktok_pixel_id || '')}"></div><div class="field"><label>Tên chatbot</label><input name="ai_name" value="${escapeHTML(s.ai_name || 'Tâm An AI')}"></div><div class="field"><label>Nhà cung cấp bot</label><select name="ai_provider"><option value="gemini" ${s.ai_provider !== 'webhook' ? 'selected' : ''}>Gemini API</option><option value="webhook" ${s.ai_provider === 'webhook' ? 'selected' : ''}>Webhook / chatbot khác</option></select></div><div class="field"><label>Model Gemini</label><input name="ai_model" value="${escapeHTML(s.ai_model || 'gemini-2.0-flash-lite')}"></div></div><label class="admin-check"><input name="ai_enabled" type="checkbox" ${s.ai_enabled ? 'checked' : ''}><span>✓</span> Bật chatbot tự động</label><div class="field"><label>Lời chào chatbot</label><textarea name="ai_greeting">${escapeHTML(s.ai_greeting || '')}</textarea></div><p class="muted">Gemini dùng Secret <code>GEMINI_API_KEY</code>. Chế độ Webhook dùng Secret <code>AI_WEBHOOK_URL</code>; không dán API key vào đây.</p><div class="field"><label>Kiến thức chatbot</label><textarea name="ai_knowledge">${escapeHTML(s.ai_knowledge || '')}</textarea></div><div class="field"><label>Từ khoá chuyển nhân viên</label><input name="ai_handoff_words" value="${escapeHTML(s.ai_handoff_words || '')}"></div>
+      </fieldset>
+      <button class="btn btn-primary">Lưu thay đổi website</button>
+    </form>`;
     $$('.site-image-file', main).forEach(input => input.onchange = async () => { try { const url = await uploadFile(input.files[0]); $(`[name="${input.dataset.field}"]`, main).value = url; notify('Đã tải ảnh'); } catch (error) { notify(error.message); } });
     $('#logoFile', main).onchange = async event => { try { const url = await uploadFile(event.target.files[0]); $('[name="logo_url"]', main).value = url; $('[name="favicon_url"]', main).value = url; notify('Đã tải logo'); } catch (error) { notify(error.message); } };
     $('#faviconFile', main).onchange = async event => { try { $('[name="favicon_url"]', main).value = await uploadFile(event.target.files[0]); notify('Đã tải favicon'); } catch (error) { notify(error.message); } };
-    $('#siteForm', main).onsubmit = async event => { event.preventDefault(); const fd = new FormData(event.target); const body = Object.fromEntries(fd.entries()); body.ai_enabled = fd.get('ai_enabled') === 'on'; try { const out = await request('/api/admin/site', { method:'PUT', body }); state.site = out.site; setSiteTheme(state.site); notify('Đã lưu nội dung website'); } catch (error) { notify(error.message); } };
+    const preview = () => {
+      const form = $('#siteForm', main); const fd = new FormData(form); const draft = Object.fromEntries(fd.entries()); setSiteTheme({ ...state.site, ...draft });
+      $('#bodySizeOut').value = `${draft.body_font_size}px`; $('#headingScaleOut').value = `${draft.heading_scale}x`; $('#lineHeightOut').value = draft.body_line_height; $('#radiusOut').value = `${draft.corner_radius}px`;
+      $('#themePreviewTitle').style.fontFamily = `'${draft.heading_font}', Arial, sans-serif`; $('#themePreviewText').style.fontFamily = `'${draft.body_font}', Arial, sans-serif`;
+    };
+    ['bodySize','headingScale','lineHeight','cornerRadius'].forEach(id => $(`#${id}`, main).addEventListener('input', preview));
+    ['body_font','heading_font','primary_color','accent_color','background_color','text_color'].forEach(name => $(`[name="${name}"]`, main).addEventListener('change', preview));
+    preview();
+    $('#siteForm', main).onsubmit = async event => { event.preventDefault(); const fd = new FormData(event.target); const body = Object.fromEntries(fd.entries()); body.ai_enabled = fd.get('ai_enabled') === 'on'; try { const out = await request('/api/admin/site', { method:'PUT', body }); state.site = out.site; setSiteTheme(state.site); notify('Đã lưu giao diện và nội dung website'); } catch (error) { notify(error.message); } };
   }
 
   async function adminPolicies(main) {
