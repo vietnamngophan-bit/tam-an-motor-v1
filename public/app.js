@@ -232,6 +232,12 @@
       messenger: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.14 2 11.25c0 2.92 1.47 5.52 3.77 7.22V22l3.4-1.86c.9.25 1.85.39 2.83.39 5.52 0 10-4.14 10-9.28S17.52 2 12 2Zm1 12.47-2.55-2.72-4.98 2.72L11 8.65l2.55 2.72 4.98-2.72L13 14.47Z"/></svg>',
       zalo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 3.4h17.2v13.1a4.1 4.1 0 0 1-4.1 4.1H9.2L5.1 23v-2.45a4.08 4.08 0 0 1-1.7-3.25V3.4Zm4.18 4.12v2.1h4.48l-4.65 5.5v1.37h8.18v-2.1h-4.8l4.8-5.68V7.52H7.58Z"/></svg>',
       phone: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 2.9 4.7 4.8c-.7.7-1 1.7-.7 2.7 1.6 5.6 6 10 11.6 11.6 1 .3 2-.1 2.7-.7l1.9-1.9-3.8-3.8-1.5 1.5c-2.1-.9-3.8-2.6-4.7-4.7L11.7 8 7.9 4.2 6.6 2.9Z"/></svg>',
+      'phone-ring': '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.3 3.6 5.1 5.8c-.7.7-.9 1.7-.6 2.7 1.7 5.2 5.8 9.3 11 11 .9.3 2-.1 2.7-.8l1.9-1.9-3.6-3.6-1.5 1.5c-2-.9-3.6-2.5-4.5-4.5l1.5-1.5L8.4 5.1 7.3 3.6Zm9.3-1.4c2.9.5 5.2 2.8 5.7 5.7l-1.9.3c-.4-2.1-2-3.7-4.1-4.1l.3-1.9Zm-.4 4.4c.8.2 1.4.8 1.6 1.6l-1.8.4c-.1-.2-.2-.4-.4-.4l.6-1.6Z"/></svg>',
+      headset: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a8 8 0 0 0-8 8v6a3 3 0 0 0 3 3h2v-7H6v-2a6 6 0 0 1 12 0v2h-3v7h2a3 3 0 0 0 3-3v-6a8 8 0 0 0-8-8Z"/></svg>',
+      'message-circle': '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-7.2 14.4L3 21l3.7-1.2A9 9 0 1 0 12 3Zm-4 8h8v2H8v-2Zm0 4h5v2H8v-2Z"/></svg>',
+      sparkles: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 1.7 5.3L19 9l-5.3 1.7L12 16l-1.7-5.3L5 9l5.3-1.7L12 2Zm7 11 .9 2.1L22 16l-2.1.9L19 19l-.9-2.1L16 16l2.1-.9L19 13ZM5 15l.8 2.2L8 18l-2.2.8L5 21l-.8-2.2L2 18l2.2-.8L5 15Z"/></svg>',
+      play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.8v16.4c0 1 1.1 1.6 2 1l12-8.2a1.2 1.2 0 0 0 0-2L7 2.8c-.9-.6-2 0-2 1Z"/></svg>',
+      heart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.5-9.4-9.1C1 8.2 3.2 5 6.8 5c2 0 3.5 1 4.2 2.4C11.7 6 13.2 5 15.2 5c3.6 0 5.8 3.2 4.2 6.9C19.5 16.5 12 21 12 21Z"/></svg>',
       chat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H10l-5.3 3.5A.45.45 0 0 1 4 21.1V18a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm3 6v2h10V9H7Zm0 4v2h7v-2H7Z"/></svg>',
       top: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.7 14.7 5.3-5.3 5.3 5.3 1.4-1.4L12 6.6l-6.7 6.7 1.4 1.4Z"/></svg>'
     };
@@ -240,6 +246,32 @@
   function socialLink(type, label, url, extra = '') {
     if (!url) return '';
     return `<a class="social social-${type} ${extra}" href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer" aria-label="${escapeHTML(label)}" title="${escapeHTML(label)}">${socialIcon(type)}<span class="sr-only">${escapeHTML(label)}</span></a>`;
+  }
+
+  const CONTACT_ICON_OPTIONS = {
+    call: [['phone','Điện thoại'],['phone-ring','Điện thoại đổ chuông'],['headset','Tổng đài'],['chat','Tin nhắn']],
+    zalo: [['zalo','Zalo'],['chat','Bong bóng chat'],['message-circle','Tin nhắn tròn']],
+    messenger: [['messenger','Messenger'],['chat','Bong bóng chat'],['message-circle','Tin nhắn tròn']],
+    facebook: [['facebook','Facebook'],['chat','Chat'],['heart','Yêu thích']],
+    tiktok: [['tiktok','TikTok'],['play','Phát video'],['sparkles','Nổi bật']],
+    chat: [['chat','Tin nhắn'],['message-circle','Tin nhắn tròn'],['headset','Tư vấn viên']]
+  };
+  function iconOptionsFor(type, selected = '') {
+    const items = CONTACT_ICON_OPTIONS[type] || [];
+    return items.map(([value,label]) => `<option value="${value}" ${value === (selected || items[0]?.[0]) ? 'selected' : ''}>${label}</option>`).join('');
+  }
+  function contactIcon(type, fallback) {
+    const s = state.site || {};
+    const custom = s[`floating_${type}_icon_url`];
+    const choice = s[`floating_${type}_icon`] || fallback;
+    return custom ? `<img class="custom-float-icon" src="${escapeHTML(custom)}" alt="">` : socialIcon(choice);
+  }
+  function contactButtonStyle(type) {
+    const s = state.site || {};
+    const color = s[`floating_${type}_color`] || '';
+    const shape = s[`floating_${type}_shape`] || 'rounded';
+    const style = color ? `--float-color:${escapeHTML(color)};` : '';
+    return { style, shape };
   }
   function footer() {
     const s = state.site;
@@ -319,18 +351,28 @@
     const s = state.site;
     const callHref = `tel:${String(s.hotline || '').replace(/\s/g, '')}`;
     const pulse = s.floating_primary_action || 'call';
+    const pulseOn = s.floating_pulse_enabled !== false;
+    const pulseClass = type => pulseOn && pulse === type ? `is-pulsing pulse-${s.floating_pulse_speed || 'normal'}` : '';
     const enabled = key => s[key] !== false;
+    const button = (type, className, href, label, fallback, external = true) => {
+      const cfg = contactButtonStyle(type);
+      const tag = external ? 'a' : 'button';
+      const attrs = external ? `href="${escapeHTML(href)}" target="_blank" rel="noopener noreferrer"` : `type="button"`;
+      return `<${tag} class="float-btn ${className} ${pulseClass(type)} shape-${cfg.shape}" style="${cfg.style}" ${attrs} aria-label="${escapeHTML(label)}" title="${escapeHTML(label)}">${contactIcon(type, fallback)}<span class="sr-only">${escapeHTML(label)}</span></${tag}>`;
+    };
     const normal = [];
-    if (enabled('floating_show_zalo') && s.zalo_url) normal.push(`<a class="float-btn float-zalo ${pulse === 'zalo' ? 'is-pulsing' : ''}" href="${escapeHTML(s.zalo_url)}" target="_blank" rel="noopener noreferrer" aria-label="Nhắn Zalo" title="Nhắn Zalo">${socialIcon('zalo')}</a>`);
-    if (enabled('floating_show_messenger') && s.messenger_url) normal.push(`<a class="float-btn float-messenger" href="${escapeHTML(s.messenger_url)}" target="_blank" rel="noopener noreferrer" aria-label="Nhắn Messenger" title="Nhắn Messenger">${socialIcon('messenger')}</a>`);
-    if (enabled('floating_show_facebook') && s.facebook_url) normal.push(`<a class="float-btn float-facebook" href="${escapeHTML(s.facebook_url)}" target="_blank" rel="noopener noreferrer" aria-label="Facebook" title="Facebook">${socialIcon('facebook')}</a>`);
-    if (enabled('floating_show_tiktok') && s.tiktok_url) normal.push(`<a class="float-btn float-tiktok" href="${escapeHTML(s.tiktok_url)}" target="_blank" rel="noopener noreferrer" aria-label="TikTok" title="TikTok">${socialIcon('tiktok')}</a>`);
+    if (enabled('floating_show_zalo') && s.zalo_url) normal.push(button('zalo','float-zalo',s.zalo_url,'Nhắn Zalo','zalo'));
+    if (enabled('floating_show_messenger') && s.messenger_url) normal.push(button('messenger','float-messenger',s.messenger_url,'Nhắn Messenger','messenger'));
+    if (enabled('floating_show_facebook') && s.facebook_url) normal.push(button('facebook','float-facebook',s.facebook_url,'Facebook','facebook'));
+    if (enabled('floating_show_tiktok') && s.tiktok_url) normal.push(button('tiktok','float-tiktok',s.tiktok_url,'TikTok','tiktok'));
+    const callCfg = contactButtonStyle('call');
+    const chatCfg = contactButtonStyle('chat');
     return `<div class="floating" aria-label="Liên hệ nhanh">
-      <a class="float-btn float-call ${pulse === 'call' ? 'is-pulsing' : ''}" href="${escapeHTML(callHref)}" aria-label="Gọi ${escapeHTML(s.hotline || '')}" title="Gọi ngay">${socialIcon('phone')}<span class="float-label">Gọi ngay</span></a>
+      <a class="float-btn float-call ${pulseClass('call')} shape-${callCfg.shape}" style="${callCfg.style}" href="${escapeHTML(callHref)}" aria-label="Gọi ${escapeHTML(s.hotline || '')}" title="Gọi ngay">${contactIcon('call','phone')}<span class="float-label">${escapeHTML(s.floating_call_label || 'Gọi ngay')}</span></a>
       ${normal.join('')}
       <button class="float-btn float-top" id="backTop" aria-label="Lên đầu trang" title="Lên đầu trang">${socialIcon('top')}</button>
     </div>
-    ${enabled('floating_show_chat') ? `<button id="chatOpen" class="chat-launch ${pulse === 'chat' ? 'is-pulsing' : ''}" aria-label="Chat trực tuyến" title="Chat trực tuyến">${socialIcon('chat')}<span class="chat-launch-text">Tư vấn</span></button>` : ''}<div id="chatPanel" class="chat-panel"></div>`;
+    ${enabled('floating_show_chat') ? `<button id="chatOpen" class="chat-launch ${pulseClass('chat')} shape-${chatCfg.shape}" style="${chatCfg.style}" aria-label="Chat trực tuyến" title="Chat trực tuyến">${contactIcon('chat','chat')}<span class="chat-launch-text">${escapeHTML(s.floating_chat_label || 'Tư vấn')}</span></button>` : ''}<div id="chatPanel" class="chat-panel"></div>`;
   }
 
   function bindHomeEvents() {
@@ -495,7 +537,7 @@
     });
     $('#chatForm')?.addEventListener('submit', async event => {
       event.preventDefault(); const input = $('input', event.target); const body = input.value.trim(); if (!body) return;
-      try { await request('/api/chat/messages', { method:'POST', body:{ visitor_key:state.visitorKey, body } }); input.value = ''; refreshChat(); }
+      try { const out = await request('/api/chat/messages', { method:'POST', body:{ visitor_key:state.visitorKey, body } }); input.value = ''; refreshChat(); if (out.ai?.status === 'unavailable') notify('Tâm An AI đang chưa sẵn sàng. Nhân viên sẽ hỗ trợ bạn sớm.'); }
       catch (error) { notify(error.message); }
     });
     clearInterval(state.chatTimer);
@@ -518,13 +560,20 @@
     $('#loginForm').onsubmit = async event => { event.preventDefault(); const form = new FormData(event.target); try { const data = await request('/api/admin/login', { method:'POST', body:{ username:form.get('username'), password:form.get('password') } }); state.admin = data.user; renderAdminShell(); } catch (error) { notify(error.message); } };
   }
   function adminTabs() {
-    const tabs = [['overview','Tổng quan'],['products','Kho xe'],['leads','Form khách'],['chats','Chat trực tuyến'],['accessories','Phụ kiện']];
-    if (state.admin.role === 'admin') tabs.push(['promotions','Khuyến mại'],['site','Nội dung website'],['policies','Chính sách'],['users','Nhân viên'],['analytics','Lượt truy cập'],['logs','Nhật ký hệ thống']);
-    return tabs;
+    const groups = [
+      { title:'Vận hành', items:[['overview','Tổng quan'],['products','Kho xe'],['leads','Form khách'],['chats','Chat trực tuyến'],['accessories','Phụ kiện']] }
+    ];
+    if (state.admin.role === 'admin') groups.push(
+      { title:'Nội dung & giao diện', items:[['promotions','Khuyến mại'],['site','Giao diện & nội dung'],['contacts','Liên hệ & nút nổi'],['policies','Chính sách']] },
+      { title:'Quảng cáo & AI', items:[['marketing_ai','Pixel & Chatbot AI'],['analytics','Lượt truy cập']] },
+      { title:'Hệ thống', items:[['users','Nhân viên'],['logs','Nhật ký hệ thống']] }
+    );
+    return groups;
   }
   function renderAdminShell() {
     app.className = 'admin-wrap';
-    app.innerHTML = `<header class="admin-header"><div class="container admin-header-inner"><a href="/" class="admin-brand"><img src="${escapeHTML(state.site.logo_url || '/assets/logo.jpg')}" alt=""><span>TÂM AN<small style="display:block;color:#8e8284;font-size:10px">KHU VỰC NỘI BỘ</small></span></a><div class="admin-user"><span>${escapeHTML(state.admin.name)} • ${state.admin.role === 'admin' ? 'Chủ cửa hàng' : 'Nhân viên'}</span><button id="logoutButton" class="small-btn">Đăng xuất</button></div></div></header><div class="admin-shell"><aside class="admin-side">${adminTabs().map(([id, label], index) => `<button data-tab="${id}" class="${index === 0 ? 'active' : ''}">${label}</button>`).join('')}</aside><main id="adminMain" class="admin-main"></main></div>`;
+    const nav = adminTabs().map((group, groupIndex) => `<div class="admin-nav-group"><span>${escapeHTML(group.title)}</span>${group.items.map(([id, label], index) => `<button data-tab="${id}" class="${groupIndex === 0 && index === 0 ? 'active' : ''}">${escapeHTML(label)}</button>`).join('')}</div>`).join('');
+    app.innerHTML = `<header class="admin-header"><div class="container admin-header-inner"><a href="/" class="admin-brand"><img src="${escapeHTML(state.site.logo_url || '/assets/logo.jpg')}" alt=""><span>TÂM AN<small>KHU VỰC NỘI BỘ</small></span></a><div class="admin-user"><span>${escapeHTML(state.admin.name)} <em>${state.admin.role === 'admin' ? 'Chủ cửa hàng' : 'Nhân viên'}</em></span><button id="logoutButton" class="small-btn">Đăng xuất</button></div></div></header><div class="admin-shell"><aside class="admin-side"><div class="admin-side-title">Bảng điều khiển</div>${nav}</aside><main id="adminMain" class="admin-main"></main></div>`;
     $$('[data-tab]').forEach(button => button.onclick = () => { $$('[data-tab]').forEach(x => x.classList.remove('active')); button.classList.add('active'); loadAdminTab(button.dataset.tab); });
     $('#logoutButton').onclick = async () => { await request('/api/admin/logout', { method:'POST' }); state.admin = null; renderLogin(); };
     loadAdminTab('overview');
@@ -537,6 +586,8 @@
       if (tab === 'promotions') return adminPromotions(main);
       if (tab === 'accessories') return adminAccessories(main);
       if (tab === 'site') return adminSite(main);
+      if (tab === 'contacts') return adminContacts(main);
+      if (tab === 'marketing_ai') return adminMarketingAi(main);
       if (tab === 'policies') return adminPolicies(main);
       if (tab === 'leads') return adminLeads(main);
       if (tab === 'chats') return adminChats(main);
@@ -680,7 +731,7 @@
       </fieldset>
       <fieldset class="fieldset"><legend>Trả góp, Pixel & AI</legend>
         <div class="field"><label>Tiêu đề trả góp</label><textarea name="installment_title">${escapeHTML(s.installment_title || '')}</textarea></div><div class="field"><label>Nội dung trả góp</label><textarea name="installment_text">${escapeHTML(s.installment_text || '')}</textarea></div><div class="field"><label>Giấy tờ / thủ tục</label><textarea name="installment_docs">${escapeHTML(s.installment_docs || '')}</textarea></div><div class="field"><label>Mức trả trước gợi ý (mỗi dòng một lựa chọn)</label><textarea name="installment_down_payments" placeholder="Từ 3 triệu&#10;Từ 5 triệu&#10;Từ 7 triệu&#10;Theo tư vấn">${escapeHTML(s.installment_down_payments || 'Từ 3 triệu\nTừ 5 triệu\nTừ 7 triệu\nTừ 10 triệu\nTheo tư vấn')}</textarea><small class="field-help">Chỉ hiện khi khách chọn Trả góp. Với từng xe, mức “Trả trước từ” của xe đó sẽ được thêm vào đầu danh sách.</small></div><div class="field"><label>Các bước thủ tục (mỗi dòng: Tiêu đề | Mô tả)</label><textarea name="installment_steps">${escapeHTML(s.installment_steps || '')}</textarea></div><div class="field"><label>Câu hỏi thường gặp (mỗi dòng: Câu hỏi | Trả lời)</label><textarea name="installment_faqs">${escapeHTML(s.installment_faqs || '')}</textarea></div>
-        <div class="form-two"><div class="field"><label>Facebook Pixel ID</label><input name="meta_pixel_id" value="${escapeHTML(s.meta_pixel_id || '')}"></div><div class="field"><label>TikTok Pixel ID</label><input name="tiktok_pixel_id" value="${escapeHTML(s.tiktok_pixel_id || '')}"></div><div class="field"><label>Tên chatbot</label><input name="ai_name" value="${escapeHTML(s.ai_name || 'Tâm An AI')}"></div><div class="field"><label>Nhà cung cấp bot</label><select name="ai_provider"><option value="gemini" ${s.ai_provider !== 'webhook' ? 'selected' : ''}>Gemini API</option><option value="webhook" ${s.ai_provider === 'webhook' ? 'selected' : ''}>Webhook / chatbot khác</option></select></div><div class="field"><label>Model Gemini</label><input name="ai_model" value="${escapeHTML(s.ai_model || 'gemini-2.0-flash-lite')}"></div></div><label class="admin-check"><input name="ai_enabled" type="checkbox" ${s.ai_enabled ? 'checked' : ''}><span>✓</span> Bật chatbot tự động</label><div class="field"><label>Lời chào chatbot</label><textarea name="ai_greeting">${escapeHTML(s.ai_greeting || '')}</textarea></div><p class="muted">Gemini dùng Secret <code>GEMINI_API_KEY</code>. Chế độ Webhook dùng Secret <code>AI_WEBHOOK_URL</code>; không dán API key vào đây.</p><div class="field"><label>Kiến thức chatbot</label><textarea name="ai_knowledge">${escapeHTML(s.ai_knowledge || '')}</textarea></div><div class="field"><label>Từ khoá chuyển nhân viên</label><input name="ai_handoff_words" value="${escapeHTML(s.ai_handoff_words || '')}"></div>
+        <div class="form-two"><div class="field"><label>Facebook Pixel ID</label><input name="meta_pixel_id" value="${escapeHTML(s.meta_pixel_id || '')}"></div><div class="field"><label>TikTok Pixel ID</label><input name="tiktok_pixel_id" value="${escapeHTML(s.tiktok_pixel_id || '')}"></div><div class="field"><label>Tên chatbot</label><input name="ai_name" value="${escapeHTML(s.ai_name || 'Tâm An AI')}"></div><div class="field"><label>Nhà cung cấp bot</label><select name="ai_provider"><option value="gemini" ${s.ai_provider !== 'webhook' ? 'selected' : ''}>Gemini API</option><option value="webhook" ${s.ai_provider === 'webhook' ? 'selected' : ''}>Webhook / chatbot khác</option></select></div><div class="field"><label>Model Gemini</label><input name="ai_model" value="${escapeHTML(s.ai_model || 'gemini-3.1-flash-lite')}" placeholder="gemini-3.1-flash-lite"></div></div><label class="admin-check"><input name="ai_enabled" type="checkbox" ${s.ai_enabled ? 'checked' : ''}><span>✓</span> Bật chatbot tự động</label><div class="field"><label>Lời chào chatbot</label><textarea name="ai_greeting">${escapeHTML(s.ai_greeting || '')}</textarea></div><p class="muted">Gemini dùng Secret <code>GEMINI_API_KEY</code>. Chế độ Webhook dùng Secret <code>AI_WEBHOOK_URL</code>; không dán API key vào đây.</p><div class="field"><label>Kiến thức chatbot</label><textarea name="ai_knowledge">${escapeHTML(s.ai_knowledge || '')}</textarea></div><div class="field"><label>Từ khoá chuyển nhân viên</label><input name="ai_handoff_words" value="${escapeHTML(s.ai_handoff_words || '')}"></div><div class="field"><label>Kiểm tra Gemini</label><button type="button" id="aiTestButton" class="small-btn">Kiểm tra kết nối AI</button><small class="muted" style="display:block;margin-top:8px">Lưu form trước khi kiểm tra nếu bạn vừa đổi cài đặt AI.</small></div>
       </fieldset>
       <button class="btn btn-primary">Lưu thay đổi website</button>
     </form>`;
@@ -696,6 +747,64 @@
     ['body_font','heading_font','primary_color','accent_color','background_color','text_color'].forEach(name => $(`[name="${name}"]`, main).addEventListener('change', preview));
     preview();
     $('#siteForm', main).onsubmit = async event => { event.preventDefault(); const fd = new FormData(event.target); const body = Object.fromEntries(fd.entries()); body.ai_enabled = fd.get('ai_enabled') === 'on'; ['floating_show_zalo','floating_show_messenger','floating_show_facebook','floating_show_tiktok','floating_show_chat'].forEach(key => body[key] = fd.get(key) === 'on'); try { const out = await request('/api/admin/site', { method:'PUT', body }); state.site = out.site; setSiteTheme(state.site); notify('Đã lưu giao diện và nội dung website'); } catch (error) { notify(error.message); } };
+    $('#aiTestButton')?.addEventListener('click', async () => { try { const out = await request('/api/admin/ai/test', { method:'POST' }); notify(`AI đã kết nối (${out.model}): ${String(out.reply || '').slice(0,110)}`); } catch (error) { notify(`AI chưa hoạt động: ${error.message}`); } });
+  }
+
+  function sitePayload(form, checkboxes = []) {
+    const fd = new FormData(form);
+    const body = Object.fromEntries(fd.entries());
+    checkboxes.forEach(key => body[key] = fd.get(key) === 'on');
+    return body;
+  }
+  async function saveSiteForm(form, checkboxes, successMessage) {
+    const out = await request('/api/admin/site', { method:'PUT', body:sitePayload(form, checkboxes) });
+    state.site = out.site;
+    setSiteTheme(state.site);
+    notify(successMessage || 'Đã lưu thay đổi.');
+    return out.site;
+  }
+  function iconConfigCard(type, title, note, site) {
+    const key = `floating_${type}`;
+    const selected = site[`${key}_icon`] || (type === 'call' ? 'phone' : type);
+    const color = site[`${key}_color`] || '';
+    const shape = site[`${key}_shape`] || 'rounded';
+    const image = site[`${key}_icon_url`] || '';
+    return `<section class="dock-config-card"><div class="dock-config-head"><div><b>${escapeHTML(title)}</b><span>${escapeHTML(note)}</span></div><span class="dock-preview-icon">${image ? `<img src="${escapeHTML(image)}" alt="">` : socialIcon(selected)}</span></div><div class="form-two"><div class="field"><label>Biểu tượng mặc định</label><select name="${key}_icon">${iconOptionsFor(type, selected)}</select></div><div class="field"><label>Kiểu bo góc</label><select name="${key}_shape"><option value="rounded" ${shape==='rounded'?'selected':''}>Bo tròn</option><option value="circle" ${shape==='circle'?'selected':''}>Tròn</option><option value="square" ${shape==='square'?'selected':''}>Vuông mềm</option></select></div><div class="field"><label>Màu nút</label><input name="${key}_color" type="color" value="${escapeHTML(/^#[0-9a-fA-F]{6}$/.test(color)?color:'#c81924')}"></div><div class="field"><label>Ảnh icon riêng (không bắt buộc)</label><input class="floating-icon-upload" data-field="${key}_icon_url" type="file" accept="image/*"><input name="${key}_icon_url" value="${escapeHTML(image)}" placeholder="Link ảnh icon"></div></div></section>`;
+  }
+  async function adminSite(main) {
+    const data = await request('/api/admin/site'); const s = data.site;
+    main.innerHTML = `<div class="admin-page-head"><div><span>Giao diện website</span><h1 class="admin-title">Theme Studio</h1><p class="admin-sub">Chỉnh font, màu sắc, chữ và ảnh chính. Liên hệ, nút nổi, Pixel và AI được đặt ở các mục riêng để dễ quản lý.</p></div><div class="admin-page-badge">65+ font tiếng Việt</div></div>
+    <form id="siteForm" class="admin-product-form admin-pro-form">
+      <fieldset class="fieldset"><legend>Thương hiệu & Theme</legend><div class="form-three">
+        <div class="field"><label>Tên thương hiệu</label><input name="brand_name" value="${escapeHTML(s.brand_name || '')}"></div><div class="field"><label>Tiêu đề tab trình duyệt</label><input name="page_title" value="${escapeHTML(s.page_title || '')}"></div><div class="field"><label>Logo</label><input id="logoFile" type="file" accept="image/*"><input name="logo_url" value="${escapeHTML(s.logo_url || '')}"></div><div class="field"><label>Favicon / icon tab</label><input id="faviconFile" type="file" accept="image/*"><input name="favicon_url" value="${escapeHTML(s.favicon_url || '')}"></div>
+        <div class="field"><label>Màu chủ đạo</label><input name="primary_color" type="color" value="${escapeHTML(s.primary_color || '#c81924')}"></div><div class="field"><label>Màu nhấn</label><input name="accent_color" type="color" value="${escapeHTML(s.accent_color || '#ff6b76')}"></div><div class="field"><label>Màu nền</label><input name="background_color" type="color" value="${escapeHTML(s.background_color || '#ffffff')}"></div><div class="field"><label>Màu chữ</label><input name="text_color" type="color" value="${escapeHTML(s.text_color || '#1b1214')}"></div>
+        <div class="field"><label>Font nội dung</label><select name="body_font">${fontOptions(s.body_font || 'Be Vietnam Pro')}</select></div><div class="field"><label>Font tiêu đề</label><select name="heading_font">${fontOptions(s.heading_font || 'Barlow Condensed')}</select></div>
+        <div class="field"><label>Cỡ chữ nội dung <output id="bodySizeOut">${escapeHTML(s.body_font_size || 16)}px</output></label><input name="body_font_size" id="bodySize" type="range" min="14" max="20" step="1" value="${escapeHTML(s.body_font_size || 16)}"></div><div class="field"><label>Tỷ lệ tiêu đề <output id="headingScaleOut">${escapeHTML(s.heading_scale || 1)}x</output></label><input name="heading_scale" id="headingScale" type="range" min="0.85" max="1.35" step="0.05" value="${escapeHTML(s.heading_scale || 1)}"></div><div class="field"><label>Giãn dòng <output id="lineHeightOut">${escapeHTML(s.body_line_height || 1.55)}</output></label><input name="body_line_height" id="lineHeight" type="range" min="1.35" max="2" step="0.05" value="${escapeHTML(s.body_line_height || 1.55)}"></div><div class="field"><label>Bo góc <output id="radiusOut">${escapeHTML(s.corner_radius || 22)}px</output></label><input name="corner_radius" id="cornerRadius" type="range" min="8" max="32" step="1" value="${escapeHTML(s.corner_radius || 22)}"></div>
+      </div><div class="theme-preview"><span class="theme-preview-kicker">XEM TRƯỚC THEME</span><h3 id="themePreviewTitle">Chọn xe ưng ý. Lên đường an tâm.</h3><p id="themePreviewText">Thay đổi màu, font và kích cỡ sẽ áp dụng khi bấm lưu.</p><button type="button" class="btn btn-primary">Nút hành động</button></div></fieldset>
+      <fieldset class="fieldset"><legend>Trang chủ & nội dung</legend><div class="field"><label>Tiêu đề Hero</label><textarea name="hero_title">${escapeHTML(s.hero_title || '')}</textarea></div><div class="field"><label>Mô tả Hero</label><textarea name="hero_subtitle">${escapeHTML(s.hero_subtitle || '')}</textarea></div>${imageField('Ảnh Hero (riêng)', 'hero_image', s.hero_image)}${imageField('Ảnh Showroom (riêng)', 'showroom_image', s.showroom_image)}${imageField('Ảnh trang trả góp', 'installment_image', s.installment_image)}${imageField('Ảnh khuyến mại mặc định', 'promo_image', s.promo_image)}<div class="form-two"><div class="field"><label>Tiêu đề giao xe</label><input name="delivery_title" value="${escapeHTML(s.delivery_title || '')}"></div><div class="field"><label>Nội dung giao xe</label><textarea name="delivery_text">${escapeHTML(s.delivery_text || '')}</textarea></div></div></fieldset>
+      <fieldset class="fieldset"><legend>Trang trả góp</legend><div class="field"><label>Tiêu đề trả góp</label><textarea name="installment_title">${escapeHTML(s.installment_title || '')}</textarea></div><div class="field"><label>Nội dung trả góp</label><textarea name="installment_text">${escapeHTML(s.installment_text || '')}</textarea></div><div class="field"><label>Giấy tờ / thủ tục</label><textarea name="installment_docs">${escapeHTML(s.installment_docs || '')}</textarea></div><div class="field"><label>Mức trả trước gợi ý (mỗi dòng một lựa chọn)</label><textarea name="installment_down_payments">${escapeHTML(s.installment_down_payments || '')}</textarea></div><div class="field"><label>Các bước thủ tục (mỗi dòng: Tiêu đề | Mô tả)</label><textarea name="installment_steps">${escapeHTML(s.installment_steps || '')}</textarea></div><div class="field"><label>Câu hỏi thường gặp (mỗi dòng: Câu hỏi | Trả lời)</label><textarea name="installment_faqs">${escapeHTML(s.installment_faqs || '')}</textarea></div></fieldset>
+      <button class="btn btn-primary">Lưu giao diện & nội dung</button></form>`;
+    $$('.site-image-file', main).forEach(input => input.onchange = async () => { try { const url = await uploadFile(input.files[0]); $(`[name="${input.dataset.field}"]`, main).value = url; notify('Đã tải ảnh'); } catch (error) { notify(error.message); } });
+    $('#logoFile', main).onchange = async event => { try { const url = await uploadFile(event.target.files[0]); $('[name="logo_url"]', main).value = url; $('[name="favicon_url"]', main).value = url; notify('Đã tải logo'); } catch (error) { notify(error.message); } };
+    $('#faviconFile', main).onchange = async event => { try { $('[name="favicon_url"]', main).value = await uploadFile(event.target.files[0]); notify('Đã tải favicon'); } catch (error) { notify(error.message); } };
+    const preview = () => { const draft = Object.fromEntries(new FormData($('#siteForm', main)).entries()); setSiteTheme({ ...state.site, ...draft }); $('#bodySizeOut').value = `${draft.body_font_size}px`; $('#headingScaleOut').value = `${draft.heading_scale}x`; $('#lineHeightOut').value = draft.body_line_height; $('#radiusOut').value = `${draft.corner_radius}px`; };
+    ['bodySize','headingScale','lineHeight','cornerRadius'].forEach(id => $(`#${id}`, main).addEventListener('input', preview)); ['body_font','heading_font','primary_color','accent_color','background_color','text_color'].forEach(name => $(`[name="${name}"]`, main).addEventListener('change', preview)); preview();
+    $('#siteForm', main).onsubmit = async event => { event.preventDefault(); try { await saveSiteForm(event.target, [], 'Đã lưu giao diện và nội dung website.'); } catch (error) { notify(error.message); } };
+  }
+  async function adminContacts(main) {
+    const data = await request('/api/admin/site'); const s = data.site;
+    main.innerHTML = `<div class="admin-page-head"><div><span>Thông tin liên hệ</span><h1 class="admin-title">Liên hệ & nút nổi</h1><p class="admin-sub">Tự chọn icon mặc định, tải icon riêng, màu nút, kiểu bo góc và nút nào được nhấp nháy.</p></div><div class="admin-page-badge">Nút nổi thực tế</div></div>
+      <form id="contactsForm" class="admin-product-form admin-pro-form"><fieldset class="fieldset"><legend>Liên hệ & mạng xã hội</legend><div class="form-three"><div class="field"><label>Hotline</label><input name="hotline" value="${escapeHTML(s.hotline || '')}"></div><div class="field"><label>Email</label><input name="support_email" value="${escapeHTML(s.support_email || '')}"></div><div class="field"><label>Địa chỉ</label><input name="address" value="${escapeHTML(s.address || '')}"></div><div class="field"><label>Zalo URL</label><input name="zalo_url" value="${escapeHTML(s.zalo_url || '')}" placeholder="https://zalo.me/..."></div><div class="field"><label>Messenger URL</label><input name="messenger_url" value="${escapeHTML(s.messenger_url || '')}" placeholder="https://m.me/..."></div><div class="field"><label>Facebook URL</label><input name="facebook_url" value="${escapeHTML(s.facebook_url || '')}" placeholder="https://facebook.com/..."></div><div class="field"><label>TikTok URL</label><input name="tiktok_url" value="${escapeHTML(s.tiktok_url || '')}" placeholder="https://tiktok.com/@..."></div><div class="field"><label>YouTube URL</label><input name="youtube_url" value="${escapeHTML(s.youtube_url || '')}" placeholder="https://youtube.com/..."></div><div class="field"><label>Google Map embed URL</label><input name="map_embed_url" value="${escapeHTML(s.map_embed_url || '')}"></div><div class="field full"><label>Giờ làm việc</label><textarea name="business_hours">${escapeHTML(s.business_hours || '')}</textarea></div></div></fieldset>
+      <fieldset class="fieldset"><legend>Nút nổi & hiệu ứng nhấp nháy</legend><div class="form-three"><div class="field"><label>Nút nhấp nháy chính</label><select name="floating_primary_action"><option value="call" ${s.floating_primary_action==='call'||!s.floating_primary_action?'selected':''}>Gọi ngay</option><option value="zalo" ${s.floating_primary_action==='zalo'?'selected':''}>Zalo</option><option value="chat" ${s.floating_primary_action==='chat'?'selected':''}>Chat trực tuyến</option></select></div><div class="field"><label>Tốc độ nhấp nháy</label><select name="floating_pulse_speed"><option value="slow" ${s.floating_pulse_speed==='slow'?'selected':''}>Chậm, nhẹ</option><option value="normal" ${!s.floating_pulse_speed||s.floating_pulse_speed==='normal'?'selected':''}>Vừa</option><option value="fast" ${s.floating_pulse_speed==='fast'?'selected':''}>Nhanh</option></select></div><div class="field"><label>Hiệu ứng</label><label class="switch-row"><input name="floating_pulse_enabled" type="checkbox" ${s.floating_pulse_enabled!==false?'checked':''}><span> Bật nhấp nháy thật</span></label></div></div><div class="check-row floating-settings"><label><input name="floating_show_zalo" type="checkbox" ${s.floating_show_zalo!==false?'checked':''}> Hiện Zalo</label><label><input name="floating_show_messenger" type="checkbox" ${s.floating_show_messenger!==false?'checked':''}> Hiện Messenger</label><label><input name="floating_show_facebook" type="checkbox" ${s.floating_show_facebook?'checked':''}> Hiện Facebook</label><label><input name="floating_show_tiktok" type="checkbox" ${s.floating_show_tiktok?'checked':''}> Hiện TikTok</label><label><input name="floating_show_chat" type="checkbox" ${s.floating_show_chat!==false?'checked':''}> Hiện Chat</label></div><div class="dock-config-grid">${iconConfigCard('call','Gọi ngay','Hotline trên thiết bị khách',s)}${iconConfigCard('zalo','Zalo','Mở trực tiếp Zalo',s)}${iconConfigCard('messenger','Messenger','Mở hội thoại Messenger',s)}${iconConfigCard('facebook','Facebook','Đi đến Fanpage',s)}${iconConfigCard('tiktok','TikTok','Đi đến TikTok',s)}${iconConfigCard('chat','Chat tư vấn','Mở chat ngay trên website',s)}</div><div class="form-two"><div class="field"><label>Nhãn nút gọi</label><input name="floating_call_label" value="${escapeHTML(s.floating_call_label || 'Gọi ngay')}"></div><div class="field"><label>Nhãn nút chat</label><input name="floating_chat_label" value="${escapeHTML(s.floating_chat_label || 'Tư vấn')}"></div></div></fieldset><button class="btn btn-primary">Lưu liên hệ & nút nổi</button></form>`;
+    $$('.floating-icon-upload', main).forEach(input => input.onchange = async () => { try { const url=await uploadFile(input.files[0]); $(`[name="${input.dataset.field}"]`, main).value=url; const preview=$(`[data-preview="${input.dataset.field}"]`, main); if(preview) preview.src=url; notify('Đã tải icon riêng.'); } catch(error){ notify(error.message); } });
+    $('#contactsForm', main).onsubmit = async event => { event.preventDefault(); try { await saveSiteForm(event.target, ['floating_show_zalo','floating_show_messenger','floating_show_facebook','floating_show_tiktok','floating_show_chat','floating_pulse_enabled'], 'Đã lưu liên hệ và nút nổi.'); } catch(error) { notify(error.message); } };
+  }
+  async function adminMarketingAi(main) {
+    const [siteData, aiData] = await Promise.all([request('/api/admin/site'), request('/api/admin/ai/status').catch(error => ({ error:error.message }))]); const s=siteData.site;
+    const status = aiData.error ? `<div class="ai-health ai-health-error"><b>Không đọc được trạng thái AI</b><span>${escapeHTML(aiData.error)}</span></div>` : `<div class="ai-health ${aiData.key_configured ? 'ai-health-ready' : 'ai-health-warn'}"><b>${aiData.key_configured ? 'Secret AI đã được cấu hình' : 'Chưa tìm thấy Secret AI'}</b><span>Nhà cung cấp: ${escapeHTML(aiData.provider || 'gemini')} • Model: ${escapeHTML(aiData.model || '')} • Chatbot: ${aiData.enabled ? 'đang bật' : 'đang tắt'}</span></div>`;
+    main.innerHTML = `<div class="admin-page-head"><div><span>Quảng cáo & tự động hoá</span><h1 class="admin-title">Pixel & Chatbot AI</h1><p class="admin-sub">Đặt Meta Pixel, TikTok Pixel và cấu hình AI ở một nơi riêng. API key luôn đặt trong Cloudflare Secret, không dán vào website.</p></div><div class="admin-page-badge">Bảo mật key</div></div>${status}<form id="marketingForm" class="admin-product-form admin-pro-form"><fieldset class="fieldset"><legend>Đo lường quảng cáo</legend><div class="form-two"><div class="field"><label>Meta / Facebook Pixel ID</label><input name="meta_pixel_id" value="${escapeHTML(s.meta_pixel_id || '')}" placeholder="Ví dụ: 123456789..."><small class="field-help">Website ghi PageView, xem xe và gửi form sau khi Pixel được cấu hình.</small></div><div class="field"><label>TikTok Pixel ID</label><input name="tiktok_pixel_id" value="${escapeHTML(s.tiktok_pixel_id || '')}" placeholder="Ví dụ: CXXXX..."><small class="field-help">Chỉ nhập Pixel ID, không nhập access token.</small></div></div></fieldset><fieldset class="fieldset"><legend>Chatbot AI</legend><div class="form-three"><div class="field"><label>Tên chatbot</label><input name="ai_name" value="${escapeHTML(s.ai_name || 'Tâm An AI')}"></div><div class="field"><label>Nhà cung cấp</label><select name="ai_provider"><option value="gemini" ${s.ai_provider!=='webhook'?'selected':''}>Gemini API</option><option value="webhook" ${s.ai_provider==='webhook'?'selected':''}>Webhook / chatbot bên khác</option></select></div><div class="field"><label>Model Gemini</label><input name="ai_model" value="${escapeHTML(s.ai_model || 'gemini-3.1-flash-lite')}" placeholder="gemini-3.1-flash-lite"></div></div><label class="admin-check"><input name="ai_enabled" type="checkbox" ${s.ai_enabled?'checked':''}><span>✓</span> Bật chatbot tự động khi chưa có nhân viên nhận chat</label><div class="field"><label>Lời chào chatbot</label><textarea name="ai_greeting">${escapeHTML(s.ai_greeting || '')}</textarea></div><div class="field"><label>Kiến thức chatbot</label><textarea name="ai_knowledge">${escapeHTML(s.ai_knowledge || '')}</textarea></div><div class="field"><label>Từ khoá chuyển nhân viên (ngăn cách bằng dấu phẩy)</label><input name="ai_handoff_words" value="${escapeHTML(s.ai_handoff_words || '')}"></div><div class="ai-action-row"><button type="button" id="aiTestButton" class="btn btn-dark">Kiểm tra kết nối AI</button><span id="aiTestResult" class="muted">Bấm kiểm tra sau khi đã thêm Secret GEMINI_API_KEY.</span></div><p class="muted">Gemini dùng <code>GEMINI_API_KEY</code>. Chatbot bên khác dùng <code>AI_WEBHOOK_URL</code>. Hai Secret này được thêm ở Cloudflare → Worker → Settings → Variables and Secrets.</p></fieldset><button class="btn btn-primary">Lưu Pixel & Chatbot AI</button></form>`;
+    $('#marketingForm',main).onsubmit = async event => { event.preventDefault(); try { await saveSiteForm(event.target,['ai_enabled'],'Đã lưu Pixel & Chatbot AI.'); } catch(error){ notify(error.message); } };
+    $('#aiTestButton',main).onclick = async () => { const button=$('#aiTestButton',main), result=$('#aiTestResult',main); button.disabled=true; button.textContent='Đang kiểm tra…'; result.textContent='Worker đang gửi một câu thử tới nhà cung cấp AI.'; try { const out=await request('/api/admin/ai/test',{method:'POST'}); result.textContent=`Kết nối thành công (${out.model}): ${String(out.reply || '').slice(0,160)}`; result.className='ai-test-success'; } catch(error) { result.textContent=`Chưa kết nối được: ${error.message}`; result.className='ai-test-error'; } finally { button.disabled=false; button.textContent='Kiểm tra kết nối AI'; } };
   }
 
   async function adminPolicies(main) {
