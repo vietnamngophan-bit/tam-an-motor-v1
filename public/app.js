@@ -111,6 +111,64 @@
   }
 
 
+  // Admin-configured announcement ticker. It deliberately presents curated store notices,
+  // not unverified live customer activity.
+  function noticeRows() {
+    const raw = String(state.site?.notice_items || '').trim();
+    if (!raw) return [];
+    const products = state.products.filter(product => product.published !== 0 && product.status !== 'sold');
+    return raw.split('\n').map((line, index) => {
+      const parts = line.split('|').map(part => part.trim());
+      const label = parts.length > 1 ? parts.shift() : 'Tâm An';
+      let message = parts.join('|').trim() || line.trim();
+      const product = products.length ? products[index % products.length] : null;
+      message = message.replace(/\{xe\}/gi, product?.name || 'mẫu xe đang quan tâm');
+      return { label: label || 'Tâm An', message };
+    }).filter(row => row.message);
+  }
+
+  function noticeTicker() {
+    const s = state.site || {};
+    const rows = noticeRows();
+    if (!s.notice_enabled || !rows.length) return '';
+    const position = s.notice_position === 'center' ? 'notice-center' : 'notice-left';
+    return `<aside id="noticeTicker" class="notice-ticker ${position}" role="status" aria-live="polite" aria-label="${escapeHTML(s.notice_title || 'Thông báo nổi bật')}">
+      <span class="notice-orbit" aria-hidden="true"></span>
+      <div class="notice-symbol" aria-hidden="true">✦</div>
+      <div class="notice-copy"><span class="notice-title">${escapeHTML(s.notice_title || 'Thông báo nổi bật')}</span><p id="noticeMessage"></p></div>
+      <button id="noticeClose" class="notice-close" type="button" aria-label="Đóng thông báo">×</button>
+    </aside>`;
+  }
+
+  function bindNoticeTicker() {
+    const ticker = $('#noticeTicker');
+    const output = $('#noticeMessage');
+    if (!ticker || !output) return;
+    const rows = noticeRows();
+    if (!rows.length) return;
+    const duration = Math.max(3000, Math.min(30000, Number(state.site?.notice_interval || 6000)));
+    let index = 0;
+    const render = () => {
+      const row = rows[index % rows.length];
+      output.classList.remove('is-visible');
+      window.setTimeout(() => {
+        output.innerHTML = `<b>${escapeHTML(row.label)}</b><span>${escapeHTML(row.message)}</span>`;
+        output.classList.add('is-visible');
+      }, 120);
+      index += 1;
+    };
+    render();
+    let timer = rows.length > 1 ? window.setInterval(render, duration) : null;
+    const pause = () => { if (timer) { window.clearInterval(timer); timer = null; } };
+    const resume = () => { if (!timer && rows.length > 1) timer = window.setInterval(render, duration); };
+    ticker.addEventListener('mouseenter', pause);
+    ticker.addEventListener('mouseleave', resume);
+    ticker.addEventListener('touchstart', pause, { passive:true });
+    ticker.addEventListener('touchend', resume, { passive:true });
+    $('#noticeClose')?.addEventListener('click', () => { pause(); ticker.remove(); });
+  }
+
+
   const PAYMENT_PLAN_LABEL = {
     cash: 'Trả thẳng',
     installment: 'Trả góp',
@@ -347,19 +405,41 @@
     const s = state.site;
     const counts = Object.fromEntries(state.categories.map(x => [x.category, Number(x.count)]));
     const categoryCards = Object.keys(CATEGORY).filter(key => counts[key] > 0).map(key => `<a href="/#inventory" class="category-card filter-category" data-category="${key}"><b>${CATEGORY[key]}</b><span>${counts[key]} sản phẩm đang hiển thị</span><i>${key.includes('electric') ? '⚡' : '🏍️'}</i></a>`).join('');
-    const promo = state.promotions[0] || { title:s.promo_title, content:s.promo_text, image_url:s.promo_image };
+    // Hiển thị tất cả chương trình đang bật. Khi có nhiều chương trình, phần khuyến mại
+    // sẽ thành carousel tự chạy; khách vẫn có thể vuốt, bấm mũi tên và chọn chấm điều hướng.
+    const promotions = state.promotions
+      .filter(item => Number(item.active ?? 1) !== 0)
+      .filter(item => item.title || item.content || item.image_url);
+    if (!promotions.length && (s.promo_title || s.promo_text || s.promo_image)) {
+      promotions.push({ title:s.promo_title, content:s.promo_text, image_url:s.promo_image, active:1 });
+    }
+    const promoSlides = promotions.map((promo, index) => `
+      <article class="promo-slide" data-promo-index="${index}">
+        <div class="promo-slide-media">
+          <img src="${escapeHTML(promo.image_url || '/assets/tam-an-promo.jpg')}" alt="${escapeHTML(promo.title || 'Chương trình khuyến mại')}" loading="lazy">
+          <span class="promo-slide-number">${String(index + 1).padStart(2, '0')}</span>
+        </div>
+        <div class="promo-slide-copy">
+          <span class="promo-slide-kicker">Ưu đãi đang diễn ra</span>
+          <h3>${escapeHTML(promo.title || 'Chương trình ưu đãi')}</h3>
+          ${promo.content ? `<p>${escapeHTML(promo.content)}</p>` : '<p>Liên hệ Tâm An để nhận thông tin ưu đãi và quà tặng hiện hành.</p>'}
+          <button class="promo-consult-btn" type="button" data-promo-lead="${escapeHTML(promo.title || 'Khuyến mại')}">Nhận tư vấn ưu đãi <span>→</span></button>
+        </div>
+      </article>`).join('');
     app.className = '';
     app.innerHTML = `${nav()}<main>
       <section class="hero"><div class="hero-bg" style="background-image:url('${escapeHTML(s.hero_image || '/assets/tam-an-promo.jpg')}')"></div><div class="container hero-inner"><div class="hero-copy"><div class="eyebrow">${escapeHTML(s.brand_name)}</div><h1>${multiline(s.hero_title || 'Chọn xe ưng ý.\nLên đường an tâm.')}</h1><p>${escapeHTML(s.hero_subtitle || '')}</p><div class="hero-actions"><a class="btn btn-primary" href="/#inventory">Xem xe đang có</a><a class="btn btn-light" href="/tra-gop">Tư vấn trả góp</a></div></div></div></section>
       <div class="trust-strip"><div class="container"><div class="trust-grid"><div class="trust-item"><i class="trust-icon">✓</i><div><b>Thông tin rõ ràng</b><span>Giá hiển thị theo cài đặt cửa hàng.</span></div></div><div class="trust-item"><i class="trust-icon">✦</i><div><b>Hỗ trợ trả góp</b><span>Kiểm tra hồ sơ trước khi xác nhận.</span></div></div><div class="trust-item"><i class="trust-icon">⌁</i><div><b>Tình trạng cập nhật</b><span>Còn hàng, sắp về, đang giữ xe.</span></div></div><div class="trust-item"><i class="trust-icon">☎</i><div><b>Tư vấn nhanh</b><span>Gọi điện hoặc chat trực tiếp.</span></div></div></div></div></div>
       ${categoryCards ? `<section class="section"><div class="container"><div class="section-head"><div><div class="section-kicker">Khám phá kho xe</div><h2>Chọn đúng dòng xe bạn cần.</h2><p class="section-lead">Danh mục chỉ xuất hiện khi đang có sản phẩm.</p></div></div><div class="category-grid">${categoryCards}</div></div></section>` : ''}
       <section id="inventory" class="section section-soft"><div class="container"><div class="section-head"><div><div class="section-kicker">Kho xe Tâm An</div><h2>Xe đang có & xe sắp về.</h2><p class="section-lead">Gõ gần đúng tên xe, hãng hoặc màu xe để tìm nhanh.</p></div><div class="search-box">⌕<input id="searchInput" placeholder="Tìm tên xe, hãng, màu xe…"></div></div><div class="chips" id="categoryChips"><button class="chip active" data-category="">Tất cả xe</button>${Object.keys(CATEGORY).filter(key => counts[key] > 0).map(key => `<button class="chip" data-category="${key}">${CATEGORY[key]}</button>`).join('')}</div><div class="section-head" style="margin-top:18px"><p class="section-lead" id="productCount">${state.products.length} xe phù hợp</p><div class="slider-controls"><button class="icon-btn" id="slideLeft">←</button><button class="icon-btn" id="slideRight">→</button></div></div><div id="productRow" class="product-row">${state.products.map(card).join('') || '<div class="admin-empty">Kho xe đang được cập nhật.</div>'}</div></div></section>
-      <section id="promo" class="section"><div class="container promo-grid"><div class="promo-visual"><img src="${escapeHTML(promo.image_url || '/assets/tam-an-promo.jpg')}" alt="Khuyến mại"></div><div class="promo-copy"><div class="section-kicker" style="color:#ffb7be">Chương trình ưu đãi</div><h2>${escapeHTML(promo.title || 'Ưu đãi đang diễn ra')}</h2><p>${escapeHTML(promo.content || '')}</p><div class="benefits"><div class="benefit"><b>Trả góp rõ ràng</b><span>Hỗ trợ tìm phương án phù hợp.</span></div><div class="benefit"><b>Quà tặng theo xe</b><span>Kiểm tra ưu đãi thực tế cùng nhân viên.</span></div><div class="benefit"><b>Hỗ trợ nhanh</b><span>Gửi số điện thoại để nhận tư vấn.</span></div></div><div style="margin-top:22px"><a class="btn btn-light" href="/tra-gop">Tư vấn trả góp →</a></div></div></div></section>
+      ${promoSlides ? `<section id="promo" class="section promo-section"><div class="container"><div class="section-head promo-section-head"><div><div class="section-kicker">Chương trình ưu đãi</div><h2>Nhiều ưu đãi. Chọn đúng thời điểm.</h2><p class="section-lead">Vuốt để xem từng chương trình đang áp dụng tại Tâm An.</p></div>${promotions.length > 1 ? `<div class="promo-controls"><button id="promoPrev" class="icon-btn" type="button" aria-label="Khuyến mại trước">←</button><button id="promoNext" class="icon-btn" type="button" aria-label="Khuyến mại tiếp theo">→</button></div>` : ''}</div><div class="promo-carousel" aria-label="Các chương trình khuyến mại"><div id="promoTrack" class="promo-track">${promoSlides}</div></div>${promotions.length > 1 ? `<div id="promoDots" class="promo-dots" aria-label="Chọn chương trình">${promotions.map((_, index) => `<button type="button" class="promo-dot ${index === 0 ? 'is-active' : ''}" data-promo-dot="${index}" aria-label="Xem chương trình ${index + 1}"></button>`).join('')}</div>` : ''}</div></section>` : ''}
       ${state.accessories.length ? `<section id="accessories" class="section section-soft"><div class="container"><div class="section-head"><div><div class="section-kicker">Phụ tùng & phụ kiện</div><h2>Chọn thêm cho xe. Đi đường yên tâm hơn.</h2></div></div><div class="accessory-grid">${state.accessories.map(a => `<article class="accessory"><img src="${escapeHTML(a.image_url || '/assets/logo.jpg')}" alt="${escapeHTML(a.name)}"><div class="accessory-body"><h3>${escapeHTML(a.name)}</h3>${a.price ? `<b class="price">${money(a.price)}</b>` : '<b class="price-hidden">Liên hệ</b>'}${a.description ? `<p class="muted">${escapeHTML(a.description)}</p>` : ''}</div></article>`).join('')}</div></div></section>` : ''}
       <section class="section"><div class="container delivery"><div class="delivery-img" style="background-image:url('${escapeHTML(s.delivery_image || s.showroom_image || '/assets/showroom.jpg')}')"></div><div class="delivery-copy"><div class="section-kicker">Dịch vụ Tâm An</div><h2>${escapeHTML(s.delivery_title || 'Hỗ trợ giao xe tận nơi')}</h2><p>${escapeHTML(s.delivery_text || '')}</p><button class="btn btn-primary lead-button" data-name="Giao xe tận nơi">Đăng ký tư vấn giao xe</button></div></div></section>
       <section id="showroom" class="section section-soft"><div class="container showroom-grid"><div class="showroom-photo"><img src="${escapeHTML(s.showroom_image || '/assets/showroom.jpg')}" alt="Showroom"></div><div class="showroom-info"><div class="section-kicker">Đến showroom</div><h2>Ghé Tâm An, xem xe thật.</h2><div class="info-list"><div class="info-item"><b>Địa chỉ</b><span>${escapeHTML(s.address || '')}</span></div><div class="info-item"><b>Hotline</b><span>${escapeHTML(s.hotline || '')}</span></div><div class="info-item"><b>Giờ làm việc</b><span>${escapeHTML(s.business_hours || '')}</span></div></div><iframe class="map-frame" src="${escapeHTML(s.map_embed_url || '')}" loading="lazy"></iframe></div></div></section>
-    </main>${footer()}${floatingButtons()}`;
+    </main>${footer()}${noticeTicker()}${floatingButtons()}`;
     bindHomeEvents();
+    bindPromotionCarousel();
+    bindNoticeTicker();
     bindHomeAnchorLinks();
     scrollToCurrentHash('auto');
   }
@@ -390,6 +470,54 @@
       <button class="float-btn float-top" id="backTop" aria-label="Lên đầu trang" title="Lên đầu trang">${socialIcon('top')}</button>
     </div>
     ${enabled('floating_show_chat') ? `<button id="chatOpen" class="chat-launch ${pulseClass('chat')} shape-${chatCfg.shape}" style="${chatCfg.style}" aria-label="Chat trực tuyến" title="Chat trực tuyến">${contactIcon('chat','chat')}<span class="chat-launch-text">${escapeHTML(s.floating_chat_label || 'Tư vấn')}</span></button>` : ''}<div id="chatPanel" class="chat-panel"></div>`;
+  }
+
+  function bindPromotionCarousel() {
+    const track = $('#promoTrack');
+    if (!track) return;
+    const slides = $$('.promo-slide', track);
+    const dots = $$('.promo-dot');
+    const setActive = index => {
+      dots.forEach((dot, dotIndex) => dot.classList.toggle('is-active', dotIndex === index));
+    };
+    const nearestIndex = () => {
+      const current = track.scrollLeft;
+      let bestIndex = 0;
+      let bestDistance = Infinity;
+      slides.forEach((slide, index) => {
+        const distance = Math.abs(slide.offsetLeft - current);
+        if (distance < bestDistance) { bestDistance = distance; bestIndex = index; }
+      });
+      return bestIndex;
+    };
+    const moveTo = index => {
+      if (!slides.length) return;
+      const target = (index + slides.length) % slides.length;
+      track.scrollTo({ left: slides[target].offsetLeft, behavior:'smooth' });
+      setActive(target);
+    };
+    let index = 0;
+    let timer = null;
+    const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
+    const start = () => {
+      stop();
+      if (slides.length < 2 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      timer = setInterval(() => { index = (nearestIndex() + 1) % slides.length; moveTo(index); }, 4800);
+    };
+    $('#promoPrev')?.addEventListener('click', () => { index = (nearestIndex() - 1 + slides.length) % slides.length; moveTo(index); start(); });
+    $('#promoNext')?.addEventListener('click', () => { index = (nearestIndex() + 1) % slides.length; moveTo(index); start(); });
+    dots.forEach(dot => dot.addEventListener('click', () => { index = Number(dot.dataset.promoDot); moveTo(index); start(); }));
+    $$('.promo-consult-btn').forEach(button => button.addEventListener('click', () => openLeadModal({ name:button.dataset.promoLead || 'Khuyến mại' })));
+    let scrollTimer;
+    track.addEventListener('scroll', () => {
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => { index = nearestIndex(); setActive(index); }, 90);
+    }, { passive:true });
+    track.addEventListener('mouseenter', stop);
+    track.addEventListener('mouseleave', start);
+    track.addEventListener('touchstart', stop, { passive:true });
+    track.addEventListener('touchend', start, { passive:true });
+    start();
   }
 
   function bindHomeEvents() {
@@ -581,7 +709,7 @@
       { title:'Vận hành', items:[['overview','Tổng quan'],['products','Kho xe'],['leads','Form khách'],['chats','Chat trực tuyến'],['accessories','Phụ kiện']] }
     ];
     if (state.admin.role === 'admin') groups.push(
-      { title:'Nội dung & giao diện', items:[['promotions','Khuyến mại'],['site','Giao diện & nội dung'],['contacts','Liên hệ & nút nổi'],['policies','Chính sách']] },
+      { title:'Nội dung & giao diện', items:[['promotions','Khuyến mại'],['site','Giao diện & nội dung'],['contacts','Liên hệ & nút nổi'],['notices','Thông báo nổi bật'],['policies','Chính sách']] },
       { title:'Quảng cáo & AI', items:[['marketing_ai','Pixel & Chatbot AI'],['analytics','Lượt truy cập']] },
       { title:'Hệ thống', items:[['users','Nhân viên'],['logs','Nhật ký hệ thống']] }
     );
@@ -604,6 +732,7 @@
       if (tab === 'accessories') return adminAccessories(main);
       if (tab === 'site') return adminSite(main);
       if (tab === 'contacts') return adminContacts(main);
+      if (tab === 'notices') return adminNotices(main);
       if (tab === 'marketing_ai') return adminMarketingAi(main);
       if (tab === 'policies') return adminPolicies(main);
       if (tab === 'leads') return adminLeads(main);
@@ -816,6 +945,54 @@
     $$('.floating-icon-upload', main).forEach(input => input.onchange = async () => { try { const url=await uploadFile(input.files[0]); $(`[name="${input.dataset.field}"]`, main).value=url; const preview=$(`[data-preview="${input.dataset.field}"]`, main); if(preview) preview.src=url; notify('Đã tải icon riêng.'); } catch(error){ notify(error.message); } });
     $('#contactsForm', main).onsubmit = async event => { event.preventDefault(); try { await saveSiteForm(event.target, ['floating_show_zalo','floating_show_messenger','floating_show_facebook','floating_show_tiktok','floating_show_chat','floating_pulse_enabled'], 'Đã lưu liên hệ và nút nổi.'); } catch(error) { notify(error.message); } };
   }
+  async function adminNotices(main) {
+    const data = await request('/api/admin/site');
+    const s = data.site;
+    const examples = String(s.notice_items || 'Tâm An|Khám phá {xe} tại showroom hôm nay.\nƯu đãi|Liên hệ để nhận tư vấn trả góp và quà tặng hiện hành.');
+    main.innerHTML = `<div class="admin-page-head"><div><span>Nội dung nổi bật</span><h1 class="admin-title">Thông báo luân phiên</h1><p class="admin-sub">Tạo các thông báo chạy tự động trên website. Mục này hiển thị dưới nhãn “Thông báo nổi bật”; dùng nội dung đúng với chương trình và thông tin showroom của bạn.</p></div><div class="admin-page-badge">Tự động luân phiên</div></div>
+      <form id="noticeForm" class="admin-product-form admin-pro-form">
+        <fieldset class="fieldset"><legend>Bật và hiển thị</legend><div class="form-three">
+          <div class="field"><label class="admin-check"><input name="notice_enabled" type="checkbox" ${s.notice_enabled ? 'checked' : ''}><span>✓</span> Hiện thông báo ngoài website</label></div>
+          <div class="field"><label>Tiêu đề nhãn</label><input name="notice_title" value="${escapeHTML(s.notice_title || 'Thông báo nổi bật')}" maxlength="48"></div>
+          <div class="field"><label>Vị trí</label><select name="notice_position"><option value="left" ${s.notice_position !== 'center' ? 'selected' : ''}>Góc trái phía dưới</option><option value="center" ${s.notice_position === 'center' ? 'selected' : ''}>Giữa đáy màn hình</option></select></div>
+          <div class="field"><label>Tốc độ chuyển (giây)</label><input name="notice_interval_seconds" type="number" min="3" max="30" value="${Math.round(Number(s.notice_interval || 6000) / 1000)}"></div>
+        </div></fieldset>
+        <fieldset class="fieldset"><legend>Nội dung thông báo</legend>
+          <div class="field"><label>Mỗi dòng một thông báo</label><textarea name="notice_items" rows="8" placeholder="Nhãn | Nội dung">${escapeHTML(examples)}</textarea><small class="field-help">Cú pháp: <b>Nhãn | Nội dung</b>. Có thể dùng <code>{xe}</code> để tự chèn tên xe đang có trong kho. Ví dụ: <code>Ưu đãi | {xe} đang có hỗ trợ tư vấn trả góp.</code></small></div>
+          <div class="notice-admin-preview"><span>HIỂN THỊ MẪU</span><div class="notice-preview-card"><i>✦</i><div><b id="noticePreviewTitle">${escapeHTML(s.notice_title || 'Thông báo nổi bật')}</b><p id="noticePreviewContent"></p></div></div></div>
+        </fieldset>
+        <button class="btn btn-primary">Lưu thông báo nổi bật</button>
+      </form>`;
+    const form = $('#noticeForm', main);
+    const content = $('#noticePreviewContent', main);
+    const title = $('#noticePreviewTitle', main);
+    const preview = () => {
+      const rows = String($('[name="notice_items"]', form).value || '').split('\n').map(v => v.trim()).filter(Boolean);
+      const first = rows[0] || 'Tâm An | Chưa có nội dung thông báo.';
+      const parts = first.split('|').map(v => v.trim());
+      const label = parts.length > 1 ? parts.shift() : 'Tâm An';
+      const body = parts.join('|') || first;
+      title.textContent = $('[name="notice_title"]', form).value || 'Thông báo nổi bật';
+      content.textContent = `${label}: ${body.replace(/\{xe\}/gi, 'Tên xe trong kho')}`;
+    };
+    $('[name="notice_items"]', form).addEventListener('input', preview);
+    $('[name="notice_title"]', form).addEventListener('input', preview);
+    preview();
+    form.onsubmit = async event => {
+      event.preventDefault();
+      const fd = new FormData(form);
+      const body = Object.fromEntries(fd.entries());
+      body.notice_enabled = fd.get('notice_enabled') === 'on';
+      body.notice_interval = Math.max(3, Math.min(30, Number(body.notice_interval_seconds || 6))) * 1000;
+      delete body.notice_interval_seconds;
+      try {
+        const out = await request('/api/admin/site', { method:'PUT', body });
+        state.site = out.site;
+        notify('Đã lưu thông báo nổi bật.');
+      } catch (error) { notify(error.message); }
+    };
+  }
+
   async function adminMarketingAi(main) {
     const [siteData, aiData] = await Promise.all([request('/api/admin/site'), request('/api/admin/ai/status').catch(error => ({ error:error.message }))]); const s=siteData.site;
     const legacyModels = ['gemini-2.0-flash-lite', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'];
