@@ -241,3 +241,52 @@ body{background:var(--page-bg);font-size:var(--base-size);line-height:var(--body
     background: #f5eeee;
   }
 }
+
+/* ==================================================================
+   V1.8.3 — FIXED HEADER
+   The showroom header remains visible while customers scroll.
+   ================================================================== */
+:root { --ta-fixed-header-height: 114px; }
+
+/* Only apply page offset on the customer-facing website, not /admin. */
+body:has(.site-header) {
+  padding-top: var(--ta-fixed-header-height);
+}
+
+.site-header {
+  position: fixed !important;
+  inset: 0 0 auto 0;
+  width: 100%;
+  z-index: 1000 !important;
+  box-shadow: 0 8px 26px rgba(38, 13, 16, .10);
+}
+
+/* Prevent anchor navigation from ending behind the fixed header. */
+body:has(.site-header) section[id],
+body:has(.site-header) [id="kho-xe"],
+body:has(.site-header) [id="khuyen-mai"],
+body:has(.site-header) [id="phu-kien"],
+body:has(.site-header) [id="showroom"] {
+  scroll-margin-top: calc(var(--ta-fixed-header-height) + 18px);
+}
+
+@media (max-width: 980px) {
+  /* Mobile menu opens below the full fixed header instead of over it. */
+  .main-nav.mobile-open {
+    top: calc(100% + 8px) !important;
+    z-index: 1001;
+  }
+}
+
+@media (max-width: 640px) {
+  :root { --ta-fixed-header-height: 104px; }
+
+  .site-header {
+    box-shadow: 0 6px 20px rgba(38, 13, 16, .12);
+  }
+
+  /* Keep the logo / hamburger bar compact but easy to tap. */
+  .nav { height: 70px; }
+  .brand-logo { width: 48px; height: 48px; }
+  .menu-btn { width: 52px; height: 52px; border-radius: 17px; }
+}
