@@ -54,6 +54,8 @@ const DEFAULT_SITE = {
   promo_image: '/assets/tam-an-promo.jpg',
   delivery_title: 'Hỗ trợ giao xe tận nơi',
   delivery_text: 'Tư vấn quy trình giao xe và hồ sơ từ xa. Liên hệ để được báo chi tiết theo khu vực.',
+  // Ảnh riêng cho phần Giao xe. Nếu chưa tải ảnh, website sẽ dùng tạm ảnh Showroom.
+  delivery_image: '',
   installment_title: 'Mua xe rõ ràng. Chọn phương án phù hợp.',
   installment_text: 'Điền thông tin để Tâm An tư vấn hồ sơ, khoản trả trước và mẫu xe phù hợp. Không cam kết duyệt khi chưa kiểm tra hồ sơ.',
   installment_image: '/assets/tam-an-promo.jpg',
