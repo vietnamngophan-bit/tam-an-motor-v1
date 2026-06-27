@@ -150,3 +150,94 @@ body{background:var(--page-bg);font-size:var(--base-size);line-height:var(--body
 @media(max-width:900px){.admin-shell{grid-template-columns:1fr}.admin-side{position:static;min-height:auto;padding:12px;display:flex;gap:10px;overflow-x:auto;align-items:stretch}.admin-side-title{display:none}.admin-nav-group{margin:0;min-width:max-content;border-right:1px solid rgba(255,255,255,.12);padding-right:10px}.admin-nav-group:last-child{border:0}.admin-nav-group>span{padding-left:8px}.admin-side button{padding:9px 10px;font-size:12px}.admin-main{padding:20px 14px}.admin-page-head{flex-direction:column}.dock-config-grid{grid-template-columns:1fr}}
 @media(max-width:640px){.admin-header-inner{height:64px}.admin-brand small{display:none}.admin-user span{display:none}.admin-main{padding:16px 12px}.admin-pro-form .fieldset{padding:14px}.admin-page-head .admin-title{font-size:38px}.admin-page-badge{white-space:normal}.dock-config-head{align-items:flex-start}.floating .is-pulsing{animation-duration:1.05s!important}.chat-launch.is-pulsing{animation-duration:1.1s!important}}
 @media(prefers-reduced-motion:reduce){.is-pulsing,.is-pulsing:before,.is-pulsing:after{animation:none!important}}
+
+/* ================================================================
+   V1.8.2 HOTFIX — Mobile delivery/showroom image layout
+   Keeps the full image visible on phones and prevents fixed actions
+   from covering the card CTA.
+   ================================================================ */
+.delivery,
+.showroom-grid {
+  min-width: 0;
+}
+.delivery-img,
+.showroom-photo {
+  min-width: 0;
+}
+
+@media (max-width: 680px) {
+  /* Delivery card must stack vertically on a phone: image first, content second. */
+  .delivery {
+    grid-template-columns: minmax(0, 1fr) !important;
+    border-radius: 22px !important;
+  }
+
+  .delivery-img {
+    min-height: 0 !important;
+    height: auto !important;
+    aspect-ratio: 4 / 3;
+    background-size: contain !important;
+    background-repeat: no-repeat !important;
+    background-position: center center !important;
+    background-color: #f5eeee;
+  }
+
+  /* When the image is rendered as <img> rather than a background image. */
+  .delivery-img img,
+  .delivery > img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain !important;
+    object-position: center center !important;
+    background: #f5eeee;
+  }
+
+  .delivery-copy {
+    min-width: 0;
+    padding: 26px 20px 92px !important;
+  }
+
+  .delivery-copy h2 {
+    font-size: clamp(2.15rem, 10.5vw, 3.1rem) !important;
+    line-height: 1.14 !important;
+    overflow-wrap: anywhere;
+  }
+
+  .delivery-copy p {
+    font-size: 16px !important;
+    line-height: 1.65 !important;
+  }
+
+  .delivery-copy .btn,
+  .delivery-copy button {
+    width: 100%;
+    min-height: 52px;
+  }
+
+  /* The action dock stays clear of content; it no longer blocks the delivery CTA. */
+  .floating {
+    right: 12px !important;
+    bottom: max(14px, env(safe-area-inset-bottom)) !important;
+  }
+
+  .chat-launch {
+    right: 72px !important;
+    bottom: max(14px, env(safe-area-inset-bottom)) !important;
+  }
+
+  /* Showroom becomes a clean image block and content block as well. */
+  .showroom-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .showroom-photo {
+    aspect-ratio: 4 / 3 !important;
+  }
+
+  .showroom-photo img {
+    object-fit: contain !important;
+    object-position: center !important;
+    background: #f5eeee;
+  }
+}
