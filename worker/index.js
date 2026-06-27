@@ -64,8 +64,8 @@ const DEFAULT_SITE = {
   meta_pixel_id: '',
   tiktok_pixel_id: '',
   ai_enabled: false,
-  ai_provider: 'gemini',
-  ai_model: 'gemini-3.1-flash-lite',
+  ai_provider: 'cloudflare',
+  ai_model: '@cf/aisingapore/gemma-sea-lion-v4-27b-it',
   ai_name: 'Tâm An AI',
   ai_greeting: 'Chào anh/chị, Tâm An AI có thể hỗ trợ tìm xe, thông tin trả góp và lịch hẹn. Anh/chị đang quan tâm mẫu xe nào ạ?',
   ai_knowledge: 'Không cam kết duyệt hồ sơ hoặc giá cuối cùng khi chưa có nhân viên xác nhận. Khi khách muốn gặp nhân viên, đặt xe, giữ xe, khiếu nại hoặc hỏi hồ sơ cụ thể thì chuyển người thật.',
@@ -272,17 +272,25 @@ function fuzzy(text, q) {
   let i=0; for(const ch of t){if(ch===needle[i])i++;if(i===needle.length)return true;} return false;
 }
 function normalizedAiModel(site) {
-  const configured = safeStr(site.ai_model, 100);
-  // The older model identifier used by early builds is no longer the default for this project.
-  if (!configured || ['gemini-2.0-flash-lite', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'].includes(configured)) return 'gemini-3.1-flash-lite';
-  return configured;
+  const provider = safeStr(site.ai_provider, 40) || 'cloudflare';
+  const configured = safeStr(site.ai_model, 160);
+  if (provider === 'cloudflare') {
+    if (!configured || !configured.startsWith('@cf/')) return '@cf/aisingapore/gemma-sea-lion-v4-27b-it';
+    return configured;
+  }
+  if (provider === 'gemini') {
+    if (!configured || ['gemini-2.0-flash-lite', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'].includes(configured)) return 'gemini-3.1-flash-lite';
+    return configured;
+  }
+  return configured || 'webhook';
 }
-function conciseAiError(data, fallback = 'Gemini không phản hồi.') {
-  const raw = safeStr(data?.error?.message || data?.message || fallback, 500);
-  if (/reported as leaked|leaked/i.test(raw)) return 'API key Gemini đã bị Google khóa vì bị lộ. Hãy tạo key mới và cập nhật Secret GEMINI_API_KEY.';
-  if (/API key not valid|invalid api key|permission|unauthenticated|forbidden|403|invalid authentication credentials|oauth 2/i.test(raw)) return 'Gemini từ chối xác thực. Hãy tạo API key mới trong Google AI Studio, lưu vào Secret GEMINI_API_KEY và dùng bản Worker đã gửi key qua header x-goog-api-key.';
-  if (/not found|404|model/i.test(raw)) return 'Model Gemini chưa hợp lệ. Đặt Model Gemini là gemini-3.1-flash-lite.';
-  if (/quota|rate|429/i.test(raw)) return 'Gemini đang hết quota hoặc bị giới hạn tạm thời. Thử lại sau ít phút.';
+function conciseAiError(data, fallback = 'AI chưa phản hồi.') {
+  const raw = safeStr(data?.error?.message || data?.message || data?.error || fallback, 600);
+  if (/reported as leaked|leaked/i.test(raw)) return 'API key đã bị khóa vì bị lộ. Hãy tạo key mới và cập nhật Secret.';
+  if (/API key not valid|invalid api key|permission|unauthenticated|forbidden|403|invalid authentication credentials|oauth 2/i.test(raw)) return 'Nhà cung cấp AI từ chối xác thực. Kiểm tra Secret/API key hoặc đổi sang Cloudflare Workers AI.';
+  if (/not found|404|model/i.test(raw)) return 'Model AI chưa hợp lệ. Với Cloudflare nên dùng @cf/aisingapore/gemma-sea-lion-v4-27b-it.';
+  if (/quota|rate|429|limit/i.test(raw)) return 'AI đang hết quota hoặc bị giới hạn tạm thời. Thử lại sau ít phút.';
+  if (/location is not supported|unsupported/i.test(raw)) return 'Nhà cung cấp AI bị chặn vùng. Hãy dùng Cloudflare Workers AI hoặc bật billing theo yêu cầu nhà cung cấp.';
   return raw || fallback;
 }
 async function buildAiPrompt(env, site, latest) {
@@ -290,7 +298,8 @@ async function buildAiPrompt(env, site, latest) {
   return `Bạn là ${site.ai_name||'Tâm An AI'}, trợ lý tư vấn cho ${site.brand_name}. Trả lời tiếng Việt lịch sự, ngắn (tối đa 90 từ), chỉ dùng dữ liệu bên dưới. Không cam kết duyệt trả góp, không xác nhận nợ xấu hay giá chốt. Khi thiếu dữ liệu hãy nói nhân viên sẽ kiểm tra.\n\nThông tin cửa hàng: ${site.address}; hotline ${site.hotline}.\nKiến thức: ${site.ai_knowledge||''}\nKho xe: ${products.map(p=>`${p.name} | ${p.status} | ${p.price?Number(p.price).toLocaleString('vi-VN')+'đ':'Liên hệ'} | ${p.year||''} | ${p.engine||''}`).join('\n')}\n\nKhách hỏi: ${latest}`;
 }
 async function callAi(env, site, prompt, conversation = null) {
-  if (site.ai_provider === 'webhook') {
+  const provider = safeStr(site.ai_provider, 40) || 'cloudflare';
+  if (provider === 'webhook') {
     if (!env.AI_WEBHOOK_URL) throw new Error('Chưa có Secret AI_WEBHOOK_URL cho chatbot bên thứ ba.');
     const r=await fetch(env.AI_WEBHOOK_URL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({prompt,conversation_id:conversation?.id || null,visitor_name:conversation?.visitor_name || null})});
     let data={}; try { data=await r.json(); } catch {}
@@ -299,16 +308,42 @@ async function callAi(env, site, prompt, conversation = null) {
     if(!out) throw new Error('Webhook không trả về nội dung phản hồi.');
     return out;
   }
-  if (!env.GEMINI_API_KEY) throw new Error('Chưa có Secret GEMINI_API_KEY trên Cloudflare Worker.');
-  const model=normalizedAiModel(site);
-  // Gemini auth keys created in AI Studio must be sent in x-goog-api-key.
-  // Do not put the key in the URL query string or use a Vertex/OAuth endpoint.
-  const endpoint=`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-  const r=await fetch(endpoint,{method:'POST',headers:{'content-type':'application/json','x-goog-api-key':String(env.GEMINI_API_KEY).trim()},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:.35,maxOutputTokens:240}})});
-  let data={}; try { data=await r.json(); } catch {}
-  if(!r.ok) throw new Error(conciseAiError(data, `Gemini trả về lỗi ${r.status}.`));
-  const out=safeStr(data?.candidates?.[0]?.content?.parts?.map(p=>p?.text||'').join('') || data?.text,1200);
-  if(!out) throw new Error('Gemini không trả về câu trả lời.');
+  if (provider === 'gemini') {
+    if (!env.GEMINI_API_KEY) throw new Error('Chưa có Secret GEMINI_API_KEY trên Cloudflare Worker.');
+    const model=normalizedAiModel(site);
+    const endpoint=`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+    const r=await fetch(endpoint,{method:'POST',headers:{'content-type':'application/json','x-goog-api-key':String(env.GEMINI_API_KEY).trim()},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:.35,maxOutputTokens:240}})});
+    let data={}; try { data=await r.json(); } catch {}
+    if(!r.ok) throw new Error(conciseAiError(data, `Gemini trả về lỗi ${r.status}.`));
+    const out=safeStr(data?.candidates?.[0]?.content?.parts?.map(p=>p?.text||'').join('') || data?.text,1200);
+    if(!out) throw new Error('Gemini không trả về câu trả lời.');
+    return out;
+  }
+  if (!env.AI || typeof env.AI.run !== 'function') throw new Error('Chưa gắn Cloudflare Workers AI binding. Hãy thêm "ai": { "binding": "AI" } vào wrangler.jsonc rồi deploy lại.');
+  const model = normalizedAiModel({ ...site, ai_provider: 'cloudflare' });
+  let data;
+  try {
+    data = await env.AI.run(model, {
+      messages: [
+        { role: 'system', content: 'Bạn là trợ lý tư vấn xe máy của showroom Tâm An. Trả lời tiếng Việt ngắn gọn, thân thiện, không bịa giá, không cam kết duyệt hồ sơ.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.35,
+      max_tokens: 260
+    });
+  } catch (error) {
+    throw new Error(conciseAiError({ message: error?.message }, 'Cloudflare Workers AI chưa phản hồi.'));
+  }
+  const out=safeStr(
+    data?.response ||
+    data?.result?.response ||
+    data?.choices?.[0]?.message?.content ||
+    data?.result?.choices?.[0]?.message?.content ||
+    data?.generated_text ||
+    data?.output_text,
+    1200
+  );
+  if(!out) throw new Error('Cloudflare Workers AI không trả về nội dung phản hồi.');
   return out;
 }
 async function maybeAiReply(env, site, conv, latest) {
@@ -347,7 +382,9 @@ async function adminApi(req, env, url, user) {
   if(url.pathname==='/api/admin/ai/status'&&req.method==='GET'){
     if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được kiểm tra chatbot AI.'},403);
     const site=await getSite(env);
-    return json({ok:true,enabled:!!site.ai_enabled,provider:site.ai_provider||'gemini',model:normalizedAiModel(site),key_configured:site.ai_provider==='webhook'?!!env.AI_WEBHOOK_URL:!!env.GEMINI_API_KEY});
+    const provider=site.ai_provider||'cloudflare';
+    const configured = provider==='webhook' ? !!env.AI_WEBHOOK_URL : provider==='gemini' ? !!env.GEMINI_API_KEY : !!env.AI;
+    return json({ok:true,enabled:!!site.ai_enabled,provider,model:normalizedAiModel(site),key_configured:configured});
   }
   if(url.pathname==='/api/admin/ai/test'&&req.method==='POST'){
     if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được kiểm tra chatbot AI.'},403);
@@ -359,7 +396,7 @@ async function adminApi(req, env, url, user) {
       return json({ok:true,model:normalizedAiModel(site),reply});
     } catch (error) {
       await log(env,user,'Lỗi kiểm tra chatbot AI','ai','test',error?.message || 'Unknown AI error');
-      return json({ok:false,error:error?.message || 'Không thể kết nối Gemini.'},400);
+      return json({ok:false,error:error?.message || 'Không thể kết nối AI.'},400);
     }
   }
   if(url.pathname==='/api/admin/site'){
