@@ -293,10 +293,128 @@ function conciseAiError(data, fallback = 'AI chưa phản hồi.') {
   if (/location is not supported|unsupported/i.test(raw)) return 'Nhà cung cấp AI bị chặn vùng. Hãy dùng Cloudflare Workers AI hoặc bật billing theo yêu cầu nhà cung cấp.';
   return raw || fallback;
 }
-async function buildAiPrompt(env, site, latest) {
-  const products=(await env.DB.prepare("SELECT name,status,price,old_price,year,engine,description FROM products WHERE published=1 AND status<>'sold' ORDER BY featured DESC,id DESC LIMIT 18").all()).results||[];
-  return `Bạn là ${site.ai_name||'Tâm An AI'}, trợ lý tư vấn cho ${site.brand_name}. Trả lời tiếng Việt lịch sự, ngắn (tối đa 90 từ), chỉ dùng dữ liệu bên dưới. Không cam kết duyệt trả góp, không xác nhận nợ xấu hay giá chốt. Khi thiếu dữ liệu hãy nói nhân viên sẽ kiểm tra.\n\nThông tin cửa hàng: ${site.address}; hotline ${site.hotline}.\nKiến thức: ${site.ai_knowledge||''}\nKho xe: ${products.map(p=>`${p.name} | ${p.status} | ${p.price?Number(p.price).toLocaleString('vi-VN')+'đ':'Liên hệ'} | ${p.year||''} | ${p.engine||''}`).join('\n')}\n\nKhách hỏi: ${latest}`;
+function normAiText(v='') {
+  return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g,'d').toLowerCase();
 }
+function formatMoneyAi(v) {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? `${n.toLocaleString('vi-VN')}đ` : 'Chưa công khai';
+}
+function cleanAiColor(c) {
+  return {
+    name: safeStr(c?.name, 60),
+    hex: safeStr(c?.hex, 20),
+    images: Array.isArray(c?.images) ? c.images.length : 0,
+  };
+}
+function productAiRecord(row) {
+  const product = productOut(row);
+  const versions = (product.versions || []).map(v => ({
+    name: safeStr(v?.name, 80),
+    description: safeStr(v?.description, 240),
+    price: v?.price == null ? null : Number(v.price),
+    old_price: v?.old_price == null ? null : Number(v.old_price),
+    colors: (v?.colors || []).map(cleanAiColor).filter(c => c.name),
+  }));
+  return {
+    id: product.id,
+    name: product.name,
+    brand: product.brand || '',
+    category: product.category,
+    status: product.status,
+    price: product.price,
+    old_price: product.old_price,
+    year: product.year,
+    mileage: product.mileage,
+    engine: product.engine || '',
+    description: safeStr(product.description, 700),
+    installment_from: product.installment_from,
+    bad_debt_from: product.bad_debt_from,
+    colors: (product.colors || []).map(cleanAiColor).filter(c => c.name),
+    versions,
+  };
+}
+function aiStatusLabel(status) {
+  return ({ in_stock: 'Còn hàng', incoming: 'Sắp về', reserved: 'Đang giữ xe', sold: 'Đã bán' })[status] || 'Chưa rõ';
+}
+function aiCategoryLabel(category) {
+  return Object.fromEntries(CATEGORIES)[category] || category || 'Xe';
+}
+function aiProductSearchText(p) {
+  return [
+    p.name, p.brand, aiCategoryLabel(p.category), p.engine, p.description,
+    ...(p.colors || []).map(c => c.name),
+    ...(p.versions || []).flatMap(v => [v.name, v.description, ...(v.colors || []).map(c => c.name)]),
+  ].filter(Boolean).join(' ');
+}
+function matchProductsForAi(products, question) {
+  const q = normAiText(question);
+  const words = q.split(/\s+/).filter(w => w.length >= 3 && !['cho','minh','anh','chi','em','voi','nhe','gia','con','hay','the','nao','xe'].includes(w));
+  const scored = products.map(p => {
+    const text = normAiText(aiProductSearchText(p));
+    let score = 0;
+    if (normAiText(p.name) && q.includes(normAiText(p.name))) score += 16;
+    for (const word of words) {
+      if (text.includes(word)) score += 3;
+      else {
+        let index = 0;
+        for (const ch of text) { if (ch === word[index]) index += 1; if (index === word.length) { score += 1; break; } }
+      }
+    }
+    if (/den|do|trang|xam|xanh|vang|hong|cam/.test(q) && /mau|den|do|trang|xam|xanh|vang|hong|cam/.test(text)) score += 1;
+    if (/sport|the thao/.test(q) && /sport|the thao/.test(text)) score += 5;
+    return { p, score };
+  }).filter(x => x.score > 0).sort((a,b) => b.score-a.score);
+  return scored.slice(0, 4).map(x => x.p);
+}
+function compactProductForPrompt(p) {
+  const baseColors = (p.colors || []).map(c => c.name).join(', ') || 'Không khai báo';
+  const versionText = (p.versions || []).length
+    ? p.versions.map(v => `• ${v.name}${v.price ? ` — ${formatMoneyAi(v.price)}` : ''}${v.old_price ? ` (giá cũ ${formatMoneyAi(v.old_price)})` : ''}; màu: ${(v.colors || []).map(c=>c.name).join(', ') || 'chưa khai báo'}${v.description ? `; ${v.description}` : ''}`).join('\n')
+    : 'Không tách phiên bản';
+  return `XE #${p.id}: ${p.name} | ${p.brand || 'Không rõ hãng'} | ${aiCategoryLabel(p.category)} | Trạng thái: ${aiStatusLabel(p.status)} | Giá chung: ${formatMoneyAi(p.price)}${p.old_price ? ` | Giá cũ: ${formatMoneyAi(p.old_price)}` : ''} | Năm: ${p.year || '—'} | ODO: ${p.mileage ? `${Number(p.mileage).toLocaleString('vi-VN')} km` : '—'} | Máy: ${p.engine || '—'} | Trả trước từ: ${p.installment_from ? formatMoneyAi(p.installment_from) : 'chưa nhập'} | Màu chung: ${baseColors}\nMô tả: ${p.description || '—'}\nPhiên bản:\n${versionText}`;
+}
+function plainFallbackAi(site, matches, latest) {
+  if (!matches.length) {
+    return `Em chưa xác định được đúng mẫu xe anh/chị đang hỏi. Anh/chị cho em xin tên xe hoặc gửi ảnh/màu quan tâm, em kiểm tra đúng phiên bản và tình trạng kho ngay ạ.`;
+  }
+  const p = matches[0];
+  const versions = p.versions || [];
+  const q = normAiText(latest);
+  let version = versions.find(v => normAiText(`${v.name} ${v.description} ${(v.colors||[]).map(c=>c.name).join(' ')}`).split(/\s+/).some(w => w.length > 2 && q.includes(w)));
+  if (!version && /sport|the thao/.test(q)) version = versions.find(v => /sport|the thao/i.test(v.name));
+  const colors = version ? (version.colors || []) : (p.colors || []);
+  const colorNames = colors.map(c => c.name).filter(Boolean);
+  const exactColor = colorNames.find(c => q.includes(normAiText(c)));
+  const lines = [
+    `${p.name} hiện đang ở trạng thái **${aiStatusLabel(p.status)}**.`,
+    version ? `Bản phù hợp: **${version.name}**${version.price ? `, giá tham khảo ${formatMoneyAi(version.price)}` : ''}.` : (p.price ? `Giá tham khảo đang hiển thị: ${formatMoneyAi(p.price)}.` : 'Giá hiện chưa công khai.'),
+    colorNames.length ? `Màu của ${version ? `bản ${version.name}` : 'mẫu này'}: ${colorNames.join(', ')}.${exactColor ? ` Anh/chị đang hỏi đúng màu ${exactColor}.` : ''}` : '',
+    p.installment_from ? `Trả góp tham khảo từ ${formatMoneyAi(p.installment_from)} trả trước; hồ sơ thực tế sẽ do nhân viên kiểm tra.` : '',
+    `Anh/chị muốn em kiểm tra thêm ảnh thực tế hay phương án trả góp của mẫu này ạ?`,
+  ].filter(Boolean);
+  return lines.join(' ');
+}
+function isTooGenericAiReply(reply, products) {
+  const t = normAiText(reply);
+  const generic = /lien he hotline|ghe tham showroom|nhan vien se tu van|de biet them thong tin|xin vui long lien he/.test(t);
+  const mentionsProduct = products.some(p => normAiText(p.name).split(' ').filter(w=>w.length>3).some(w => t.includes(w)));
+  return generic && !mentionsProduct;
+}
+async function buildAiPrompt(env, site, latest, conversation = null) {
+  const rows = (await env.DB.prepare("SELECT * FROM products WHERE published=1 AND status<>'sold' ORDER BY featured DESC,sort_order,id DESC LIMIT 24").all()).results || [];
+  const products = rows.map(productAiRecord);
+  const matches = matchProductsForAi(products, latest);
+  let history = [];
+  if (conversation?.id) {
+    const result = await env.DB.prepare('SELECT sender_type,sender_name,body FROM chat_messages WHERE conversation_id=? ORDER BY id DESC LIMIT 8').bind(conversation.id).all();
+    history = (result.results || []).reverse().map(m => `${m.sender_type === 'visitor' ? 'KHÁCH' : (m.sender_type === 'staff' ? 'NHÂN VIÊN' : 'AI')}: ${safeStr(m.body, 600)}`);
+  }
+  const contextProducts = matches.length ? matches : products.slice(0, 10);
+  const prompt = `VAI TRÒ\nBạn là ${site.ai_name || 'Tâm An AI'}, tư vấn viên bán xe của ${site.brand_name}. Trả lời bằng tiếng Việt tự nhiên, chính xác và thân thiện.\n\nQUY TẮC BẮT BUỘC\n1) Chỉ dùng dữ liệu trong mục DỮ LIỆU KHO XE và THÔNG TIN CỬA HÀNG. Không đoán giá, màu, phiên bản hoặc tình trạng.\n2) Nếu câu hỏi nhắc tới màu/phiên bản, phải kiểm tra quan hệ PHIÊN BẢN → MÀU. Không nói một màu có ở bản khác khi dữ liệu không có.\n3) Khi có mẫu xe phù hợp: nêu rõ tên xe, trạng thái, phiên bản/màu liên quan, giá công khai nếu có, và trả góp nếu có.\n4) Khi không xác định được mẫu: hỏi đúng 1 câu làm rõ (tên mẫu, phiên bản hoặc màu), KHÔNG đẩy ngay sang hotline/showroom.\n5) Không hứa duyệt trả góp/nợ xấu, không chốt giá cuối cùng.\n6) Chỉ nhắc hotline/showroom khi khách hỏi liên hệ/địa chỉ hoặc dữ liệu thực sự thiếu sau khi đã hỏi làm rõ.\n7) Câu trả lời 70–160 từ, chia 2–4 đoạn ngắn hoặc gạch đầu dòng khi có nhiều thông tin.\n8) Kết thúc bằng một câu hỏi ngắn để tiếp tục tư vấn.\n\nTHÔNG TIN CỬA HÀNG\nĐịa chỉ: ${site.address}\nHotline: ${site.hotline}\nKiến thức vận hành: ${site.ai_knowledge || 'Không cam kết giá chốt hoặc duyệt hồ sơ trước khi nhân viên xác nhận.'}\n\nDỮ LIỆU KHO XE\n${contextProducts.map(compactProductForPrompt).join('\n\n')}\n\nLỊCH SỬ HỘI THOẠI\n${history.join('\n') || 'Chưa có'}\n\nCÂU HỎI MỚI CỦA KHÁCH\n${latest}`;
+  return { prompt, matches, products };
+}
+
 async function callAi(env, site, prompt, conversation = null) {
   const provider = safeStr(site.ai_provider, 40) || 'cloudflare';
   if (provider === 'webhook') {
@@ -325,7 +443,7 @@ async function callAi(env, site, prompt, conversation = null) {
   try {
     data = await env.AI.run(model, {
       messages: [
-        { role: 'system', content: 'Bạn là trợ lý tư vấn xe máy của showroom Tâm An. Trả lời tiếng Việt ngắn gọn, thân thiện, không bịa giá, không cam kết duyệt hồ sơ.' },
+        { role: 'system', content: 'Bạn là trợ lý tư vấn xe máy Tâm An. Làm theo dữ liệu trong tin nhắn người dùng một cách chính xác. Ưu tiên thông tin mẫu xe, phiên bản, màu, giá và tình trạng; không trả lời chung chung hoặc tự bịa.' },
         { role: 'user', content: prompt }
       ],
       temperature: 0.35,
@@ -353,8 +471,9 @@ async function maybeAiReply(env, site, conv, latest) {
   const words=(site.ai_handoff_words||'').toLowerCase().split(',').map(x=>x.trim()).filter(Boolean);
   if(words.some(w=>latest.toLowerCase().includes(w)))return { status:'handoff' };
   try {
-    const prompt=await buildAiPrompt(env,site,latest);
-    const out=await callAi(env,site,prompt,conv);
+    const aiContext=await buildAiPrompt(env,site,latest,conv);
+    let out=await callAi(env,site,aiContext.prompt,conv);
+    if (isTooGenericAiReply(out, aiContext.matches)) out=plainFallbackAi(site, aiContext.matches, latest);
     await env.DB.prepare('INSERT INTO chat_messages(conversation_id,sender_type,sender_name,body) VALUES (?,?,?,?)').bind(conv.id,'ai',site.ai_name||'Tâm An AI',out).run();
     await env.DB.prepare('UPDATE conversations SET ai_count=ai_count+1,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(conv.id).run();
     return { status:'replied' };
@@ -390,8 +509,8 @@ async function adminApi(req, env, url, user) {
     if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được kiểm tra chatbot AI.'},403);
     const site=await getSite(env);
     try {
-      const prompt=await buildAiPrompt(env,site,'Xin chào, hãy trả lời một câu ngắn để xác nhận chatbot Tâm An đang hoạt động.');
-      const reply=await callAi(env,site,prompt,null);
+      const aiContext=await buildAiPrompt(env,site,'Xin chào, hãy trả lời một câu ngắn để xác nhận chatbot Tâm An đang hoạt động.',null);
+      const reply=await callAi(env,site,aiContext.prompt,null);
       await log(env,user,'Kiểm tra chatbot AI','ai','test',normalizedAiModel(site));
       return json({ok:true,model:normalizedAiModel(site),reply});
     } catch (error) {
@@ -405,7 +524,7 @@ async function adminApi(req, env, url, user) {
   }
   if(url.pathname==='/api/admin/upload'&&req.method==='POST'){
     if(!env.IMAGES)return json({ok:false,error:'Chưa cấu hình R2 bucket IMAGES.'},500); const form=await req.formData(); const file=form.get('file'); if(!(file instanceof File))return json({ok:false,error:'Chưa chọn ảnh.'},400); if(file.size>8*1024*1024)return json({ok:false,error:'Ảnh tối đa 8MB.'},400); if(!file.type.startsWith('image/'))return json({ok:false,error:'Chỉ nhận ảnh.'},400);
-    const ext=(file.name.split('.').pop()||'jpg').replace(/[^a-z0-9]/gi,'').slice(0,8);const key=`uploads/${Date.now()}-${crypto.randomUUID().slice(0,8)}.${ext}`; await env.IMAGES.put(key,file.stream,{httpMetadata:{contentType:file.type}}); return json({ok:true,url:`/media/${key}`});
+    const ext=(file.name.split('.').pop()||'jpg').replace(/[^a-z0-9]/gi,'').slice(0,8);const key=`uploads/${Date.now()}-${crypto.randomUUID().slice(0,8)}.${ext}`; await env.IMAGES.put(key,file.stream(),{httpMetadata:{contentType:file.type}}); return json({ok:true,url:`/media/${key}`});
   }
   if(url.pathname==='/api/admin/products'){
     if(req.method==='GET'){const rows=(await env.DB.prepare('SELECT * FROM products ORDER BY updated_at DESC,id DESC').all()).results||[];return json({ok:true,products:rows.map(productOut)});}
