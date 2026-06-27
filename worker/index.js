@@ -27,6 +27,14 @@ const DEFAULT_SITE = {
   floating_show_facebook: false,
   floating_show_tiktok: false,
   floating_show_chat: true,
+  floating_pulse_enabled: true,
+  floating_pulse_speed: 'normal',
+  floating_call_icon: 'phone', floating_call_icon_url: '', floating_call_color: '#d61726', floating_call_shape: 'rounded', floating_call_label: 'Gọi ngay',
+  floating_zalo_icon: 'zalo', floating_zalo_icon_url: '', floating_zalo_color: '#157ee8', floating_zalo_shape: 'rounded',
+  floating_messenger_icon: 'messenger', floating_messenger_icon_url: '', floating_messenger_color: '#1478f2', floating_messenger_shape: 'rounded',
+  floating_facebook_icon: 'facebook', floating_facebook_icon_url: '', floating_facebook_color: '#1877f2', floating_facebook_shape: 'rounded',
+  floating_tiktok_icon: 'tiktok', floating_tiktok_icon_url: '', floating_tiktok_color: '#151515', floating_tiktok_shape: 'rounded',
+  floating_chat_icon: 'chat', floating_chat_icon_url: '', floating_chat_color: '#c81924', floating_chat_shape: 'rounded', floating_chat_label: 'Tư vấn',
   address: 'Cổng phụ KCN Nomura, Hải Phòng',
   map_embed_url: 'https://www.google.com/maps?q=C%E1%BB%95ng%20ph%E1%BB%A5%20KCN%20Nomura%20H%E1%BA%A3i%20Ph%C3%B2ng&output=embed',
   business_hours: 'Bán hàng: 08:00 – 21:00\nDịch vụ: 08:00 – 17:30',
@@ -57,7 +65,7 @@ const DEFAULT_SITE = {
   tiktok_pixel_id: '',
   ai_enabled: false,
   ai_provider: 'gemini',
-  ai_model: 'gemini-2.0-flash-lite',
+  ai_model: 'gemini-3.1-flash-lite',
   ai_name: 'Tâm An AI',
   ai_greeting: 'Chào anh/chị, Tâm An AI có thể hỗ trợ tìm xe, thông tin trả góp và lịch hẹn. Anh/chị đang quan tâm mẫu xe nào ạ?',
   ai_knowledge: 'Không cam kết duyệt hồ sơ hoặc giá cuối cùng khi chưa có nhân viên xác nhận. Khi khách muốn gặp nhân viên, đặt xe, giữ xe, khiếu nại hoặc hỏi hồ sơ cụ thể thì chuyển người thật.',
@@ -251,9 +259,10 @@ async function publicApi(req, env, url) {
     await env.DB.prepare('INSERT INTO chat_messages(conversation_id,sender_type,sender_name,body) VALUES (?,?,?,?)').bind(conv.id,'visitor',conv.visitor_name||'Khách',body).run();
     await env.DB.prepare('UPDATE conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(conv.id).run();
     const site=await getSite(env);
-    const aiReady = (site.ai_provider === 'webhook' && env.AI_WEBHOOK_URL) || (site.ai_provider !== 'webhook' && env.GEMINI_API_KEY);
-    if (site.ai_enabled && !conv.assigned_to && aiReady) await maybeAiReply(env,site,conv,body);
-    return json({ok:true});
+    let ai = { status:'disabled' };
+    if (site.ai_enabled && !conv.assigned_to) ai = await maybeAiReply(env,site,conv,body);
+    else if (conv.assigned_to) ai = { status:'human_assigned' };
+    return json({ok:true,ai});
   }
   return null;
 }
@@ -262,26 +271,62 @@ function fuzzy(text, q) {
   const t=norm(text), needle=norm(q); if(t.includes(needle))return true;
   let i=0; for(const ch of t){if(ch===needle[i])i++;if(i===needle.length)return true;} return false;
 }
-async function maybeAiReply(env, site, conv, latest) {
-  const today=new Date().toISOString().slice(0,10); if(conv.ai_day!==today){await env.DB.prepare('UPDATE conversations SET ai_day=?,ai_count=0 WHERE id=?').bind(today,conv.id).run();conv.ai_count=0;}
-  if((conv.ai_count||0)>=12)return;
-  const words=(site.ai_handoff_words||'').toLowerCase().split(',').map(x=>x.trim()).filter(Boolean); if(words.some(w=>latest.toLowerCase().includes(w)))return;
+function normalizedAiModel(site) {
+  const configured = safeStr(site.ai_model, 100);
+  // The older model identifier used by early builds is no longer the default for this project.
+  if (!configured || ['gemini-2.0-flash-lite', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'].includes(configured)) return 'gemini-3.1-flash-lite';
+  return configured;
+}
+function conciseAiError(data, fallback = 'Gemini không phản hồi.') {
+  const raw = safeStr(data?.error?.message || data?.message || fallback, 500);
+  if (/reported as leaked|leaked/i.test(raw)) return 'API key Gemini đã bị Google khóa vì bị lộ. Hãy tạo key mới và cập nhật Secret GEMINI_API_KEY.';
+  if (/API key not valid|invalid api key|permission|unauthenticated|forbidden|403/i.test(raw)) return 'Gemini từ chối API key. Kiểm tra lại Secret GEMINI_API_KEY và quyền của key.';
+  if (/not found|404|model/i.test(raw)) return 'Model Gemini chưa hợp lệ. Đặt Model Gemini là gemini-3.1-flash-lite.';
+  if (/quota|rate|429/i.test(raw)) return 'Gemini đang hết quota hoặc bị giới hạn tạm thời. Thử lại sau ít phút.';
+  return raw || fallback;
+}
+async function buildAiPrompt(env, site, latest) {
   const products=(await env.DB.prepare("SELECT name,status,price,old_price,year,engine,description FROM products WHERE published=1 AND status<>'sold' ORDER BY featured DESC,id DESC LIMIT 18").all()).results||[];
-  const prompt=`Bạn là ${site.ai_name||'Tâm An AI'}, trợ lý tư vấn cho ${site.brand_name}. Trả lời tiếng Việt lịch sự, ngắn (tối đa 90 từ), chỉ dùng dữ liệu bên dưới. Không cam kết duyệt trả góp, không xác nhận nợ xấu hay giá chốt. Khi thiếu dữ liệu hãy nói nhân viên sẽ kiểm tra.\n\nThông tin cửa hàng: ${site.address}; hotline ${site.hotline}.\nKiến thức: ${site.ai_knowledge||''}\nKho xe: ${products.map(p=>`${p.name} | ${p.status} | ${p.price?Number(p.price).toLocaleString('vi-VN')+'đ':'Liên hệ'} | ${p.year||''} | ${p.engine||''}`).join('\n')}\n\nKhách hỏi: ${latest}`;
+  return `Bạn là ${site.ai_name||'Tâm An AI'}, trợ lý tư vấn cho ${site.brand_name}. Trả lời tiếng Việt lịch sự, ngắn (tối đa 90 từ), chỉ dùng dữ liệu bên dưới. Không cam kết duyệt trả góp, không xác nhận nợ xấu hay giá chốt. Khi thiếu dữ liệu hãy nói nhân viên sẽ kiểm tra.\n\nThông tin cửa hàng: ${site.address}; hotline ${site.hotline}.\nKiến thức: ${site.ai_knowledge||''}\nKho xe: ${products.map(p=>`${p.name} | ${p.status} | ${p.price?Number(p.price).toLocaleString('vi-VN')+'đ':'Liên hệ'} | ${p.year||''} | ${p.engine||''}`).join('\n')}\n\nKhách hỏi: ${latest}`;
+}
+async function callAi(env, site, prompt, conversation = null) {
+  if (site.ai_provider === 'webhook') {
+    if (!env.AI_WEBHOOK_URL) throw new Error('Chưa có Secret AI_WEBHOOK_URL cho chatbot bên thứ ba.');
+    const r=await fetch(env.AI_WEBHOOK_URL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({prompt,conversation_id:conversation?.id || null,visitor_name:conversation?.visitor_name || null})});
+    let data={}; try { data=await r.json(); } catch {}
+    if (!r.ok) throw new Error(conciseAiError(data, `Webhook trả về lỗi ${r.status}.`));
+    const out=safeStr(data?.reply||data?.message,1200);
+    if(!out) throw new Error('Webhook không trả về nội dung phản hồi.');
+    return out;
+  }
+  if (!env.GEMINI_API_KEY) throw new Error('Chưa có Secret GEMINI_API_KEY trên Cloudflare Worker.');
+  const model=normalizedAiModel(site);
+  // v1 is Gemini's stable API version. Send the API key only server-side from the Worker secret.
+  const endpoint=`https://generativelanguage.googleapis.com/v1/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`;
+  const r=await fetch(endpoint,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:.35,maxOutputTokens:240}})});
+  let data={}; try { data=await r.json(); } catch {}
+  if(!r.ok) throw new Error(conciseAiError(data, `Gemini trả về lỗi ${r.status}.`));
+  const out=safeStr(data?.candidates?.[0]?.content?.parts?.map(p=>p?.text||'').join('') || data?.text,1200);
+  if(!out) throw new Error('Gemini không trả về câu trả lời.');
+  return out;
+}
+async function maybeAiReply(env, site, conv, latest) {
+  const today=new Date().toISOString().slice(0,10);
+  if(conv.ai_day!==today){await env.DB.prepare('UPDATE conversations SET ai_day=?,ai_count=0 WHERE id=?').bind(today,conv.id).run();conv.ai_count=0;}
+  if((conv.ai_count||0)>=12)return { status:'limit' };
+  const words=(site.ai_handoff_words||'').toLowerCase().split(',').map(x=>x.trim()).filter(Boolean);
+  if(words.some(w=>latest.toLowerCase().includes(w)))return { status:'handoff' };
   try {
-    let out='';
-    if(site.ai_provider==='webhook' && env.AI_WEBHOOK_URL){
-      const r=await fetch(env.AI_WEBHOOK_URL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({prompt,conversation_id:conv.id,visitor_name:conv.visitor_name})});
-      const data=await r.json(); out=safeStr(data?.reply||data?.message,1200);
-    } else {
-      const endpoint=`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(site.ai_model||'gemini-2.0-flash-lite')}:generateContent?key=${env.GEMINI_API_KEY}`;
-      const r=await fetch(endpoint,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:.35,maxOutputTokens:240}})});
-      const data=await r.json(); out=safeStr(data?.candidates?.[0]?.content?.parts?.[0]?.text,1200);
-    }
-    if(!out)return;
+    const prompt=await buildAiPrompt(env,site,latest);
+    const out=await callAi(env,site,prompt,conv);
     await env.DB.prepare('INSERT INTO chat_messages(conversation_id,sender_type,sender_name,body) VALUES (?,?,?,?)').bind(conv.id,'ai',site.ai_name||'Tâm An AI',out).run();
     await env.DB.prepare('UPDATE conversations SET ai_count=ai_count+1,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(conv.id).run();
-  } catch {}
+    return { status:'replied' };
+  } catch (error) {
+    // Detailed error is kept for the admin via the audit log. Visitors only receive a neutral notice.
+    await log(env,{name:'Tâm An AI'},'Lỗi chatbot AI','conversation',conv.id,error?.message || 'Unknown AI error');
+    return { status:'unavailable' };
+  }
 }
 
 async function adminApi(req, env, url, user) {
@@ -297,6 +342,24 @@ async function adminApi(req, env, url, user) {
     const [ps,ls,cs,as,vs]=await Promise.all([
       env.DB.prepare('SELECT COUNT(*) c FROM products').first(),env.DB.prepare('SELECT COUNT(*) c FROM leads WHERE status<>\'done\'').first(),env.DB.prepare("SELECT COUNT(*) c FROM conversations WHERE status='open'").first(),env.DB.prepare('SELECT COUNT(*) c FROM accessories').first(),env.DB.prepare("SELECT COUNT(*) c FROM page_views WHERE date(created_at)>=date('now','-30 day')").first()
     ]); return json({ok:true,counts:{products:ps.c,leads:ls.c,chats:cs.c,accessories:as.c,visits:vs.c}});
+  }
+  if(url.pathname==='/api/admin/ai/status'&&req.method==='GET'){
+    if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được kiểm tra chatbot AI.'},403);
+    const site=await getSite(env);
+    return json({ok:true,enabled:!!site.ai_enabled,provider:site.ai_provider||'gemini',model:normalizedAiModel(site),key_configured:site.ai_provider==='webhook'?!!env.AI_WEBHOOK_URL:!!env.GEMINI_API_KEY});
+  }
+  if(url.pathname==='/api/admin/ai/test'&&req.method==='POST'){
+    if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được kiểm tra chatbot AI.'},403);
+    const site=await getSite(env);
+    try {
+      const prompt=await buildAiPrompt(env,site,'Xin chào, hãy trả lời một câu ngắn để xác nhận chatbot Tâm An đang hoạt động.');
+      const reply=await callAi(env,site,prompt,null);
+      await log(env,user,'Kiểm tra chatbot AI','ai','test',normalizedAiModel(site));
+      return json({ok:true,model:normalizedAiModel(site),reply});
+    } catch (error) {
+      await log(env,user,'Lỗi kiểm tra chatbot AI','ai','test',error?.message || 'Unknown AI error');
+      return json({ok:false,error:error?.message || 'Không thể kết nối Gemini.'},400);
+    }
   }
   if(url.pathname==='/api/admin/site'){
     if(req.method==='GET')return json({ok:true,site:await getSite(env)});
