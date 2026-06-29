@@ -456,3 +456,64 @@ body.modal-open { overflow: hidden !important; }
   .notice-ticker.notice-center { left: 50% !important; }
 }
 .notice-ticker.notice-center.is-fading { transform: translate(-50%, 12px); }
+
+@media (max-width: 720px) {
+  /* Chỉ còn một lớp cuộn: lớp nền popup. Không để modal-card cắt phần cuối form. */
+  .modal {
+    display: block !important;
+    align-items: initial !important;
+    justify-content: initial !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    padding: 12px 12px calc(28px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .modal-card {
+    width: 100% !important;
+    min-height: calc(100dvh - 24px) !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding-bottom: calc(100px + env(safe-area-inset-bottom)) !important;
+  }
+
+  /* Popup xem xe và popup “Để lại thông tin” xuống một cột, không ép nội dung. */
+  .product-modal {
+    display: block !important;
+  }
+
+  .product-content,
+  .policy-modal {
+    padding-bottom: calc(124px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .consult-box {
+    padding: 16px !important;
+    padding-bottom: calc(28px + env(safe-area-inset-bottom)) !important;
+    margin-bottom: 0 !important;
+  }
+
+  /* Nút gửi luôn có khoảng thở bên dưới và không bị thanh trình duyệt che. */
+  .consult-box .field.full:last-child,
+  #quickLead .field.full:last-child,
+  #detailLead .field.full:last-child {
+    padding-bottom: calc(28px + env(safe-area-inset-bottom)) !important;
+    scroll-margin-bottom: 110px;
+  }
+
+  .consult-box .field.full:last-child .btn,
+  #quickLead .field.full:last-child .btn,
+  #detailLead .field.full:last-child .btn {
+    width: 100% !important;
+    min-height: 54px !important;
+  }
+
+  /* Nút X luôn nằm trên form, nhưng không chiếm vùng bấm của nút gửi. */
+  .modal-close {
+    position: sticky !important;
+    top: 8px !important;
+    right: 8px !important;
+    margin-left: auto !important;
+    z-index: 80 !important;
+  }
+}
