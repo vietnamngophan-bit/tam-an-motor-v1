@@ -42,72 +42,8 @@
   function escapeHTML(value = '') {
     return String(value).replace(/[&<>'"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[c]));
   }
-  // JSON helper is deliberately local so a malformed saved setting cannot stop the whole website.
-  function parseJSON(value, fallback) { try { return value ? JSON.parse(value) : fallback; } catch { return fallback; } }
   function money(value) {
-    return value === null || value === undefined || value === '' || Number.isNaN(Number(value)) ? '' : `${Number(value).toLocaleString('vi-VN')}đ`;
-  }
-  function moneyDigits(value) {
-    const digits = String(value ?? '').replace(/\D/g, '');
-    return digits ? Number(digits) : null;
-  }
-  function moneyInputValue(value) {
-    const amount = moneyDigits(value);
-    return amount === null ? '' : amount.toLocaleString('vi-VN');
-  }
-  function moneyField(name, value, extra = '') {
-    return `<div class="money-control"><input name="${escapeHTML(name)}" class="money-input ${extra}" data-money="1" type="text" inputmode="numeric" autocomplete="off" value="${escapeHTML(moneyInputValue(value))}" placeholder="0"><span>VNĐ</span></div>`;
-  }
-  function bindMoneyInput(input, onChange) {
-    if (!input || input.dataset.moneyBound) return;
-    input.dataset.moneyBound = '1';
-    const update = () => {
-      const amount = moneyDigits(input.value);
-      input.value = amount === null ? '' : amount.toLocaleString('vi-VN');
-      if (onChange) onChange(amount === null ? '' : amount);
-    };
-    input.addEventListener('input', update);
-    input.addEventListener('blur', update);
-  }
-  function bindMoneyInputs(root = document) { $$('[data-money]', root).forEach(input => bindMoneyInput(input)); }
-  function richEditorHTML(value = '') {
-    const source = String(value || '');
-    if (!source) return '';
-    // Existing plain text is converted into readable paragraphs; saved HTML was server-sanitized.
-    if (/^\s*<\/?[a-z][^>]*>/i.test(source)) return source;
-    const text = escapeHTML(source)
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/(^|[^*])\*(?!\s)(.+?)(?!\s)\*/g, '$1<em>$2</em>');
-    return text.split(/\n{2,}/).map(part => `<p>${part.replace(/\n/g, '<br>')}</p>`).join('');
-  }
-  function richDescription(value = '') { return richEditorHTML(value); }
-  function richEditorMarkup(value = '') {
-    return `<div class="rich-editor" data-rich-editor>
-      <div class="rich-toolbar" role="toolbar" aria-label="Định dạng mô tả">
-        <button type="button" data-rich-cmd="bold" title="In đậm"><b>B</b></button>
-        <button type="button" data-rich-cmd="italic" title="In nghiêng"><i>I</i></button>
-        <button type="button" data-rich-cmd="underline" title="Gạch chân"><u>U</u></button>
-        <button type="button" data-rich-cmd="insertUnorderedList" title="Danh sách chấm">•≡</button>
-        <button type="button" data-rich-cmd="insertOrderedList" title="Danh sách số">1≡</button>
-        <button type="button" data-rich-block="h3" title="Tiêu đề">Tt</button>
-        <button type="button" data-rich-cmd="justifyLeft" title="Căn trái">≡</button>
-        <button type="button" data-rich-cmd="justifyCenter" title="Căn giữa">≡</button>
-        <select data-rich-font aria-label="Font chữ"><option value="Be Vietnam Pro">Be Vietnam Pro</option><option value="Arial">Arial</option><option value="Times New Roman">Times New Roman</option><option value="Roboto">Roboto</option><option value="Montserrat">Montserrat</option><option value="Lexend">Lexend</option><option value="Barlow">Barlow</option></select>
-        <select data-rich-size aria-label="Kích cỡ chữ"><option value="3">16px</option><option value="2">14px</option><option value="4">18px</option><option value="5">22px</option><option value="6">28px</option></select>
-        <input type="color" data-rich-color value="#1b1214" title="Màu chữ">
-      </div>
-      <div id="productDescriptionEditor" class="rich-editable" contenteditable="true" data-placeholder="Viết mô tả, thông số, ưu điểm của xe…">${richEditorHTML(value)}</div>
-      <small class="field-help">Hỗ trợ in đậm, nghiêng, gạch chân, tiêu đề, danh sách, font, cỡ chữ, màu chữ và giữ xuống dòng.</small>
-    </div>`;
-  }
-  function initRichEditor(root) {
-    const editor = $('#productDescriptionEditor', root); if (!editor) return;
-    const command = (cmd, value = null) => { editor.focus(); try { document.execCommand(cmd, false, value); } catch {} };
-    $$('[data-rich-cmd]', root).forEach(button => button.addEventListener('mousedown', event => { event.preventDefault(); command(button.dataset.richCmd); }));
-    $$('[data-rich-block]', root).forEach(button => button.addEventListener('mousedown', event => { event.preventDefault(); command('formatBlock', `<${button.dataset.richBlock}>`); }));
-    $('[data-rich-font]', root)?.addEventListener('change', event => command('fontName', event.target.value));
-    $('[data-rich-size]', root)?.addEventListener('change', event => command('fontSize', event.target.value));
-    $('[data-rich-color]', root)?.addEventListener('input', event => command('foreColor', event.target.value));
+    return value === null || value === undefined || value === '' ? '' : `${Number(value).toLocaleString('vi-VN')}đ`;
   }
 
   // D1 stores CURRENT_TIMESTAMP in UTC. All timestamps shown to staff are converted
@@ -127,13 +63,110 @@
     }).format(date).replace(',', ' •');
   }
   function multiline(value = '') { return escapeHTML(value).replace(/\n/g, '<br>'); }
-  function chatText(value = '') {
-    return escapeHTML(value)
+
+  // Product description: keeps Word-like formatting created by the admin editor,
+  // while turning old plain-text descriptions into clean paragraphs/lists.
+  function inlineDescriptionHTML(value = '') {
+    let text = escapeHTML(value)
+      .replace(/\s*\[(?:\d+\s*,?\s*)+\]/g, '')
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/^\s*[-*]\s+/gm, '• ')
-      .replace(/\n/g, '<br>');
+      .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+    return text;
   }
 
+  function sanitizeRichHTML(value = '') {
+    const raw = String(value || '');
+    if (!raw) return '';
+    const template = document.createElement('template');
+    template.innerHTML = raw;
+    const allowed = new Set(['P','DIV','BR','STRONG','B','EM','I','U','H2','H3','H4','UL','OL','LI','SPAN','FONT','BLOCKQUOTE']);
+    const removeCompletely = new Set(['SCRIPT','STYLE','IFRAME','OBJECT','EMBED','LINK','META']);
+    const allowedStyles = new Set(['font-weight','font-style','text-decoration','color','font-family','font-size','text-align','line-height']);
+    const clean = node => {
+      if (node.nodeType === Node.TEXT_NODE) return;
+      if (node.nodeType !== Node.ELEMENT_NODE) { node.remove(); return; }
+      const tag = node.tagName.toUpperCase();
+      if (removeCompletely.has(tag)) { node.remove(); return; }
+      Array.from(node.childNodes).forEach(clean);
+      if (!allowed.has(tag)) {
+        const fragment = document.createDocumentFragment();
+        while (node.firstChild) fragment.appendChild(node.firstChild);
+        node.replaceWith(fragment);
+        return;
+      }
+      Array.from(node.attributes).forEach(attr => {
+        const key = attr.name.toLowerCase();
+        if (key === 'style') {
+          const safeStyle = attr.value.split(';').map(part => part.trim()).filter(Boolean).map(part => {
+            const [prop, ...rest] = part.split(':');
+            const name = String(prop || '').trim().toLowerCase();
+            const val = rest.join(':').trim();
+            if (!allowedStyles.has(name) || /url\s*\(|expression\s*\(|javascript:/i.test(val)) return '';
+            return `${name}:${val}`;
+          }).filter(Boolean).join(';');
+          if (safeStyle) node.setAttribute('style', safeStyle); else node.removeAttribute('style');
+        } else if (!((tag === 'FONT' && ['face','size','color'].includes(key)))) {
+          node.removeAttribute(attr.name);
+        }
+      });
+    };
+    Array.from(template.content.childNodes).forEach(clean);
+    return template.innerHTML;
+  }
+
+  function plainDescriptionHTML(value = '') {
+    const raw = String(value || '').replace(/\r\n?/g, '\n').trim();
+    if (!raw) return '';
+    const blocks = raw.split(/\n\s*\n/).filter(Boolean);
+    return blocks.map(block => {
+      const lines = block.split('\n').map(line => line.trim()).filter(Boolean);
+      if (!lines.length) return '';
+      if (lines.every(line => /^[-•*]\s+/.test(line))) {
+        return `<ul>${lines.map(line => `<li>${inlineDescriptionHTML(line.replace(/^[-•*]\s+/, ''))}</li>`).join('')}</ul>`;
+      }
+      if (/^#{1,3}\s+/.test(lines[0])) {
+        const title = lines.shift().replace(/^#{1,3}\s+/, '');
+        return `<h3>${inlineDescriptionHTML(title)}</h3>${lines.length ? `<p>${lines.map(inlineDescriptionHTML).join('<br>')}</p>` : ''}`;
+      }
+      // Markdown-style bold headers such as **Thông số kỹ thuật**.
+      if (lines.length === 1 && /^\*\*.+\*\*$/.test(lines[0])) return `<h3>${inlineDescriptionHTML(lines[0])}</h3>`;
+      return `<p>${lines.map(inlineDescriptionHTML).join('<br>')}</p>`;
+    }).join('');
+  }
+
+  function descriptionHTML(value = '') {
+    const raw = String(value || '').trim();
+    if (!raw) return '<p class="muted">Tâm An sẽ cập nhật thông tin chi tiết cho mẫu xe này.</p>';
+    return /<\/?[a-z][\s\S]*>/i.test(raw) ? sanitizeRichHTML(raw) : plainDescriptionHTML(raw);
+  }
+
+  function editorInitialHTML(value = '') {
+    const raw = String(value || '').trim();
+    return /<\/?[a-z][\s\S]*>/i.test(raw) ? sanitizeRichHTML(raw) : plainDescriptionHTML(raw);
+  }
+
+  function bindDescriptionEditor(modal) {
+    const editor = $('#descriptionEditor', modal);
+    const output = $('#descriptionValue', modal);
+    if (!editor || !output) return;
+    const sync = () => { output.value = sanitizeRichHTML(editor.innerHTML); };
+    const focusEditor = () => editor.focus({ preventScroll: true });
+    $$('.rich-toolbar [data-command]', modal).forEach(button => button.addEventListener('click', event => {
+      event.preventDefault();
+      focusEditor();
+      document.execCommand(button.dataset.command, false, button.dataset.value || null);
+      sync();
+    }));
+    const fontPicker = $('.rich-font-picker', modal);
+    const sizePicker = $('.rich-size-picker', modal);
+    const colorPicker = $('.rich-color-picker', modal);
+    fontPicker?.addEventListener('change', () => { focusEditor(); document.execCommand('fontName', false, fontPicker.value); sync(); });
+    sizePicker?.addEventListener('change', () => { focusEditor(); document.execCommand('fontSize', false, sizePicker.value); sync(); });
+    colorPicker?.addEventListener('input', () => { focusEditor(); document.execCommand('foreColor', false, colorPicker.value); sync(); });
+    editor.addEventListener('input', sync);
+    editor.addEventListener('blur', sync);
+    sync();
+  }
   function notify(message) {
     toastBox.textContent = message;
     toastBox.classList.add('show');
@@ -164,6 +197,25 @@
     return close;
   }
 
+  // A vehicle colour is a complete paint combination, not separate selectable colours.
+  // `swatches` contains 1–3 contiguous visual blocks, e.g. [white, red, black].
+  function validHex(value, fallback = '#c81924') {
+    const text = String(value || '').trim();
+    return /^#[0-9a-fA-F]{6}$/.test(text) ? text : fallback;
+  }
+  function paletteOf(color = {}) {
+    const raw = Array.isArray(color.swatches) && color.swatches.length ? color.swatches : [color.hex || '#c81924'];
+    const out = raw.map(hex => validHex(hex)).slice(0, 3);
+    return out.length ? out : ['#c81924'];
+  }
+  function paletteStrip(color = {}, className = '') {
+    const swatches = paletteOf(color);
+    return `<span class="paint-strip ${escapeHTML(className)}" aria-label="Phối màu ${escapeHTML(color.name || '')}">${swatches.map(hex => `<i style="background:${escapeHTML(hex)}"></i>`).join('')}</span>`;
+  }
+  function colorClone(color = {}) {
+    const swatches = paletteOf(color);
+    return { name: color.name || '', hex: swatches[0], swatches, images: [...(color.images || [])] };
+  }
   function productVariantColors(product) {
     return (product.versions || []).flatMap(version => Array.isArray(version.colors) ? version.colors : []);
   }
@@ -171,7 +223,7 @@
     const output = [...(product.colors || []), ...productVariantColors(product)];
     const used = new Set();
     return output.filter(color => {
-      const key = `${color.name || ''}|${color.hex || ''}|${(color.images || [])[0] || ''}`;
+      const key = `${color.name || ''}|${paletteOf(color).join(',')}|${(color.images || [])[0] || ''}`;
       if (used.has(key)) return false; used.add(key); return true;
     });
   }
@@ -179,83 +231,28 @@
     const color = allProductColors(product).find(c => c.images && c.images.length);
     return color?.images?.[0] || product.images?.[0] || '/assets/tam-an-promo.jpg';
   }
-  // Accept both the new JSON image list and old single-image settings.
-  function storedImageList(value, fallback = '') {
-    let list = [];
-    if (Array.isArray(value)) list = value;
-    else if (typeof value === 'string' && value.trim()) {
-      const parsed = parseJSON(value, null);
-      list = Array.isArray(parsed) ? parsed : value.split(/\r?\n|\s*\|\s*/);
-    }
-    const seen = new Set();
-    list = list.map(item => String(item || '').trim()).filter(url => {
-      if (!url || seen.has(url)) return false;
-      seen.add(url); return true;
-    });
-    if (!list.length && fallback) list.push(fallback);
-    return list;
-  }
-  function productDisplayPrice(product) {
-    const versionPrices = (product.versions || []).map(version => Number(version.price)).filter(price => Number.isFinite(price) && price > 0);
-    const base = Number(product.price);
-    const candidates = [...versionPrices, ...(Number.isFinite(base) && base > 0 ? [base] : [])];
-    return candidates.length ? Math.min(...candidates) : null;
-  }
   function statusName(status) {
     return { in_stock:'Còn hàng', incoming:'Sắp về', reserved:'Đang giữ xe', sold:'Đã bán' }[status] || 'Còn hàng';
   }
   function normalize(text = '') {
     return String(text).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').toLowerCase();
   }
-  function levenshtein(a = '', b = '') {
-    const rows = a.length + 1;
-    const cols = b.length + 1;
-    const dp = Array.from({ length: rows }, (_, index) => [index]);
-    for (let col = 1; col < cols; col += 1) dp[0][col] = col;
-    for (let row = 1; row < rows; row += 1) {
-      for (let col = 1; col < cols; col += 1) {
-        dp[row][col] = a[row - 1] === b[col - 1]
-          ? dp[row - 1][col - 1]
-          : Math.min(dp[row - 1][col], dp[row][col - 1], dp[row - 1][col - 1]) + 1;
-      }
+  function fuzzyMatch(product, query) {
+    const needle = normalize(query);
+    if (!needle) return true;
+    const source = normalize([
+      product.name, product.brand, product.category,
+      ...allProductColors(product).map(c => c.name),
+      ...(product.versions || []).map(v => v.name)
+    ].join(' '));
+    if (source.includes(needle)) return true;
+    let cursor = 0;
+    for (const char of source) {
+      if (char === needle[cursor]) cursor += 1;
+      if (cursor === needle.length) return true;
     }
-    return dp[a.length][b.length];
+    return false;
   }
-  function queryAliases(value = '') {
-    return normalize(value)
-      .replace(/\bvison\b/g, 'vision')
-      .replace(/\bairblade\b/g, 'air blade')
-      .replace(/\bwavealpha\b/g, 'wave alpha')
-      .replace(/\bshmode\b/g, 'sh mode')
-      .replace(/\bvario160\b/g, 'vario 160')
-      .replace(/\bvision2026\b/g, 'vision 2026');
-  }
-  function searchTokens(value = '') { return queryAliases(value).split(/[^a-z0-9]+/).filter(Boolean); }
-  function productSearchScore(product, query) {
-    const raw = queryAliases(query).trim();
-    if (!raw) return 1;
-    const source = queryAliases([product.name, product.brand, CATEGORY[product.category] || product.category, ...allProductColors(product).map(color => color.name), ...(product.versions || []).flatMap(version => [version.name, version.description])].join(' '));
-    if (source.includes(raw)) return 10000;
-    const sourceTokens = searchTokens(source), wanted = searchTokens(raw);
-    if (!wanted.length || !sourceTokens.length) return 0;
-    let matched = 0, score = 0;
-    for (const token of wanted) {
-      let best = 0;
-      for (const candidate of sourceTokens) {
-        if (candidate === token) { best = 1; break; }
-        if (token.length >= 3 && (candidate.includes(token) || token.includes(candidate))) { best = Math.max(best, .9); continue; }
-        if (token.length >= 4 && candidate.length >= 4) {
-          const similarity = 1 - levenshtein(token, candidate) / Math.max(token.length, candidate.length);
-          if (similarity >= .68) best = Math.max(best, similarity);
-        }
-      }
-      if (best >= .68) matched += 1;
-      score += best;
-    }
-    const coverage = matched / wanted.length;
-    return coverage < (wanted.length === 1 ? .68 : .72) ? 0 : Math.round(score * 100 + coverage * 100);
-  }
-  function fuzzyMatch(product, query) { return productSearchScore(product, query) > 0; }
   function pipeRows(text = '') {
     return String(text).split('\n').map(line => line.split('|').map(x => x.trim())).filter(parts => parts[0]);
   }
@@ -539,7 +536,7 @@
       <div class="product-body"><div class="product-meta">${escapeHTML(product.brand || 'TÂM AN')} • ${escapeHTML(CATEGORY[product.category] || '')}</div><h3>${escapeHTML(product.name)}</h3>
       <div class="product-details">${product.year ? `<span class="mini-tag">${product.year}</span>` : ''}${product.engine ? `<span class="mini-tag">${escapeHTML(product.engine)}</span>` : ''}</div>
       <div class="price-line">${product.price ? `<span class="price">${money(product.price)}</span>${product.old_price ? `<span class="old-price">${money(product.old_price)}</span>` : ''}` : `<span class="price-hidden">Liên hệ nhận giá</span>`}</div>
-      ${colors.length ? `<div class="color-dots">${colors.map(c => `<button class="color-dot preview-color" data-image="${escapeHTML(c.images?.[0] || productImage(product))}" style="background:${escapeHTML(c.hex || '#c81924')}" title="${escapeHTML(c.name)}"></button>`).join('')}</div>` : ''}
+      ${colors.length ? `<div class="color-dots paint-preview-row">${colors.map(c => `<button class="paint-preview preview-color" data-image="${escapeHTML(c.images?.[0] || productImage(product))}" title="${escapeHTML(c.name)}">${paletteStrip(c)}<span>${escapeHTML(c.name)}</span></button>`).join('')}</div>` : ''}
       <div class="product-cta"><button class="btn btn-ghost open-product" data-slug="${escapeHTML(product.slug)}">Xem chi tiết</button><button class="btn btn-primary lead-button" data-product="${product.id}" data-name="${escapeHTML(product.name)}">Giữ xe</button></div></div>
     </article>`;
   }
@@ -571,31 +568,6 @@
     });
   }
 
-  function heroCarousel(site) {
-    const images = storedImageList(site?.hero_images, site?.hero_image || '/assets/tam-an-promo.jpg');
-    const slides = images.length > 1 ? [...images, images[0]] : images;
-    return `<div class="hero-slides" aria-label="Ảnh giới thiệu showroom"><div id="heroTrack" class="hero-track">${slides.map((url, index) => `<div class="hero-slide" style="background-image:url('${escapeHTML(url)}')" role="img" aria-label="Ảnh giới thiệu ${index + 1}"></div>`).join('')}</div>${images.length > 1 ? `<div id="heroDots" class="hero-dots" aria-label="Chọn ảnh Hero">${images.map((_, index) => `<button type="button" class="${index === 0 ? 'is-active' : ''}" data-hero-dot="${index}" aria-label="Ảnh ${index + 1}"></button>`).join('')}</div>` : ''}</div>`;
-  }
-  function initHeroSlider() {
-    const track = $('#heroTrack'), dots = $$('#heroDots [data-hero-dot]');
-    if (!track || dots.length < 2) return;
-    const total = dots.length; let index = 0; let timer = null;
-    const stop = () => { if (timer) window.clearInterval(timer); timer = null; };
-    const apply = (next, instant = false) => {
-      index = next; track.style.transition = instant ? 'none' : '';
-      track.style.transform = `translate3d(-${index * 100}%,0,0)`;
-      dots.forEach((dot, i) => dot.classList.toggle('is-active', i === (index % total)));
-      if (instant) requestAnimationFrame(() => { track.style.transition = ''; });
-    };
-    const start = () => { if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; stop(); timer = window.setInterval(() => apply(index + 1), 5200); };
-    track.addEventListener('transitionend', () => { if (index === total) apply(0, true); });
-    dots.forEach(dot => dot.addEventListener('click', () => { apply(Number(dot.dataset.heroDot)); start(); }));
-    const hero = track.closest('.hero');
-    hero?.addEventListener('mouseenter', stop); hero?.addEventListener('mouseleave', start);
-    hero?.addEventListener('touchstart', stop, { passive: true }); hero?.addEventListener('touchend', start, { passive: true });
-    start();
-  }
-
   function renderHome() {
     const s = state.site;
     const counts = Object.fromEntries(state.categories.map(x => [x.category, Number(x.count)]));
@@ -623,10 +595,10 @@
       </article>`).join('');
     app.className = '';
     app.innerHTML = `${nav()}<main>
-      <section class="hero">${heroCarousel(s)}<div class="container hero-inner"><div class="hero-copy"><div class="eyebrow">${escapeHTML(s.brand_name)}</div><h1>${multiline(s.hero_title || 'Chọn xe ưng ý.\nLên đường an tâm.')}</h1><p>${escapeHTML(s.hero_subtitle || '')}</p><div class="hero-actions"><a class="btn btn-primary" href="/#inventory">Xem xe đang có</a><a class="btn btn-light" href="/tra-gop">Tư vấn trả góp</a></div></div></div></section>
+      <section class="hero"><div class="hero-bg" style="background-image:url('${escapeHTML(s.hero_image || '/assets/tam-an-promo.jpg')}')"></div><div class="container hero-inner"><div class="hero-copy"><div class="eyebrow">${escapeHTML(s.brand_name)}</div><h1>${multiline(s.hero_title || 'Chọn xe ưng ý.\nLên đường an tâm.')}</h1><p>${escapeHTML(s.hero_subtitle || '')}</p><div class="hero-actions"><a class="btn btn-primary" href="/#inventory">Xem xe đang có</a><a class="btn btn-light" href="/tra-gop">Tư vấn trả góp</a></div></div></div></section>
       <div class="trust-strip"><div class="container"><div class="trust-grid"><div class="trust-item"><i class="trust-icon">✓</i><div><b>Thông tin rõ ràng</b><span>Giá hiển thị theo cài đặt cửa hàng.</span></div></div><div class="trust-item"><i class="trust-icon">✦</i><div><b>Hỗ trợ trả góp</b><span>Kiểm tra hồ sơ trước khi xác nhận.</span></div></div><div class="trust-item"><i class="trust-icon">⌁</i><div><b>Tình trạng cập nhật</b><span>Còn hàng, sắp về, đang giữ xe.</span></div></div><div class="trust-item"><i class="trust-icon">☎</i><div><b>Tư vấn nhanh</b><span>Gọi điện hoặc chat trực tiếp.</span></div></div></div></div></div>
       ${categoryCards ? `<section class="section"><div class="container"><div class="section-head"><div><div class="section-kicker">Khám phá kho xe</div><h2>Chọn đúng dòng xe bạn cần.</h2><p class="section-lead">Danh mục chỉ xuất hiện khi đang có sản phẩm.</p></div></div><div class="category-grid">${categoryCards}</div></div></section>` : ''}
-      <section id="inventory" class="section section-soft"><div class="container"><div class="section-head"><div><div class="section-kicker">Kho xe Tâm An</div><h2>Xe đang có & xe sắp về.</h2><p class="section-lead">Gõ gần đúng tên xe, hãng, phiên bản hoặc màu xe để tìm nhanh.</p></div><div class="search-box">⌕<input id="searchInput" placeholder="Ví dụ: vison, air blade sport, đen sần…"></div></div><div class="catalog-filter-panel"><div class="catalog-filter-label"><b>Lọc theo khoảng giá</b><span>Nhập giá từ – đến (VNĐ), giống cách lọc trên sàn mua sắm.</span></div><div class="catalog-filter-controls"><div class="price-inputs"><input id="priceMin" type="number" min="0" inputmode="numeric" placeholder="Từ giá (VD 20000000)"><span>đến</span><input id="priceMax" type="number" min="0" inputmode="numeric" placeholder="Đến giá (VD 50000000)"></div><select id="priceSort" aria-label="Sắp xếp giá"><option value="default">Sắp xếp mặc định</option><option value="price_asc">Giá: thấp đến cao</option><option value="price_desc">Giá: cao đến thấp</option><option value="name_asc">Tên xe: A đến Z</option></select></div><div id="pricePresets" class="price-presets"><button type="button" data-min="" data-max="" class="active">Tất cả</button><button type="button" data-min="0" data-max="20000000">Dưới 20 triệu</button><button type="button" data-min="20000000" data-max="30000000">20 – 30 triệu</button><button type="button" data-min="30000000" data-max="45000000">30 – 45 triệu</button><button type="button" data-min="45000000" data-max="70000000">45 – 70 triệu</button><button type="button" data-min="70000000" data-max="">Từ 70 triệu</button></div></div><div class="chips" id="categoryChips"><button class="chip active" data-category="">Tất cả xe</button>${Object.keys(CATEGORY).filter(key => counts[key] > 0).map(key => `<button class="chip" data-category="${key}">${CATEGORY[key]}</button>`).join('')}</div><div class="section-head" style="margin-top:18px"><p class="section-lead" id="productCount">${state.products.length} xe phù hợp</p><div class="slider-controls"><button class="icon-btn" id="slideLeft">←</button><button class="icon-btn" id="slideRight">→</button></div></div><div id="productRow" class="product-row">${state.products.map(card).join('') || '<div class="admin-empty">Kho xe đang được cập nhật.</div>'}</div></div></section>
+      <section id="inventory" class="section section-soft"><div class="container"><div class="section-head"><div><div class="section-kicker">Kho xe Tâm An</div><h2>Xe đang có & xe sắp về.</h2><p class="section-lead">Gõ gần đúng tên xe, hãng hoặc màu xe để tìm nhanh.</p></div><div class="search-box">⌕<input id="searchInput" placeholder="Tìm tên xe, hãng, màu xe…"></div></div><div class="chips" id="categoryChips"><button class="chip active" data-category="">Tất cả xe</button>${Object.keys(CATEGORY).filter(key => counts[key] > 0).map(key => `<button class="chip" data-category="${key}">${CATEGORY[key]}</button>`).join('')}</div><div class="section-head" style="margin-top:18px"><p class="section-lead" id="productCount">${state.products.length} xe phù hợp</p><div class="slider-controls"><button class="icon-btn" id="slideLeft">←</button><button class="icon-btn" id="slideRight">→</button></div></div><div id="productRow" class="product-row">${state.products.map(card).join('') || '<div class="admin-empty">Kho xe đang được cập nhật.</div>'}</div></div></section>
       ${promoSlides ? `<section id="promo" class="section promo-section"><div class="container"><div class="section-head promo-section-head"><div><div class="section-kicker">Chương trình ưu đãi</div><h2>Nhiều ưu đãi. Chọn đúng thời điểm.</h2><p class="section-lead">Vuốt để xem từng chương trình đang áp dụng tại Tâm An.</p></div>${promotions.length > 1 ? `<div class="promo-controls"><button id="promoPrev" class="icon-btn" type="button" aria-label="Khuyến mại trước">←</button><button id="promoNext" class="icon-btn" type="button" aria-label="Khuyến mại tiếp theo">→</button></div>` : ''}</div><div class="promo-carousel" aria-label="Các chương trình khuyến mại"><div id="promoTrack" class="promo-track">${promoSlides}</div></div>${promotions.length > 1 ? `<div id="promoDots" class="promo-dots" aria-label="Chọn chương trình">${promotions.map((_, index) => `<button type="button" class="promo-dot ${index === 0 ? 'is-active' : ''}" data-promo-dot="${index}" aria-label="Xem chương trình ${index + 1}"></button>`).join('')}</div>` : ''}</div></section>` : ''}
       ${state.accessories.length ? `<section id="accessories" class="section section-soft"><div class="container"><div class="section-head"><div><div class="section-kicker">Phụ tùng & phụ kiện</div><h2>Chọn thêm cho xe. Đi đường yên tâm hơn.</h2></div></div><div class="accessory-grid">${state.accessories.map(a => `<article class="accessory"><img src="${escapeHTML(a.image_url || '/assets/logo.jpg')}" alt="${escapeHTML(a.name)}"><div class="accessory-body"><h3>${escapeHTML(a.name)}</h3>${a.price ? `<b class="price">${money(a.price)}</b>` : '<b class="price-hidden">Liên hệ</b>'}${a.description ? `<p class="muted">${escapeHTML(a.description)}</p>` : ''}</div></article>`).join('')}</div></div></section>` : ''}
       <section class="section"><div class="container delivery"><div class="delivery-img" style="background-image:url('${escapeHTML(s.delivery_image || s.showroom_image || '/assets/showroom.jpg')}')"></div><div class="delivery-copy"><div class="section-kicker">Dịch vụ Tâm An</div><h2>${escapeHTML(s.delivery_title || 'Hỗ trợ giao xe tận nơi')}</h2><p>${escapeHTML(s.delivery_text || '')}</p><button class="btn btn-primary lead-button" data-name="Giao xe tận nơi">Đăng ký tư vấn giao xe</button></div></div></section>
@@ -718,43 +690,26 @@
   function bindHomeEvents() {
     $('#menuBtn')?.addEventListener('click', () => $('#mainNav')?.classList.toggle('mobile-open'));
     $$('#mainNav a').forEach(link => link.addEventListener('click', () => $('#mainNav')?.classList.remove('mobile-open')));
-    const rangeValue = id => { const value = Number($(`#${id}`)?.value || ''); return Number.isFinite(value) && value > 0 ? value : null; };
     const renderProducts = () => {
-      const query = $('#searchInput')?.value || '';
+      const query = $('#searchInput').value;
       const selected = $('#categoryChips .chip.active')?.dataset.category || '';
-      const min = rangeValue('priceMin'), max = rangeValue('priceMax'), sort = $('#priceSort')?.value || 'default';
-      const rows = state.products.filter(product => !selected || product.category === selected)
-        .map(product => ({ product, score: productSearchScore(product, query), displayPrice: productDisplayPrice(product) }))
-        .filter(row => !query.trim() || row.score > 0)
-        .filter(row => {
-          if (min === null && max === null) return true;
-          if (row.displayPrice === null) return false;
-          return !(min !== null && row.displayPrice < min) && !(max !== null && row.displayPrice > max);
-        });
-      rows.sort((a,b) => {
-        if (sort === 'price_asc') return (a.displayPrice ?? Number.MAX_SAFE_INTEGER) - (b.displayPrice ?? Number.MAX_SAFE_INTEGER) || b.score - a.score;
-        if (sort === 'price_desc') return (b.displayPrice ?? -1) - (a.displayPrice ?? -1) || b.score - a.score;
-        if (sort === 'name_asc') return a.product.name.localeCompare(b.product.name, 'vi');
-        return query.trim() ? b.score - a.score : 0;
-      });
-      const items=rows.map(row=>row.product);
-      $('#productRow').innerHTML=items.map(card).join('') || '<div class="admin-empty">Không tìm thấy xe phù hợp với từ khoá hoặc khoảng giá này.</div>';
-      $('#productCount').textContent=`${items.length} xe phù hợp`;
+      const items = state.products.filter(p => (!selected || p.category === selected) && fuzzyMatch(p, query));
+      $('#productRow').innerHTML = items.map(card).join('') || '<div class="admin-empty">Không tìm thấy xe phù hợp.</div>';
+      $('#productCount').textContent = `${items.length} xe phù hợp`;
       bindProductEvents();
     };
     $('#searchInput')?.addEventListener('input', renderProducts);
-    ['priceMin','priceMax'].forEach(id => $(`#${id}`)?.addEventListener('input', () => { $$('#pricePresets button').forEach(button => button.classList.remove('active')); renderProducts(); }));
-    $('#priceSort')?.addEventListener('change', renderProducts);
-    $$('#pricePresets button').forEach(button => button.addEventListener('click', () => { $('#priceMin').value=button.dataset.min||''; $('#priceMax').value=button.dataset.max||''; $$('#pricePresets button').forEach(item => item.classList.toggle('active', item===button)); renderProducts(); }));
-    $$('#categoryChips .chip').forEach(button => button.addEventListener('click', () => { $$('#categoryChips .chip').forEach(x=>x.classList.remove('active')); button.classList.add('active'); renderProducts(); }));
-    $$('.filter-category').forEach(link => link.addEventListener('click', () => setTimeout(() => $(`#categoryChips .chip[data-category="${link.dataset.category}"]`)?.click(), 30)));
+    $$('#categoryChips .chip').forEach(button => button.addEventListener('click', () => { $$('#categoryChips .chip').forEach(x => x.classList.remove('active')); button.classList.add('active'); renderProducts(); }));
+    $$('.filter-category').forEach(link => link.addEventListener('click', () => setTimeout(() => { const chip = $(`#categoryChips .chip[data-category="${link.dataset.category}"]`); chip?.click(); }, 30)));
     $('#slideLeft')?.addEventListener('click', () => $('#productRow').scrollBy({ left:-340, behavior:'smooth' }));
     $('#slideRight')?.addEventListener('click', () => $('#productRow').scrollBy({ left:340, behavior:'smooth' }));
-    $('#backTop')?.addEventListener('click', () => window.scrollTo({top:0,behavior:'smooth'}));
-    window.addEventListener('scroll', () => $('#backTop')?.classList.toggle('show', window.scrollY > 400), {passive:true});
-    $$('.footer-links [data-policy]').forEach(link => link.addEventListener('click', event => {event.preventDefault();openPolicy(link.dataset.policy);}));
-    bindProductEvents(); initHeroSlider(); initChat();
+    $('#backTop')?.addEventListener('click', () => window.scrollTo({ top:0, behavior:'smooth' }));
+    window.addEventListener('scroll', () => $('#backTop')?.classList.toggle('show', window.scrollY > 400), { passive:true });
+    $$('.footer-links [data-policy]').forEach(link => link.addEventListener('click', event => { event.preventDefault(); openPolicy(link.dataset.policy); }));
+    bindProductEvents();
+    initChat();
   }
+
   function bindProductEvents() {
     $$('.open-product').forEach(button => button.onclick = () => openProduct(button.dataset.slug));
     $$('.lead-button').forEach(button => button.onclick = () => openLeadModal({ id:button.dataset.product || null, name:button.dataset.name || '' }));
@@ -768,7 +723,7 @@
       trackEvent('ViewProduct', { content_name: product.name, content_category: product.category, value: product.price || 0, currency: 'VND' });
       const modal = document.createElement('div');
       modal.className = 'modal';
-      modal.innerHTML = `<div class="modal-card"><button class="modal-close">×</button><div class="product-modal"><div class="gallery"><div class="gallery-main"><img id="galleryImage" alt="${escapeHTML(product.name)}"></div><div id="thumbs" class="thumb-row"></div><div id="versionChoices" class="version-choices"></div><div id="colorChoices" class="gallery-colors"></div></div><div class="product-content"><span class="status-badge" style="position:static;display:inline-block">${statusName(product.status)}</span><div class="product-meta" style="margin-top:12px">${escapeHTML(product.brand || 'TÂM AN')} • ${escapeHTML(CATEGORY[product.category] || '')}</div><h2>${escapeHTML(product.name)}</h2><div id="selectedVersionInfo" class="selected-version-info"></div><div id="dynamicPrice" class="price-line"></div><div class="product-description rich-content">${richDescription(product.description || '')}</div><div class="detail-grid"><div class="detail-item"><small>Năm sản xuất</small><b>${product.year || '—'}</b></div><div class="detail-item"><small>Số km</small><b>${product.mileage === null || product.mileage === undefined ? '—' : `${Number(product.mileage).toLocaleString('vi-VN')} km`}</b></div><div class="detail-item"><small>Động cơ</small><b>${escapeHTML(product.engine || '—')}</b></div><div class="detail-item"><small>Giấy tờ</small><b>${escapeHTML(product.documents || '—')}</b></div></div>${product.installment_from || product.bad_debt_from ? `<div class="finance-box"><b>Hỗ trợ trả góp</b><div>${product.installment_from ? `Trả trước tham khảo từ ${money(product.installment_from)}. ` : ''}${product.bad_debt_from ? `Thông tin hỗ trợ hồ sơ từ ${money(product.bad_debt_from)}.` : ''}</div><small>Thông tin tham khảo, Tâm An kiểm tra hồ sơ trước khi xác nhận.</small></div>` : ''}<div class="consult-box"><h3>Để lại thông tin tư vấn</h3><p class="muted">Nhân viên Tâm An sẽ liên hệ theo số điện thoại của bạn.</p><form id="detailLead" class="form-grid"><input type="hidden" name="product_id" value="${product.id}"><div class="field"><label>Họ và tên *</label><input name="name" required></div><div class="field"><label>Số điện thoại *</label><input name="phone" required inputmode="tel"></div>${paymentIntentFields(product.installment_from)}<div class="field full"><label>Ghi chú</label><textarea name="note" placeholder="Muốn xem xe, giữ xe hoặc hỏi trả góp…"></textarea></div><div class="field full"><button class="btn btn-primary">Gửi yêu cầu tư vấn</button></div></form></div></div></div>${data.related?.length ? `<div class="related"><div class="section-kicker">Gợi ý thêm</div><h2 style="font-size:34px">Xe tương tự</h2><div class="product-row">${data.related.map(card).join('')}</div></div>` : ''}</div>`;
+      modal.innerHTML = `<div class="modal-card product-modal-card"><button class="modal-close">×</button><div class="product-modal"><div class="gallery"><div class="gallery-main"><img id="galleryImage" alt="${escapeHTML(product.name)}"></div><div id="thumbs" class="thumb-row"></div><div id="versionChoices" class="version-choices"></div><div id="colorChoices" class="gallery-colors"></div></div><div class="product-content"><span class="status-badge" style="position:static;display:inline-block">${statusName(product.status)}</span><div class="product-meta" style="margin-top:12px">${escapeHTML(product.brand || 'TÂM AN')} • ${escapeHTML(CATEGORY[product.category] || '')}</div><h2>${escapeHTML(product.name)}</h2><div id="selectedVersionInfo" class="selected-version-info"></div><div id="dynamicPrice" class="price-line"></div><section class="product-description"><div class="product-description-head"><span>THÔNG TIN XE</span><h3>Mô tả & thông số chi tiết</h3></div><div class="product-description-body">${descriptionHTML(product.description)}</div><button type="button" id="openDescriptionReader" class="description-reader-btn">Đọc toàn bộ mô tả & thông số <span>→</span></button></section><div class="detail-grid"><div class="detail-item"><small>Năm sản xuất</small><b>${product.year || '—'}</b></div><div class="detail-item"><small>Số km</small><b>${product.mileage === null || product.mileage === undefined ? '—' : `${Number(product.mileage).toLocaleString('vi-VN')} km`}</b></div><div class="detail-item"><small>Động cơ</small><b>${escapeHTML(product.engine || '—')}</b></div><div class="detail-item"><small>Giấy tờ</small><b>${escapeHTML(product.documents || '—')}</b></div></div>${product.installment_from || product.bad_debt_from ? `<div class="finance-box"><b>Hỗ trợ trả góp</b><div>${product.installment_from ? `Trả trước tham khảo từ ${money(product.installment_from)}. ` : ''}${product.bad_debt_from ? `Thông tin hỗ trợ hồ sơ từ ${money(product.bad_debt_from)}.` : ''}</div><small>Thông tin tham khảo, Tâm An kiểm tra hồ sơ trước khi xác nhận.</small></div>` : ''}<div class="consult-box"><h3>Để lại thông tin tư vấn</h3><p class="muted">Nhân viên Tâm An sẽ liên hệ theo số điện thoại của bạn.</p><form id="detailLead" class="form-grid"><input type="hidden" name="product_id" value="${product.id}"><div class="field"><label>Họ và tên *</label><input name="name" required></div><div class="field"><label>Số điện thoại *</label><input name="phone" required inputmode="tel"></div>${paymentIntentFields(product.installment_from)}<div class="field full"><label>Ghi chú</label><textarea name="note" placeholder="Muốn xem xe, giữ xe hoặc hỏi trả góp…"></textarea></div><div class="field full"><button class="btn btn-primary">Gửi yêu cầu tư vấn</button></div></form></div></div></div>${data.related?.length ? `<div class="related"><div class="section-kicker">Gợi ý thêm</div><h2 style="font-size:34px">Xe tương tự</h2><div class="product-row">${data.related.map(card).join('')}</div></div>` : ''}</div>`;
       document.body.appendChild(modal); document.body.classList.add('modal-open');
       const close = bindOverlayDismissal(modal);
       const hasVersions = Array.isArray(product.versions) && product.versions.length;
@@ -791,43 +746,35 @@
         $('#dynamicPrice', modal).innerHTML = priceBlock();
         $('#selectedVersionInfo', modal).innerHTML = version ? `<b>${escapeHTML(version.name)}</b>${version.description ? `<small>${escapeHTML(version.description)}</small>` : ''}` : '';
         $('#versionChoices', modal).innerHTML = hasVersions ? `<div class="choice-label">Chọn phiên bản</div><div class="choice-row">${product.versions.map((v, index) => `<button type="button" class="version-choice ${index === versionIndex ? 'active' : ''}" data-index="${index}">${escapeHTML(v.name)}</button>`).join('')}</div>` : '';
-        $('#colorChoices', modal).innerHTML = colors.length ? `<div class="choice-label">Màu có ở ${escapeHTML(version?.name || 'mẫu xe này')}</div>${colors.map((color, index) => `<button type="button" class="color-choice ${index === colorIndex ? 'active' : ''}" data-index="${index}"><i style="background:${escapeHTML(color.hex || '#c81924')}"></i>${escapeHTML(color.name)}</button>`).join('')}` : '';
+        $('#colorChoices', modal).innerHTML = colors.length ? `<div class="choice-label">Phối màu${version?.name ? ` · Bản ${escapeHTML(version.name)}` : ''}<small>${colors.length} lựa chọn</small></div><div class="choice-row color-choice-row">${colors.map((color, index) => `<button type="button" class="color-choice ${index === colorIndex ? 'active' : ''}" data-index="${index}" title="${escapeHTML(color.name)}">${paletteStrip(color, 'color-choice-strip')}<span>${escapeHTML(color.name)}</span></button>`).join('')}</div>` : '<div class="color-empty">Phiên bản này chưa cập nhật phối màu.</div>';
         $('#thumbs', modal).innerHTML = gallery.map((url, index) => `<button class="thumb ${index === 0 ? 'active' : ''}" data-url="${escapeHTML(url)}"><img src="${escapeHTML(url)}" alt=""></button>`).join('');
         $$('#versionChoices .version-choice', modal).forEach(button => button.onclick = () => { versionIndex = Number(button.dataset.index); colorIndex = 0; draw(); });
         $$('#colorChoices .color-choice', modal).forEach(button => button.onclick = () => { colorIndex = Number(button.dataset.index); draw(); });
         $$('#thumbs .thumb', modal).forEach(btn => btn.onclick = () => { $('#galleryImage', modal).src = btn.dataset.url; $$('#thumbs .thumb', modal).forEach(x => x.classList.toggle('active', x === btn)); });
       };
       draw();
-      const galleryStage = $('.gallery-main', modal);
-      const galleryImage = $('#galleryImage', modal);
-      if (window.matchMedia('(hover: hover) and (pointer: fine)').matches && galleryStage && galleryImage) {
-        galleryStage.classList.add('gallery-mouse-ready');
-        galleryStage.addEventListener('pointermove', event => {
-          const rect = galleryStage.getBoundingClientRect();
-          const x = ((event.clientX - rect.left) / rect.width - .5) * 20;
-          const y = ((event.clientY - rect.top) / rect.height - .5) * 12;
-          galleryImage.style.setProperty('--gallery-x', `${x.toFixed(2)}px`);
-          galleryImage.style.setProperty('--gallery-y', `${y.toFixed(2)}px`);
-          galleryStage.classList.add('is-tracking');
-        });
-        galleryStage.addEventListener('pointerleave', () => {
-          galleryImage.style.setProperty('--gallery-x','0px');
-          galleryImage.style.setProperty('--gallery-y','0px');
-          galleryStage.classList.remove('is-tracking');
-        });
-      }
+      $('#openDescriptionReader', modal)?.addEventListener('click', () => openDescriptionReader(product));
       $('.gallery-main', modal).onclick = () => openLightbox(gallery, $('#galleryImage', modal).src);
       const detailLeadForm = $('#detailLead', modal);
       bindPaymentIntent(detailLeadForm);
       detailLeadForm.onsubmit = async event => {
         event.preventDefault(); const form = new FormData(event.target); const version = getVersion(); const color = selectedColor();
-        const chosen = [version?.name ? `Phiên bản: ${version.name}` : '', color?.name ? `Màu: ${color.name}` : ''].filter(Boolean).join(' • ');
+        const chosen = [version?.name ? `Phiên bản: ${version.name}` : '', color?.name ? `Phối màu: ${color.name}` : ''].filter(Boolean).join(' • ');
         const note = [chosen, form.get('note') || ''].filter(Boolean).join('\n');
         try { await request('/api/leads', { method:'POST', body:{ type:'product_consultation', product_id:Number(form.get('product_id')), name:form.get('name'), phone:form.get('phone'), note, ...paymentLeadPayload(form) } }); trackEvent('Lead', { content_name: product.name, content_category: product.category }); notify('Tâm An đã nhận thông tin và sẽ liên hệ sớm.'); event.target.reset(); $('[name="payment_plan"]', event.target)?.dispatchEvent(new Event('change')); }
         catch (error) { notify(error.message); }
       };
       bindProductEvents();
     } catch (error) { notify(error.message); }
+  }
+
+  function openDescriptionReader(product) {
+    const reader = document.createElement('div');
+    reader.className = 'modal description-reader-modal';
+    reader.innerHTML = `<div class="modal-card description-reader-card"><button class="modal-close">×</button><article><div class="product-meta">${escapeHTML(product.brand || 'TÂM AN')} • ${escapeHTML(product.name || '')}</div><h2>Mô tả & thông số chi tiết</h2><div class="description-reader-content">${descriptionHTML(product.description)}</div></article></div>`;
+    document.body.appendChild(reader);
+    document.body.classList.add('modal-open');
+    bindOverlayDismissal(reader);
   }
 
   function openLightbox(images, current) {
@@ -937,7 +884,7 @@
   }
   async function refreshChat(silent = false) {
     const box = $('#chatBody'); if (!box) return;
-    try { const data = await request(`/api/chat/messages?visitor_key=${encodeURIComponent(state.visitorKey)}`); box.innerHTML = (data.messages || []).map(m => `<div class="chat-msg ${escapeHTML(m.sender_type)}"><small>${escapeHTML(m.sender_type === 'visitor' ? 'Bạn' : (m.sender_name || 'Tâm An'))}</small>${chatText(m.body)}</div>`).join('') || `<div class="muted">${escapeHTML(state.site.ai_greeting || 'Tâm An xin chào! Bạn cần tư vấn xe nào ạ?')}</div>`; const form=$('#chatForm'); if(data.conversation?.status==='done' && form) form.innerHTML='<div class="conversation-locked">✓ Hội thoại đã hoàn tất. Vui lòng gọi hotline hoặc gửi form tư vấn mới.</div>'; box.scrollTop = box.scrollHeight; }
+    try { const data = await request(`/api/chat/messages?visitor_key=${encodeURIComponent(state.visitorKey)}`); box.innerHTML = (data.messages || []).map(m => `<div class="chat-msg ${escapeHTML(m.sender_type)}"><small>${escapeHTML(m.sender_type === 'visitor' ? 'Bạn' : (m.sender_name || 'Tâm An'))}</small>${escapeHTML(m.body)}</div>`).join('') || `<div class="muted">${escapeHTML(state.site.ai_greeting || 'Tâm An xin chào! Bạn cần tư vấn xe nào ạ?')}</div>`; box.scrollTop = box.scrollHeight; }
     catch (error) { if (!silent) notify(error.message); }
   }
 
@@ -1020,65 +967,58 @@
 
   function openProductEditor(product) {
     const p = product || { category:'motor_new', status:'in_stock', published:true, images:[], colors:[], versions:[] };
-    const modal = adminModal(product ? 'Sửa sản phẩm' : 'Thêm sản phẩm', `<form id="productForm" class="admin-product-form admin-pro-form">
-      <fieldset class="fieldset"><legend>Thông tin xe</legend>
-        <div class="form-three">
-          <div class="field"><label>Tên xe *</label><input name="name" required value="${escapeHTML(p.name || '')}"></div>
-          <div class="field"><label>Hãng</label><input name="brand" value="${escapeHTML(p.brand || 'Honda')}"></div>
-          <div class="field"><label>Nhóm xe</label><select name="category">${Object.entries(CATEGORY).map(([key, label]) => `<option value="${key}" ${p.category === key ? 'selected' : ''}>${label}</option>`).join('')}</select></div>
-          <div class="field"><label>Trạng thái</label><select name="status">${['in_stock','incoming','reserved','sold'].map(key => `<option value="${key}" ${p.status === key ? 'selected' : ''}>${statusName(key)}</option>`).join('')}</select></div>
-          <div class="field"><label>Giá chung (không bắt buộc)</label>${moneyField('price', p.price)}</div>
-          <div class="field"><label>Giá cũ chung</label>${moneyField('old_price', p.old_price)}</div>
-          <div class="field"><label>Năm sản xuất</label><input name="year" type="number" value="${p.year ?? ''}"></div>
-          <div class="field"><label>Số km</label><input name="mileage" type="number" value="${p.mileage ?? ''}"></div>
-          <div class="field"><label>Động cơ</label><input name="engine" value="${escapeHTML(p.engine || '')}"></div>
-          <div class="field"><label>Trả trước từ</label>${moneyField('installment_from', p.installment_from)}</div>
-          <div class="field"><label>Hỗ trợ hồ sơ từ</label>${moneyField('bad_debt_from', p.bad_debt_from)}</div>
-          <div class="field"><label>Giấy tờ</label><input name="documents" value="${escapeHTML(p.documents || '')}"></div>
-        </div>
-        <div class="field"><label>Mô tả chi tiết</label>${richEditorMarkup(p.description || '')}</div>
-        <div class="check-row"><label><input type="checkbox" name="featured" ${p.featured ? 'checked' : ''}> Xe nổi bật</label><label><input type="checkbox" name="published" ${p.published !== 0 ? 'checked' : ''}> Hiển thị ngoài website</label></div>
-      </fieldset>
-      <fieldset class="fieldset"><legend>Ảnh chung của mẫu xe</legend><p class="muted">Ảnh này dùng khi mẫu xe chưa có phiên bản/màu riêng.</p><input id="productImagesInput" type="file" accept="image/*" multiple><div id="productImages" class="thumb-row"></div></fieldset>
-      <fieldset class="fieldset"><legend>Phiên bản → màu → album ảnh</legend><p class="muted"><b>Ví dụ:</b> Air Blade → <b>Sport</b> → Đen sần, Đỏ đen; <b>Tiêu chuẩn</b> → Trắng, Đen. Màu nào không có ở phiên bản đó thì không thêm vào phiên bản đó.</p><div id="versionRows"></div><button id="addVersion" type="button" class="small-btn">+ Thêm phiên bản</button></fieldset>
-      <fieldset class="fieldset"><legend>Màu chung (chỉ dùng khi xe không phân phiên bản)</legend><p class="muted">Nếu xe đã có phiên bản, hãy khai báo màu trong từng phiên bản phía trên.</p><div id="generalColorRows"></div><button id="addGeneralColor" type="button" class="small-btn">+ Thêm màu chung</button></fieldset>
-      <button class="btn btn-primary">${product ? 'Lưu thay đổi' : 'Tạo sản phẩm'}</button>
-    </form>`);
+    const modal = adminModal(product ? 'Sửa sản phẩm' : 'Thêm sản phẩm', `<form id="productForm" class="admin-product-form"><fieldset class="fieldset"><legend>Thông tin xe</legend><div class="form-three"><div class="field"><label>Tên xe *</label><input name="name" required value="${escapeHTML(p.name || '')}"></div><div class="field"><label>Hãng</label><input name="brand" value="${escapeHTML(p.brand || 'Honda')}"></div><div class="field"><label>Nhóm xe</label><select name="category">${Object.entries(CATEGORY).map(([key, label]) => `<option value="${key}" ${p.category === key ? 'selected' : ''}>${label}</option>`).join('')}</select></div><div class="field"><label>Trạng thái</label><select name="status">${['in_stock','incoming','reserved','sold'].map(key => `<option value="${key}" ${p.status === key ? 'selected' : ''}>${statusName(key)}</option>`).join('')}</select></div><div class="field"><label>Giá chung (không bắt buộc)</label><input name="price" type="number" value="${p.price ?? ''}"></div><div class="field"><label>Giá cũ chung</label><input name="old_price" type="number" value="${p.old_price ?? ''}"></div><div class="field"><label>Năm sản xuất</label><input name="year" type="number" value="${p.year ?? ''}"></div><div class="field"><label>Số km</label><input name="mileage" type="number" value="${p.mileage ?? ''}"></div><div class="field"><label>Động cơ</label><input name="engine" value="${escapeHTML(p.engine || '')}"></div><div class="field"><label>Trả trước từ</label><input name="installment_from" type="number" value="${p.installment_from ?? ''}"></div><div class="field"><label>Hỗ trợ hồ sơ từ</label><input name="bad_debt_from" type="number" value="${p.bad_debt_from ?? ''}"></div><div class="field"><label>Giấy tờ</label><input name="documents" value="${escapeHTML(p.documents || '')}"></div></div><div class="field"><label>Mô tả chi tiết</label><div class="rich-editor"><div class="rich-toolbar" role="toolbar" aria-label="Định dạng mô tả"><button type="button" data-command="bold" title="In đậm"><b>B</b></button><button type="button" data-command="italic" title="In nghiêng"><i>I</i></button><button type="button" data-command="underline" title="Gạch chân"><u>U</u></button><span class="toolbar-sep"></span><button type="button" data-command="formatBlock" data-value="H3" title="Tiêu đề">Tt</button><button type="button" data-command="insertUnorderedList" title="Danh sách chấm">•≡</button><button type="button" data-command="insertOrderedList" title="Danh sách số">1≡</button><span class="toolbar-sep"></span><button type="button" data-command="justifyLeft" title="Căn trái">≡</button><button type="button" data-command="justifyCenter" title="Căn giữa">≡</button><select class="rich-font-picker" title="Font chữ"><option value="Be Vietnam Pro">Be Vietnam Pro</option><option value="Arial">Arial</option><option value="Tahoma">Tahoma</option><option value="Times New Roman">Times New Roman</option><option value="Georgia">Georgia</option><option value="Montserrat">Montserrat</option><option value="Manrope">Manrope</option></select><select class="rich-size-picker" title="Cỡ chữ"><option value="2">Nhỏ</option><option value="3" selected>Vừa</option><option value="4">Lớn</option><option value="5">Rất lớn</option></select><input class="rich-color-picker" type="color" value="#1b1214" title="Màu chữ"></div><div id="descriptionEditor" class="rich-editor-area" contenteditable="true" role="textbox" aria-multiline="true">${editorInitialHTML(p.description || '')}</div><textarea id="descriptionValue" name="description" hidden></textarea></div><small class="field-help">Dùng thanh công cụ như Word. Xuống dòng, tiêu đề, danh sách, in đậm/nghiêng sẽ được giữ nguyên ngoài website.</small></div><div class="check-row"><label><input type="checkbox" name="featured" ${p.featured ? 'checked' : ''}> Xe nổi bật</label><label><input type="checkbox" name="published" ${p.published !== 0 ? 'checked' : ''}> Hiển thị ngoài website</label></div></fieldset><fieldset class="fieldset"><legend>Ảnh chung của mẫu xe</legend><p class="muted">Ảnh này dùng khi mẫu xe chưa có phiên bản/màu riêng.</p><input id="productImagesInput" type="file" accept="image/*" multiple><div id="productImages" class="thumb-row"></div></fieldset><fieldset class="fieldset"><legend>Phiên bản → phối màu → album ảnh</legend><p class="muted"><b>Ví dụ đúng:</b> Air Blade → <b>Sport</b> → <b>Trắng Đỏ Đen</b> (3 ô màu), <b>Xám Đỏ Đen</b>; <b>Tiêu chuẩn</b> → Trắng, Đen. Mỗi phối màu là một lựa chọn hoàn chỉnh có album ảnh riêng.</p><div id="versionRows"></div><button id="addVersion" type="button" class="small-btn">+ Thêm phiên bản</button></fieldset><fieldset class="fieldset"><legend>Phối màu chung (chỉ dùng khi xe không phân phiên bản)</legend><p class="muted">Nếu xe đã có phiên bản, hãy khai báo phối màu trong từng phiên bản phía trên. Phần này dành cho xe chỉ có một bản.</p><div id="generalColorRows"></div><button id="addGeneralColor" type="button" class="small-btn">+ Thêm phối màu chung</button></fieldset><button class="btn btn-primary">${product ? 'Lưu thay đổi' : 'Tạo sản phẩm'}</button></form>`);
     const form = $('#productForm', modal);
-    initRichEditor(modal);
-    bindMoneyInputs(modal);
+    bindDescriptionEditor(modal);
     let images = [...(p.images || [])];
-    let generalColors = (p.colors || []).map(c => ({ name:c.name || '', hex:c.hex || '#c81924', images:[...(c.images || [])] }));
-    let versions = (p.versions || []).map(v => ({ name:v.name || '', price:v.price ?? '', old_price:v.old_price ?? '', description:v.description || '', colors:(v.colors || []).map(c => ({ name:c.name || '', hex:c.hex || '#c81924', images:[...(c.images || [])] })) }));
-    const uploadMany = async files => { const out=[]; for (const file of Array.from(files || [])) out.push(await uploadFile(file)); return out; };
-    function renderImages() { $('#productImages', modal).innerHTML = images.map((url,index)=>`<button type="button" class="thumb remove-image" data-index="${index}"><img src="${escapeHTML(url)}" alt=""><span>×</span></button>`).join(''); $$('.remove-image',modal).forEach(button=>button.onclick=()=>{images.splice(Number(button.dataset.index),1);renderImages();}); }
-    function colorBox(color,path,label){ return `<div class="nested-color-box"><div class="variant-head"><b>${label}</b><button type="button" class="small-btn danger remove-nested-color" data-path="${path}">Xoá màu</button></div><div class="form-three"><div class="field"><label>Tên màu</label><input class="nested-color-name" data-path="${path}" value="${escapeHTML(color.name)}" placeholder="Ví dụ: Đen sần"></div><div class="field"><label>Màu hiển thị</label><input class="nested-color-hex" data-path="${path}" type="color" value="${escapeHTML(color.hex || '#c81924')}"></div><div class="field"><label>Album ảnh của màu</label><input class="nested-color-upload" data-path="${path}" type="file" accept="image/*" multiple></div></div><div class="thumb-row">${(color.images||[]).map((url,imageIndex)=>`<button type="button" class="thumb remove-nested-image" data-path="${path}" data-image="${imageIndex}"><img src="${escapeHTML(url)}" alt=""><span>×</span></button>`).join('')}</div></div>`; }
-    function atPath(path){const [a,b]=path.split(':').map(Number);return b===undefined?generalColors[a]:versions[a]?.colors?.[b];}
-    function removeAtPath(path){const [a,b]=path.split(':').map(Number);if(b===undefined)generalColors.splice(a,1);else versions[a].colors.splice(b,1);}
-    function renderGeneralColors(){ $('#generalColorRows',modal).innerHTML=generalColors.map((color,index)=>colorBox(color,String(index),`Màu chung ${index+1}`)).join('')||'<p class="muted">Chưa có màu chung.</p>'; bindColorInputs(); }
-    function renderVersions(){
-      $('#versionRows',modal).innerHTML=versions.map((version,versionIndex)=>`<div class="version-editor"><div class="variant-head"><b>Phiên bản ${versionIndex+1}</b><button type="button" class="small-btn danger remove-version" data-index="${versionIndex}">Xoá phiên bản</button></div><div class="form-three"><div class="field"><label>Tên phiên bản *</label><input class="version-name" data-index="${versionIndex}" value="${escapeHTML(version.name)}" placeholder="Sport / Tiêu chuẩn / Đặc biệt"></div><div class="field"><label>Giá phiên bản</label>${moneyField('', version.price, 'version-price')}<input type="hidden" class="version-price-index" data-index="${versionIndex}"></div><div class="field"><label>Giá cũ phiên bản</label>${moneyField('', version.old_price, 'version-old-price')}<input type="hidden" class="version-old-price-index" data-index="${versionIndex}"></div></div><div class="field"><label>Mô tả phiên bản</label><input class="version-description" data-index="${versionIndex}" value="${escapeHTML(version.description)}" placeholder="Ví dụ: Mâm trước, phanh ABS, tem thể thao…"></div><div class="version-colors"><b class="version-color-title" data-index="${versionIndex}">Màu có ở phiên bản “${escapeHTML(version.name || `Phiên bản ${versionIndex+1}`)}”</b>${version.colors.map((color,colorIndex)=>colorBox(color,`${versionIndex}:${colorIndex}`,`Màu ${colorIndex+1}`)).join('')||'<p class="muted">Chưa thêm màu cho phiên bản này.</p>'}<button type="button" class="small-btn add-version-color" data-index="${versionIndex}">+ Thêm màu cho phiên bản này</button></div></div>`).join('')||'<p class="muted">Chưa thêm phiên bản. Xe sẽ sử dụng “Màu chung”.</p>';
-      $$('.remove-version',modal).forEach(button=>button.onclick=()=>{versions.splice(Number(button.dataset.index),1);renderVersions();});
-      // Do NOT re-render while typing. The previous implementation stole focus after every character.
-      $$('.version-name',modal).forEach(input=>input.addEventListener('input',()=>{const i=Number(input.dataset.index);versions[i].name=input.value;const label=$(`.version-color-title[data-index="${i}"]`,modal);if(label)label.textContent=`Màu có ở phiên bản “${input.value || `Phiên bản ${i+1}`}”`; }));
-      $$('.version-description',modal).forEach(input=>input.addEventListener('input',()=>{versions[Number(input.dataset.index)].description=input.value;}));
-      $$('.version-price',modal).forEach(input=>{const index=$$('.version-price',modal).indexOf(input);const holder=$$('.version-price-index',modal)[index];bindMoneyInput(input,value=>{versions[Number(holder.dataset.index)].price=value;});});
-      $$('.version-old-price',modal).forEach(input=>{const index=$$('.version-old-price',modal).indexOf(input);const holder=$$('.version-old-price-index',modal)[index];bindMoneyInput(input,value=>{versions[Number(holder.dataset.index)].old_price=value;});});
-      $$('.add-version-color',modal).forEach(button=>button.onclick=()=>{versions[Number(button.dataset.index)].colors.push({name:'',hex:'#c81924',images:[]});renderVersions();});
+    let generalColors = (p.colors || []).map(colorClone);
+    let versions = (p.versions || []).map(v => ({ name:v.name || '', price:v.price ?? '', old_price:v.old_price ?? '', description:v.description || '', colors:(v.colors || []).map(colorClone) }));
+    const uploadMany = async files => { const out = []; for (const file of Array.from(files || [])) out.push(await uploadFile(file)); return out; };
+    function renderImages() { $('#productImages', modal).innerHTML = images.map((url, index) => `<button type="button" class="thumb remove-image" data-index="${index}"><img src="${escapeHTML(url)}" alt=""><span>×</span></button>`).join(''); $$('.remove-image', modal).forEach(button => button.onclick = () => { images.splice(Number(button.dataset.index),1); renderImages(); }); }
+    function colorBox(color, path, label) {
+      const swatches = paletteOf(color);
+      color.swatches = swatches;
+      color.hex = swatches[0];
+      return `<div class="nested-color-box"><div class="variant-head"><b>${label}</b><button type="button" class="small-btn danger remove-nested-color" data-path="${path}">Xoá phối màu</button></div><div class="form-three"><div class="field"><label>Tên phối màu</label><input class="nested-color-name" data-path="${path}" value="${escapeHTML(color.name)}" placeholder="Ví dụ: Trắng Đỏ Đen / Đen sần"></div><div class="field palette-field"><label>Phối màu trên xe</label><div class="palette-editor" data-path="${path}">${swatches.map((hex, index) => `<span class="palette-editor-chip"><input class="nested-swatch" data-path="${path}" data-index="${index}" type="color" value="${escapeHTML(hex)}" title="Ô màu ${index + 1}">${swatches.length > 1 ? `<button type="button" class="remove-swatch" data-path="${path}" data-index="${index}" title="Bỏ ô màu">×</button>` : ''}</span>`).join('')}${swatches.length < 3 ? `<button type="button" class="add-swatch" data-path="${path}">+ Thêm ô màu</button>` : ''}</div><small class="field-help">Chọn 1–3 ô liền nhau. Đây là một phối màu hoàn chỉnh, không phải ba màu chọn riêng.</small></div><div class="field"><label>Album ảnh của phối màu</label><input class="nested-color-upload" data-path="${path}" type="file" accept="image/*" multiple></div></div><div class="thumb-row">${(color.images || []).map((url,imageIndex) => `<button type="button" class="thumb remove-nested-image" data-path="${path}" data-image="${imageIndex}"><img src="${escapeHTML(url)}" alt=""><span>×</span></button>`).join('')}</div></div>`;
+    }
+    function atPath(path) { const [a,b] = path.split(':').map(Number); return b === undefined ? generalColors[a] : versions[a]?.colors?.[b]; }
+    function removeAtPath(path) { const [a,b] = path.split(':').map(Number); if (b === undefined) generalColors.splice(a,1); else versions[a].colors.splice(b,1); }
+    function renderGeneralColors() { $('#generalColorRows', modal).innerHTML = generalColors.map((color,index) => colorBox(color, String(index), `Phối màu chung ${index+1}`)).join('') || '<p class="muted">Chưa có màu chung.</p>'; bindColorInputs(); }
+    function renderVersions() { $('#versionRows', modal).innerHTML = versions.map((version,versionIndex) => `<div class="version-editor"><div class="variant-head"><b>Phiên bản ${versionIndex+1}</b><button type="button" class="small-btn danger remove-version" data-index="${versionIndex}">Xoá phiên bản</button></div><div class="form-three"><div class="field"><label>Tên phiên bản *</label><input class="version-name" data-index="${versionIndex}" value="${escapeHTML(version.name)}" placeholder="Sport / Tiêu chuẩn / Đặc biệt"></div><div class="field"><label>Giá phiên bản</label><input class="version-price" data-index="${versionIndex}" type="number" value="${escapeHTML(version.price)}"></div><div class="field"><label>Giá cũ phiên bản</label><input class="version-old-price" data-index="${versionIndex}" type="number" value="${escapeHTML(version.old_price)}"></div></div><div class="field"><label>Mô tả phiên bản</label><input class="version-description" data-index="${versionIndex}" value="${escapeHTML(version.description)}" placeholder="Ví dụ: Mâm trước, phanh ABS, tem thể thao…"></div><div class="version-colors"><div class="version-colors-title"><b class="version-color-heading" data-version-title="${versionIndex}">Phối màu · Bản ${escapeHTML(version.name || `Phiên bản ${versionIndex+1}`)}</b><span>${version.colors.length} phối màu</span></div>${version.colors.map((color,colorIndex)=>colorBox(color, `${versionIndex}:${colorIndex}`, `Màu ${colorIndex+1}`)).join('') || '<p class="muted">Chưa thêm màu cho phiên bản này.</p>'}<button type="button" class="small-btn add-version-color" data-index="${versionIndex}">+ Thêm phối màu cho phiên bản này</button></div></div>`).join('') || '<p class="muted">Chưa thêm phiên bản. Xe sẽ sử dụng “Màu chung”.</p>';
+      $$('.remove-version', modal).forEach(button => button.onclick = () => { versions.splice(Number(button.dataset.index),1); renderVersions(); });
+      $$('.version-name', modal).forEach(input => input.oninput = () => { const index = Number(input.dataset.index); versions[index].name = input.value; const title = $(`.version-color-heading[data-version-title="${index}"]`, modal); if (title) title.textContent = `Phối màu · Bản ${input.value || `Phiên bản ${index + 1}`}`; });
+      $$('.version-price', modal).forEach(input => input.oninput = () => { versions[Number(input.dataset.index)].price = input.value; });
+      $$('.version-old-price', modal).forEach(input => input.oninput = () => { versions[Number(input.dataset.index)].old_price = input.value; });
+      $$('.version-description', modal).forEach(input => input.oninput = () => { versions[Number(input.dataset.index)].description = input.value; });
+      $$('.add-version-color', modal).forEach(button => button.onclick = () => { versions[Number(button.dataset.index)].colors.push({name:'',hex:'#c81924',swatches:['#c81924'],images:[]}); renderVersions(); });
       bindColorInputs();
     }
-    function bindColorInputs(){
-      $$('.remove-nested-color',modal).forEach(button=>button.onclick=()=>{removeAtPath(button.dataset.path);renderVersions();renderGeneralColors();});
-      $$('.nested-color-name',modal).forEach(input=>input.addEventListener('input',()=>{const color=atPath(input.dataset.path);if(color)color.name=input.value;}));
-      $$('.nested-color-hex',modal).forEach(input=>input.addEventListener('input',()=>{const color=atPath(input.dataset.path);if(color)color.hex=input.value;}));
-      $$('.nested-color-upload',modal).forEach(input=>input.onchange=async()=>{try{const color=atPath(input.dataset.path);color.images.push(...await uploadMany(input.files));renderVersions();renderGeneralColors();notify('Đã tải ảnh cho màu xe');}catch(error){notify(error.message);}});
-      $$('.remove-nested-image',modal).forEach(button=>button.onclick=()=>{const color=atPath(button.dataset.path);color.images.splice(Number(button.dataset.image),1);renderVersions();renderGeneralColors();});
+    function bindColorInputs() {
+      $$('.remove-nested-color', modal).forEach(button => button.onclick = () => { removeAtPath(button.dataset.path); renderVersions(); renderGeneralColors(); });
+      $$('.nested-color-name', modal).forEach(input => input.oninput = () => { const color=atPath(input.dataset.path); if(color) color.name=input.value; });
+      $$('.nested-swatch', modal).forEach(input => input.oninput = () => {
+        const color = atPath(input.dataset.path); const index = Number(input.dataset.index);
+        if (!color) return;
+        color.swatches = paletteOf(color); color.swatches[index] = validHex(input.value); color.hex = color.swatches[0];
+      });
+      $$('.add-swatch', modal).forEach(button => button.onclick = () => {
+        const color = atPath(button.dataset.path); if (!color) return;
+        color.swatches = paletteOf(color); if (color.swatches.length < 3) color.swatches.push('#c81924'); color.hex = color.swatches[0];
+        renderVersions(); renderGeneralColors();
+      });
+      $$('.remove-swatch', modal).forEach(button => button.onclick = () => {
+        const color = atPath(button.dataset.path); if (!color) return;
+        color.swatches = paletteOf(color); if (color.swatches.length > 1) color.swatches.splice(Number(button.dataset.index), 1); color.hex = color.swatches[0];
+        renderVersions(); renderGeneralColors();
+      });
+      $$('.nested-color-upload', modal).forEach(input => input.onchange = async () => { try { const color=atPath(input.dataset.path); color.images.push(...await uploadMany(input.files)); renderVersions(); renderGeneralColors(); notify('Đã tải ảnh cho màu xe'); } catch (error) { notify(error.message); } });
+      $$('.remove-nested-image', modal).forEach(button => button.onclick = () => { const color=atPath(button.dataset.path); color.images.splice(Number(button.dataset.image),1); renderVersions(); renderGeneralColors(); });
     }
-    $('#productImagesInput',modal).onchange=async event=>{try{images.push(...await uploadMany(event.target.files));renderImages();}catch(error){notify(error.message);}};
-    $('#addVersion',modal).onclick=()=>{versions.push({name:'',price:'',old_price:'',description:'',colors:[]});renderVersions();};
-    $('#addGeneralColor',modal).onclick=()=>{generalColors.push({name:'',hex:'#c81924',images:[]});renderGeneralColors();};
-    renderImages();renderVersions();renderGeneralColors();
-    form.onsubmit=async event=>{event.preventDefault();const fd=new FormData(form);const body=Object.fromEntries(fd.entries());body.description=$('#productDescriptionEditor',modal)?.innerHTML||'';body.price=moneyDigits(body.price);body.old_price=moneyDigits(body.old_price);body.installment_from=moneyDigits(body.installment_from);body.bad_debt_from=moneyDigits(body.bad_debt_from);body.images=images;body.colors=generalColors.filter(c=>c.name);body.versions=versions.filter(v=>v.name).map(v=>({...v,price:moneyDigits(v.price),old_price:moneyDigits(v.old_price),colors:(v.colors||[]).filter(c=>c.name)}));body.featured=fd.get('featured')==='on';body.published=fd.get('published')==='on';try{await request(product?`/api/admin/products/${p.id}`:'/api/admin/products',{method:product?'PUT':'POST',body});notify('Đã lưu sản phẩm');modal.remove();document.body.classList.remove('modal-open');loadAdminTab('products');}catch(error){notify(error.message);}};
+    $('#productImagesInput', modal).onchange = async event => { try { images.push(...await uploadMany(event.target.files)); renderImages(); } catch (error) { notify(error.message); } };
+    $('#addVersion', modal).onclick = () => { versions.push({name:'',price:'',old_price:'',description:'',colors:[]}); renderVersions(); };
+    $('#addGeneralColor', modal).onclick = () => { generalColors.push({name:'',hex:'#c81924',swatches:['#c81924'],images:[]}); renderGeneralColors(); };
+    renderImages(); renderVersions(); renderGeneralColors();
+    form.onsubmit = async event => { event.preventDefault(); const fd = new FormData(form); const body = Object.fromEntries(fd.entries()); body.images=images; body.colors=generalColors.filter(c=>c.name); body.versions=versions.filter(v=>v.name).map(v=>({...v, colors:(v.colors||[]).filter(c=>c.name)})); body.featured=fd.get('featured')==='on'; body.published=fd.get('published')==='on'; try { await request(product ? `/api/admin/products/${p.id}` : '/api/admin/products', {method:product?'PUT':'POST',body}); notify('Đã lưu sản phẩm'); modal.remove(); document.body.classList.remove('modal-open'); loadAdminTab('products'); } catch(error) { notify(error.message); } };
   }
 
   async function adminPromotions(main) {
@@ -1105,11 +1045,10 @@
   }
   function openAccessoryEditor(accessory) {
     const a = accessory || { published:true };
-    const modal = adminModal(accessory ? 'Sửa phụ kiện' : 'Thêm phụ kiện', `<form id="accessoryForm" class="admin-product-form"><div class="field"><label>Tên *</label><input name="name" required value="${escapeHTML(a.name || '')}"></div><div class="field"><label>Giá</label>${moneyField('price', a.price)}</div><div class="field"><label>Ảnh</label><input id="accessoryImageFile" type="file" accept="image/*"><input name="image_url" value="${escapeHTML(a.image_url || '')}"></div><div class="field"><label>Mô tả</label><textarea name="description">${escapeHTML(a.description || '')}</textarea></div><label><input name="published" type="checkbox" ${a.published !== 0 ? 'checked' : ''}> Hiển thị ngoài website</label><button class="btn btn-primary">Lưu</button></form>`);
+    const modal = adminModal(accessory ? 'Sửa phụ kiện' : 'Thêm phụ kiện', `<form id="accessoryForm" class="admin-product-form"><div class="field"><label>Tên *</label><input name="name" required value="${escapeHTML(a.name || '')}"></div><div class="field"><label>Giá</label><input name="price" type="number" value="${a.price ?? ''}"></div><div class="field"><label>Ảnh</label><input id="accessoryImageFile" type="file" accept="image/*"><input name="image_url" value="${escapeHTML(a.image_url || '')}"></div><div class="field"><label>Mô tả</label><textarea name="description">${escapeHTML(a.description || '')}</textarea></div><label><input name="published" type="checkbox" ${a.published !== 0 ? 'checked' : ''}> Hiển thị ngoài website</label><button class="btn btn-primary">Lưu</button></form>`);
     const form = $('#accessoryForm', modal);
-    bindMoneyInputs(modal);
     $('#accessoryImageFile', modal).onchange = async event => { try { form.image_url.value = await uploadFile(event.target.files[0]); } catch (error) { notify(error.message); } };
-    form.onsubmit = async event => { event.preventDefault(); const fd = new FormData(form); const body = Object.fromEntries(fd.entries()); body.price = moneyDigits(body.price); body.published = fd.get('published') === 'on'; try { await request(accessory ? `/api/admin/accessories/${a.id}` : '/api/admin/accessories', { method:accessory ? 'PUT' : 'POST', body }); notify('Đã lưu phụ kiện'); modal.remove(); document.body.classList.remove('modal-open'); loadAdminTab('accessories'); } catch (error) { notify(error.message); } };
+    form.onsubmit = async event => { event.preventDefault(); const fd = new FormData(form); const body = Object.fromEntries(fd.entries()); body.published = fd.get('published') === 'on'; try { await request(accessory ? `/api/admin/accessories/${a.id}` : '/api/admin/accessories', { method:accessory ? 'PUT' : 'POST', body }); notify('Đã lưu phụ kiện'); modal.remove(); document.body.classList.remove('modal-open'); loadAdminTab('accessories'); } catch (error) { notify(error.message); } };
   }
 
   function imageField(label, name, value) {
@@ -1194,7 +1133,6 @@
   }
   async function adminSite(main) {
     const data = await request('/api/admin/site'); const s = data.site;
-    let heroImages = storedImageList(s.hero_images, s.hero_image);
     main.innerHTML = `<div class="admin-page-head"><div><span>Giao diện website</span><h1 class="admin-title">Theme Studio</h1><p class="admin-sub">Chỉnh font, màu sắc, chữ và ảnh chính. Liên hệ, nút nổi, Pixel và AI được đặt ở các mục riêng để dễ quản lý.</p></div><div class="admin-page-badge">65+ font tiếng Việt</div></div>
     <form id="siteForm" class="admin-product-form admin-pro-form">
       <fieldset class="fieldset"><legend>Thương hiệu & Theme</legend><div class="form-three">
@@ -1203,21 +1141,9 @@
         <div class="field"><label>Font nội dung</label><select name="body_font">${fontOptions(s.body_font || 'Be Vietnam Pro')}</select></div><div class="field"><label>Font tiêu đề</label><select name="heading_font">${fontOptions(s.heading_font || 'Barlow Condensed')}</select></div>
         <div class="field"><label>Cỡ chữ nội dung <output id="bodySizeOut">${escapeHTML(s.body_font_size || 16)}px</output></label><input name="body_font_size" id="bodySize" type="range" min="14" max="20" step="1" value="${escapeHTML(s.body_font_size || 16)}"></div><div class="field"><label>Tỷ lệ tiêu đề <output id="headingScaleOut">${escapeHTML(s.heading_scale || 1)}x</output></label><input name="heading_scale" id="headingScale" type="range" min="0.85" max="1.35" step="0.05" value="${escapeHTML(s.heading_scale || 1)}"></div><div class="field"><label>Giãn dòng <output id="lineHeightOut">${escapeHTML(s.body_line_height || 1.55)}</output></label><input name="body_line_height" id="lineHeight" type="range" min="1.35" max="2" step="0.05" value="${escapeHTML(s.body_line_height || 1.55)}"></div><div class="field"><label>Bo góc <output id="radiusOut">${escapeHTML(s.corner_radius || 22)}px</output></label><input name="corner_radius" id="cornerRadius" type="range" min="8" max="32" step="1" value="${escapeHTML(s.corner_radius || 22)}"></div>
       </div><div class="theme-preview"><span class="theme-preview-kicker">XEM TRƯỚC THEME</span><h3 id="themePreviewTitle">Chọn xe ưng ý. Lên đường an tâm.</h3><p id="themePreviewText">Thay đổi màu, font và kích cỡ sẽ áp dụng khi bấm lưu.</p><button type="button" class="btn btn-primary">Nút hành động</button></div></fieldset>
-      <fieldset class="fieldset"><legend>Trang chủ & nội dung</legend><div class="field"><label>Tiêu đề Hero</label><textarea name="hero_title">${escapeHTML(s.hero_title || '')}</textarea></div><div class="field"><label>Mô tả Hero</label><textarea name="hero_subtitle">${escapeHTML(s.hero_subtitle || '')}</textarea></div><div class="field hero-images-manager"><label>Slider ảnh Hero (nhiều ảnh, tự chạy ngang)</label><p class="muted">Chữ Hero giữ nguyên. Chỉ ảnh tự chuyển. Có thể tải nhiều ảnh cùng lúc và dùng mũi tên để đổi thứ tự.</p><input id="heroImagesFile" type="file" accept="image/*" multiple><input name="hero_images" type="hidden" value="${escapeHTML(JSON.stringify(heroImages))}"><div id="heroImagesList" class="hero-images-list"></div></div>${imageField('Ảnh Hero dự phòng', 'hero_image', s.hero_image)}${imageField('Ảnh Showroom (riêng)', 'showroom_image', s.showroom_image)}${imageField('Ảnh Giao xe tận nơi (riêng)', 'delivery_image', s.delivery_image)}${imageField('Ảnh trang trả góp', 'installment_image', s.installment_image)}${imageField('Ảnh khuyến mại mặc định', 'promo_image', s.promo_image)}<div class="form-two"><div class="field"><label>Tiêu đề giao xe</label><input name="delivery_title" value="${escapeHTML(s.delivery_title || '')}"></div><div class="field"><label>Nội dung giao xe</label><textarea name="delivery_text">${escapeHTML(s.delivery_text || '')}</textarea></div></div></fieldset>
+      <fieldset class="fieldset"><legend>Trang chủ & nội dung</legend><div class="field"><label>Tiêu đề Hero</label><textarea name="hero_title">${escapeHTML(s.hero_title || '')}</textarea></div><div class="field"><label>Mô tả Hero</label><textarea name="hero_subtitle">${escapeHTML(s.hero_subtitle || '')}</textarea></div>${imageField('Ảnh Hero (riêng)', 'hero_image', s.hero_image)}${imageField('Ảnh Showroom (riêng)', 'showroom_image', s.showroom_image)}${imageField('Ảnh Giao xe tận nơi (riêng)', 'delivery_image', s.delivery_image)}${imageField('Ảnh trang trả góp', 'installment_image', s.installment_image)}${imageField('Ảnh khuyến mại mặc định', 'promo_image', s.promo_image)}<div class="form-two"><div class="field"><label>Tiêu đề giao xe</label><input name="delivery_title" value="${escapeHTML(s.delivery_title || '')}"></div><div class="field"><label>Nội dung giao xe</label><textarea name="delivery_text">${escapeHTML(s.delivery_text || '')}</textarea></div></div></fieldset>
       <fieldset class="fieldset"><legend>Trang trả góp</legend><div class="field"><label>Tiêu đề trả góp</label><textarea name="installment_title">${escapeHTML(s.installment_title || '')}</textarea></div><div class="field"><label>Nội dung trả góp</label><textarea name="installment_text">${escapeHTML(s.installment_text || '')}</textarea></div><div class="field"><label>Giấy tờ / thủ tục</label><textarea name="installment_docs">${escapeHTML(s.installment_docs || '')}</textarea></div><div class="field"><label>Mức trả trước gợi ý (mỗi dòng một lựa chọn)</label><textarea name="installment_down_payments">${escapeHTML(s.installment_down_payments || '')}</textarea></div><div class="field"><label>Các bước thủ tục (mỗi dòng: Tiêu đề | Mô tả)</label><textarea name="installment_steps">${escapeHTML(s.installment_steps || '')}</textarea></div><div class="field"><label>Câu hỏi thường gặp (mỗi dòng: Câu hỏi | Trả lời)</label><textarea name="installment_faqs">${escapeHTML(s.installment_faqs || '')}</textarea></div></fieldset>
       <button class="btn btn-primary">Lưu giao diện & nội dung</button></form>`;
-    const heroImagesHidden = $('[name="hero_images"]', main);
-    const renderHeroImages = () => {
-      if (heroImagesHidden) heroImagesHidden.value = JSON.stringify(heroImages);
-      $('#heroImagesList', main).innerHTML = heroImages.map((url,index) => `<div class="hero-image-admin-item"><img src="${escapeHTML(url)}" alt="Ảnh Hero ${index+1}"><span>Ảnh ${index+1}</span><div><button type="button" class="small-btn hero-image-move" data-index="${index}" data-direction="-1" ${index===0?'disabled':''}>←</button><button type="button" class="small-btn hero-image-move" data-index="${index}" data-direction="1" ${index===heroImages.length-1?'disabled':''}>→</button><button type="button" class="small-btn danger hero-image-delete" data-index="${index}">Xoá</button></div></div>`).join('') || '<p class="muted">Chưa có ảnh Slider. Website dùng ảnh Hero dự phòng.</p>';
-      $$('.hero-image-delete', main).forEach(button => button.onclick = () => {heroImages.splice(Number(button.dataset.index),1);renderHeroImages();});
-      $$('.hero-image-move', main).forEach(button => button.onclick = () => {const i=Number(button.dataset.index), next=i+Number(button.dataset.direction);if(next<0||next>=heroImages.length)return;[heroImages[i],heroImages[next]]=[heroImages[next],heroImages[i]];renderHeroImages();});
-    };
-    $('#heroImagesFile', main).onchange = async event => {
-      const files=Array.from(event.target.files||[]); if(!files.length)return;
-      try { for(const file of files) heroImages.push(await uploadFile(file)); if(!$('[name="hero_image"]',main).value&&heroImages[0])$('[name="hero_image"]',main).value=heroImages[0]; event.target.value='';renderHeroImages();notify(`Đã tải ${files.length} ảnh Hero.`); } catch(error){notify(error.message);}
-    };
-    renderHeroImages();
     $$('.site-image-file', main).forEach(input => input.onchange = async () => { try { const url = await uploadFile(input.files[0]); $(`[name="${input.dataset.field}"]`, main).value = url; notify('Đã tải ảnh'); } catch (error) { notify(error.message); } });
     $('#logoFile', main).onchange = async event => { try { const url = await uploadFile(event.target.files[0]); $('[name="logo_url"]', main).value = url; $('[name="favicon_url"]', main).value = url; notify('Đã tải logo'); } catch (error) { notify(error.message); } };
     $('#faviconFile', main).onchange = async event => { try { $('[name="favicon_url"]', main).value = await uploadFile(event.target.files[0]); notify('Đã tải favicon'); } catch (error) { notify(error.message); } };
@@ -1310,42 +1236,53 @@
 
   async function adminLeads(main) {
     const users = state.admin.role === 'admin' ? (await request('/api/admin/users')).users : [];
-    main.innerHTML = `<div class="admin-page-head"><div><span>Chăm sóc khách hàng</span><h1 class="admin-title">Form khách hàng</h1><p class="admin-sub">Lọc nhanh, phân công rõ ràng. Form đã hoàn tất chỉ còn đọc lại; không thể mở lại hay xoá bởi nhân viên.</p></div><div class="admin-page-badge">Quy trình an toàn</div></div><div class="admin-filter-card"><div class="filter-label"><b>Lọc form</b><span>Theo trạng thái, nhân viên và khoảng ngày.</span></div><div class="form-filter-grid"><select id="leadStatus"><option value="">Tất cả trạng thái</option><option value="new">Chưa xử lý</option><option value="in_progress">Đang xử lý</option><option value="done">Đã xong</option></select>${state.admin.role === 'admin' ? `<select id="leadAssigned"><option value="">Tất cả nhân viên</option>${users.filter(u=>u.role==='employee').map(u=>`<option value="${u.id}">${escapeHTML(u.full_name)}</option>`).join('')}</select>`:''}<input id="leadFrom" type="date" aria-label="Từ ngày"><input id="leadTo" type="date" aria-label="Đến ngày"></div></div><div id="leadRows" class="admin-card admin-card-spacious"></div>`;
-    async function load(){
-      const qs=new URLSearchParams();if($('#leadStatus').value)qs.set('status',$('#leadStatus').value);if($('#leadFrom').value)qs.set('from',$('#leadFrom').value);if($('#leadTo').value)qs.set('to',$('#leadTo').value);if($('#leadAssigned')?.value)qs.set('assigned_to',$('#leadAssigned').value);
-      const data=await request(`/api/admin/leads?${qs}`);
-      $('#leadRows').innerHTML=`<div class="admin-table-wrap"><table class="admin-table lead-table"><thead><tr><th>Khách</th><th>Nội dung</th><th>Ngày</th><th>Nhân viên</th><th>Trạng thái</th><th></th></tr></thead><tbody>${data.leads.map(lead=>{const done=lead.status==='done';return `<tr class="${done?'is-complete':''}"><td><b>${escapeHTML(lead.name)}</b><br><a href="tel:${escapeHTML(lead.phone)}">${escapeHTML(lead.phone)}</a></td><td><b>${escapeHTML(lead.type)}</b><br><span class="lead-payment">${escapeHTML(paymentPlanLabel(lead.payment_plan))}${lead.down_payment?` • ${escapeHTML(lead.down_payment)}`:''}</span>${lead.note?`<br><span class="muted">${escapeHTML(lead.note)}</span>`:''}</td><td>${escapeHTML(vietnamTime(lead.created_at))}</td><td>${done?escapeHTML(lead.assigned_name||'—'):(state.admin.role==='admin'?`<select class="lead-assignee" data-id="${lead.id}"><option value="">Chưa gán</option>${users.filter(u=>u.role==='employee').map(u=>`<option value="${u.id}" ${lead.assigned_to===u.id?'selected':''}>${escapeHTML(u.full_name)}</option>`).join('')}</select>`:escapeHTML(lead.assigned_name||state.admin.name||''))}</td><td>${done?'<span class="complete-badge">✓ Đã xong</span>':`<select class="lead-state" data-id="${lead.id}" data-current="${lead.status}"><option value="new" ${lead.status==='new'?'selected':''}>Chưa xử lý</option><option value="in_progress" ${lead.status==='in_progress'?'selected':''}>Đang xử lý</option><option value="done">✓ Đánh dấu đã xong</option></select>`}</td><td>${state.admin.role==='admin'&&!done?`<button class="small-btn danger delete-lead" data-id="${lead.id}">Xoá</button>`:''}</td></tr>`;}).join('')||'<tr><td colspan="6" class="admin-empty">Chưa có form phù hợp.</td></tr>'}</tbody></table></div>`;
-      $$('.lead-state').forEach(select=>select.onchange=async()=>{const row=select.closest('tr');const was=select.dataset.current;if(select.value==='done'&&!confirm('Đánh dấu form này đã xong? Sau khi xác nhận, form sẽ chỉ còn xem lại và không thể mở lại.')){select.value=was;return;}const payload={status:select.value};if(state.admin.role==='admin')payload.assigned_to=$('.lead-assignee',row)?.value||null;try{await request(`/api/admin/leads/${select.dataset.id}`,{method:'PUT',body:payload});notify(select.value==='done'?'Đã hoàn tất form.':'Đã cập nhật form.');load();}catch(error){notify(error.message);}});
-      $$('.lead-assignee').forEach(select=>select.onchange=async()=>{try{await request(`/api/admin/leads/${select.dataset.id}`,{method:'PUT',body:{status:'in_progress',assigned_to:select.value||null}});notify('Đã gán nhân viên.');}catch(error){notify(error.message);}});
-      $$('.delete-lead').forEach(button=>button.onclick=async()=>{if(!confirm('Xoá form này? Hành động không thể hoàn tác.'))return;try{await request(`/api/admin/leads/${button.dataset.id}`,{method:'DELETE'});load();}catch(error){notify(error.message);}});
+    main.innerHTML = `<div class="admin-toolbar"><div><h1 class="admin-title">Form khách hàng</h1><p class="admin-sub">Tích xử lý xong, lọc theo ngày; admin được xoá và gán nhân viên.</p></div><div class="form-three"><select id="leadStatus"><option value="">Tất cả trạng thái</option><option value="new">Chưa xử lý</option><option value="in_progress">Đang xử lý</option><option value="done">Đã xong</option></select>${state.admin.role === 'admin' ? `<select id="leadAssigned"><option value="">Tất cả nhân viên</option>${users.filter(u => u.role === 'employee').map(u => `<option value="${u.id}">${escapeHTML(u.full_name)}</option>`).join('')}</select>` : ''}<input id="leadFrom" type="date"><input id="leadTo" type="date"></div></div><div id="leadRows" class="admin-card"></div>`;
+    async function load() {
+      const qs = new URLSearchParams(); if ($('#leadStatus').value) qs.set('status', $('#leadStatus').value); if ($('#leadFrom').value) qs.set('from', $('#leadFrom').value); if ($('#leadTo').value) qs.set('to', $('#leadTo').value);
+      const data = await request(`/api/admin/leads?${qs}`);
+      $('#leadRows').innerHTML = `<div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Khách</th><th>Nội dung</th><th>Ngày</th><th>Nhân viên</th><th>Trạng thái</th><th></th></tr></thead><tbody>${data.leads.map(lead => `<tr><td><b>${escapeHTML(lead.name)}</b><br><a href="tel:${escapeHTML(lead.phone)}">${escapeHTML(lead.phone)}</a></td><td><b>${escapeHTML(lead.type)}</b><br><span class="lead-payment">${escapeHTML(paymentPlanLabel(lead.payment_plan))}${lead.down_payment ? ` • ${escapeHTML(lead.down_payment)}` : ''}</span>${lead.note ? `<br><span class="muted">${escapeHTML(lead.note)}</span>` : ''}</td><td>${escapeHTML(vietnamTime(lead.created_at))}</td><td>${state.admin.role === 'admin' ? `<select class="lead-assignee" data-id="${lead.id}"><option value="">Chưa gán</option>${users.filter(u => u.role === 'employee').map(u => `<option value="${u.id}" ${lead.assigned_to === u.id ? 'selected' : ''}>${escapeHTML(u.full_name)}</option>`).join('')}</select>` : escapeHTML(lead.assigned_name || '')}</td><td><div class="status-editor"><select class="lead-state" data-id="${lead.id}"><option value="new" ${lead.status === 'new' ? 'selected' : ''}>Chưa xử lý</option><option value="in_progress" ${lead.status === 'in_progress' ? 'selected' : ''}>Đang xử lý</option><option value="done" ${lead.status === 'done' ? 'selected' : ''}>✓ Đã xong</option></select>${lead.status === 'done' ? `<button class="small-btn reopen-lead" data-id="${lead.id}">↻ Mở lại</button>` : ''}</div></td><td>${state.admin.role === 'admin' ? `<button class="small-btn danger delete-lead" data-id="${lead.id}">Xoá</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="admin-empty">Chưa có form phù hợp.</td></tr>'}</tbody></table></div>`;
+      $$('.lead-state').forEach(select => select.onchange = async () => { const row = select.closest('tr'); const payload = { status:select.value }; if (state.admin.role === 'admin') payload.assigned_to = $('.lead-assignee', row)?.value || null; try { await request(`/api/admin/leads/${select.dataset.id}`, { method:'PUT', body:payload }); notify('Đã cập nhật'); } catch (error) { notify(error.message); } });
+      $$('.lead-assignee').forEach(select => select.onchange = async () => { const row = select.closest('tr'); const status = $('.lead-state', row).value; try { await request(`/api/admin/leads/${select.dataset.id}`, { method:'PUT', body:{ status, assigned_to:select.value || null } }); notify('Đã gán nhân viên'); } catch (error) { notify(error.message); } });
+      $$('.reopen-lead').forEach(button => button.onclick = async () => { try { await request(`/api/admin/leads/${button.dataset.id}`, { method:'PUT', body:{ status:'in_progress' } }); notify('Đã mở lại form để xử lý'); load(); } catch (error) { notify(error.message); } });
+      $$('.delete-lead').forEach(button => button.onclick = async () => { if (!confirm('Xoá form này?')) return; try { await request(`/api/admin/leads/${button.dataset.id}`, { method:'DELETE' }); load(); } catch (error) { notify(error.message); } });
     }
-    ['leadStatus','leadAssigned','leadFrom','leadTo'].forEach(id=>{const el=$(`#${id}`);if(el)el.onchange=load;});await load();
+    ['leadStatus','leadAssigned','leadFrom','leadTo'].forEach(id => $(`#${id}`) && ($(`#${id}`).onchange = load)); await load();
   }
 
   async function adminChats(main) {
     const users = state.admin.role === 'admin' ? (await request('/api/admin/users')).users : [];
-    main.innerHTML = `<div class="admin-page-head"><div><span>Chăm sóc khách hàng</span><h1 class="admin-title">Chat trực tuyến</h1><p class="admin-sub">Tin nhắn cuộn riêng như Messenger. Hội thoại hoàn tất chỉ còn đọc lại, không gửi thêm tin.</p></div><button id="chatSound" class="small-btn">Bật chuông chat</button></div><div class="admin-filter-card"><div class="filter-label"><b>Lọc hội thoại</b><span>Chọn trạng thái, nhân viên hoặc khoảng ngày.</span></div><div class="form-filter-grid"><select id="chatStatus"><option value="">Tất cả</option><option value="open">Đang mở</option><option value="done">Đã xong</option></select>${state.admin.role==='admin'?`<select id="chatAssigned"><option value="">Tất cả nhân viên</option>${users.filter(u=>u.role==='employee').map(u=>`<option value="${u.id}">${escapeHTML(u.full_name)}</option>`).join('')}</select>`:''}<input id="chatFrom" type="date"><input id="chatTo" type="date"></div></div><div class="admin-chat"><div id="conversationList" class="chat-list-admin"></div><div id="conversationThread" class="chat-admin-thread"><div class="admin-empty">Chọn hội thoại để đọc hoặc trả lời.</div></div></div>`;
-    let selected=null, soundOn=false;
-    $('#chatSound').onclick=()=>{soundOn=true;notify('Đã bật chuông chat cho tab này.');};
-    const beep=()=>{if(!soundOn)return;try{const a=new AudioContext(),o=a.createOscillator(),g=a.createGain();o.connect(g);g.connect(a.destination);o.frequency.value=760;g.gain.value=.08;o.start();o.stop(a.currentTime+.12);}catch{}};
-    const openThread=async id=>{
-      selected=id; const data=await request(`/api/admin/conversations/${id}`); const conv=data.conversation; const done=conv.status==='done';
-      $('#conversationThread').innerHTML=`<div class="chat-thread-head"><div><b>${escapeHTML(conv.visitor_name||'Khách')}</b><span>${done?'Đã hoàn tất — chỉ xem lại':escapeHTML(conv.assigned_name||'Chưa gán nhân viên')}</span></div>${done?'<span class="complete-badge">✓ Đã xong</span>':''}</div><div class="chat-body chat-body-admin">${data.messages.map(m=>`<div class="chat-msg ${escapeHTML(m.sender_type)}"><small>${escapeHTML(m.sender_type==='visitor'?'Khách':(m.sender_name||'Tâm An'))}</small>${chatText(m.body)}</div>`).join('')}</div><div class="chat-admin-actions">${done?'<div class="conversation-locked">✓ Hội thoại đã hoàn tất. Chỉ xem lại, không thể nhắn hoặc đổi trạng thái.</div>':`<div class="form-two"><div class="field"><label>Nhân viên phụ trách</label>${state.admin.role==='admin'?`<select id="conversationAssignee"><option value="">Chưa gán</option>${users.filter(u=>u.role==='employee').map(u=>`<option value="${u.id}" ${conv.assigned_to===u.id?'selected':''}>${escapeHTML(u.full_name)}</option>`).join('')}</select>`:`<input value="${escapeHTML(conv.assigned_name||state.admin.name)}" disabled>`}</div><div class="field action-field"><label>Hoàn tất</label><button id="completeConversation" class="small-btn complete-action">✓ Đánh dấu đã xong</button></div></div><form id="replyForm" class="chat-form admin-reply-form"><input name="body" placeholder="Trả lời với tên ${escapeHTML(state.admin.name)}…"><button>Gửi</button></form>`}${state.admin.role==='admin'?'<button id="deleteConversation" class="small-btn danger" style="margin-top:10px">Xoá hội thoại</button>':''}</div>`;
-      const threadBody=$('.chat-body-admin',$('#conversationThread')); threadBody.scrollTop=threadBody.scrollHeight;
-      $('#conversationAssignee')?.addEventListener('change',async()=>{try{await request(`/api/admin/conversations/${id}`,{method:'PUT',body:{status:'open',assigned_to:$('#conversationAssignee').value||null}});notify('Đã gán nhân viên.');refresh(true);}catch(error){notify(error.message);}});
-      $('#completeConversation')?.addEventListener('click',async()=>{if(!confirm('Đánh dấu hội thoại đã xong? Sau khi xác nhận chỉ có thể xem lại, không thể mở lại hoặc nhắn thêm.'))return;try{await request(`/api/admin/conversations/${id}`,{method:'PUT',body:{status:'done'}});notify('Đã hoàn tất hội thoại.');openThread(id);refresh(true);}catch(error){notify(error.message);}});
-      $('#replyForm')?.addEventListener('submit',async event=>{event.preventDefault();const input=$('input',event.target);const body=input.value.trim();if(!body)return;try{await request(`/api/admin/conversations/${id}/messages`,{method:'POST',body:{body}});input.value='';openThread(id);refresh(true);}catch(error){notify(error.message);}});
-      $('#deleteConversation')?.addEventListener('click',async()=>{if(!confirm('Xoá toàn bộ hội thoại? Hành động không thể hoàn tác.'))return;try{await request(`/api/admin/conversations/${id}`,{method:'DELETE'});selected=null;$('#conversationThread').innerHTML='<div class="admin-empty">Đã xoá hội thoại.</div>';refresh(true);}catch(error){notify(error.message);}});
-    };
-    async function refresh(silent=false){
-      const qs=new URLSearchParams();if($('#chatStatus').value)qs.set('status',$('#chatStatus').value);if($('#chatFrom').value)qs.set('from',$('#chatFrom').value);if($('#chatTo').value)qs.set('to',$('#chatTo').value);if($('#chatAssigned')?.value)qs.set('assigned_to',$('#chatAssigned').value);
-      const data=await request(`/api/admin/conversations?${qs}`);const previous=$('#conversationList').dataset.ids||'';const now=data.conversations.map(c=>`${c.id}:${c.updated_at}`).join(',');if(previous&&previous!==now&&!silent)beep();$('#conversationList').dataset.ids=now;
-      $('#conversationList').innerHTML=data.conversations.map(c=>`<div class="chat-list-item ${selected===c.id?'active':''} ${c.status==='done'?'is-complete':''}" data-id="${c.id}"><b>${escapeHTML(c.visitor_name||'Khách')}${c.status==='done'?' <span class="one-tick">✓</span>':''}</b><span>${escapeHTML(c.assigned_name||'Chưa gán')} • ${escapeHTML(c.last_message||'')}</span></div>`).join('')||'<div class="admin-empty">Chưa có hội thoại.</div>';
-      $$('.chat-list-item').forEach(item=>item.onclick=()=>openThread(Number(item.dataset.id)));
+    main.innerHTML = `<div class="admin-toolbar"><div><h1 class="admin-title">Chat trực tuyến</h1><p class="admin-sub">Khách thấy tên nhân viên trả lời. Nhân viên nhận chat là AI tự nhường.</p></div><button id="chatSound" class="small-btn">Bật chuông chat</button></div><div class="admin-toolbar"><div class="form-three"><select id="chatStatus"><option value="">Tất cả</option><option value="open">Đang mở</option><option value="done">Đã xong</option></select>${state.admin.role === 'admin' ? `<select id="chatAssigned"><option value="">Tất cả nhân viên</option>${users.filter(u => u.role === 'employee').map(u => `<option value="${u.id}">${escapeHTML(u.full_name)}</option>`).join('')}</select>` : ''}<input id="chatFrom" type="date"><input id="chatTo" type="date"></div></div><div class="admin-chat"><div id="conversationList" class="chat-list-admin"></div><div id="conversationThread" class="chat-admin-thread"><div class="admin-empty">Chọn hội thoại để trả lời.</div></div></div>`;
+    let selected = null; let soundOn = false;
+    $('#chatSound').onclick = () => { soundOn = true; notify('Đã bật chuông chat cho tab này.'); };
+    const beep = () => { if (!soundOn) return; try { const context = new AudioContext(); const osc = context.createOscillator(); const gain = context.createGain(); osc.connect(gain); gain.connect(context.destination); gain.gain.value = .08; osc.frequency.value = 720; osc.start(); osc.stop(context.currentTime + .12); } catch {} };
+    async function openThread(id) {
+      selected = id; const data = await request(`/api/admin/conversations/${id}`); const conv = data.conversation;
+      $('#conversationThread').innerHTML = `<div class="chat-body">${data.messages.map(m => `<div class="chat-msg ${escapeHTML(m.sender_type)}"><small>${escapeHTML(m.sender_type === 'visitor' ? 'Khách' : (m.sender_name || 'Tâm An'))}</small>${escapeHTML(m.body)}</div>`).join('')}</div><div style="padding:12px;border-top:1px solid var(--line)"><div class="form-two"><select id="conversationState"><option value="open" ${conv.status === 'open' ? 'selected' : ''}>Đang mở</option><option value="done" ${conv.status === 'done' ? 'selected' : ''}>Đã xong</option></select>${state.admin.role === 'admin' ? `<select id="conversationAssignee"><option value="">Chưa gán</option>${users.filter(u => u.role === 'employee').map(u => `<option value="${u.id}" ${conv.assigned_to === u.id ? 'selected' : ''}>${escapeHTML(u.full_name)}</option>`).join('')}</select>` : `<input value="${escapeHTML(conv.assigned_name || state.admin.name)}" disabled>`}</div><form id="replyForm" class="chat-form" style="margin-top:8px"><input name="body" placeholder="Trả lời với tên ${escapeHTML(state.admin.name)}…"><button>Gửi</button></form>${state.admin.role === 'admin' ? '<button id="deleteConversation" class="small-btn danger" style="margin-top:8px">Xoá hội thoại</button>' : ''}</div>`;
+      $('.chat-body', $('#conversationThread')).scrollTop = 999999;
+      $('#conversationState').onchange = async () => { try { const payload = { status:$('#conversationState').value }; if (state.admin.role === 'admin') payload.assigned_to = $('#conversationAssignee')?.value || null; await request(`/api/admin/conversations/${id}`, { method:'PUT', body:payload }); refresh(true); } catch (error) { notify(error.message); } };
+      $('#conversationAssignee')?.addEventListener('change', async () => { try { await request(`/api/admin/conversations/${id}`, { method:'PUT', body:{ status:$('#conversationState').value, assigned_to:$('#conversationAssignee').value || null } }); refresh(true); } catch (error) { notify(error.message); } });
+      $('#replyForm').onsubmit = async event => { event.preventDefault(); const input = $('input', event.target); const body = input.value.trim(); if (!body) return; try { await request(`/api/admin/conversations/${id}/messages`, { method:'POST', body:{ body } }); input.value = ''; openThread(id); refresh(true); } catch (error) { notify(error.message); } };
+      $('#deleteConversation')?.addEventListener('click', async () => { if (!confirm('Xoá toàn bộ hội thoại?')) return; try { await request(`/api/admin/conversations/${id}`, { method:'DELETE' }); selected = null; $('#conversationThread').innerHTML = '<div class="admin-empty">Đã xoá hội thoại.</div>'; refresh(true); } catch (error) { notify(error.message); } });
     }
-    ['chatStatus','chatAssigned','chatFrom','chatTo'].forEach(id=>{const el=$(`#${id}`);if(el)el.onchange=()=>refresh();});await refresh();
+    async function refresh(silent = false) {
+      const qs = new URLSearchParams(); if ($('#chatStatus').value) qs.set('status', $('#chatStatus').value); if ($('#chatFrom').value) qs.set('from', $('#chatFrom').value); if ($('#chatTo').value) qs.set('to', $('#chatTo').value); if ($('#chatAssigned')?.value) qs.set('assigned_to', $('#chatAssigned').value);
+      const data = await request(`/api/admin/conversations?${qs}`);
+      const previous = $('#conversationList').dataset.ids || ''; const now = data.conversations.map(c => `${c.id}:${c.updated_at}`).join(','); if (previous && previous !== now && !silent) beep(); $('#conversationList').dataset.ids = now;
+      $('#conversationList').innerHTML = data.conversations.map(c => `<div class="chat-list-item ${selected === c.id ? 'active' : ''}" data-id="${c.id}"><b>${escapeHTML(c.visitor_name || 'Khách')} ${c.status === 'done' ? '✓' : ''}</b><span>${escapeHTML(c.assigned_name || 'Chưa gán')} • ${escapeHTML(c.last_message || '')}</span></div>`).join('') || '<div class="admin-empty">Chưa có hội thoại.</div>';
+      $$('.chat-list-item').forEach(item => item.onclick = () => openThread(Number(item.dataset.id)));
+    }
+    ['chatStatus','chatAssigned','chatFrom','chatTo'].forEach(id => $(`#${id}`) && ($(`#${id}`).onchange = () => refresh()));
+    await refresh(); clearInterval(window.__tamAnAdminChatTimer); window.__tamAnAdminChatTimer = setInterval(() => refresh(true).catch(() => {}), 9000);
   }
 
+  async function adminUsers(main) {
+    const data = await request('/api/admin/users');
+    main.innerHTML = `<div class="admin-toolbar"><div><h1 class="admin-title">Nhân viên</h1><p class="admin-sub">Tài khoản nhân viên không có quyền xoá hoặc sửa website.</p></div><button id="addUser" class="btn btn-primary">+ Thêm nhân viên</button></div><div class="admin-card"><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Họ tên</th><th>Tài khoản</th><th>Vai trò</th><th>Trạng thái</th></tr></thead><tbody>${data.users.map(u => `<tr><td><b>${escapeHTML(u.full_name)}</b></td><td>${escapeHTML(u.username)}</td><td>${u.role === 'admin' ? 'Chủ cửa hàng' : 'Nhân viên'}</td><td>${u.active ? 'Đang hoạt động' : 'Đã khoá'}</td></tr>`).join('')}</tbody></table></div></div>`;
+    $('#addUser').onclick = () => {
+      const modal = adminModal('Thêm nhân viên', `<form id="userForm" class="admin-product-form"><div class="field"><label>Họ và tên</label><input name="full_name" required></div><div class="field"><label>Tên đăng nhập</label><input name="username" required></div><div class="field"><label>Mật khẩu ban đầu</label><input name="password" type="password" required></div><button class="btn btn-primary">Tạo tài khoản</button></form>`);
+      $('#userForm', modal).onsubmit = async event => { event.preventDefault(); try { await request('/api/admin/users', { method:'POST', body:Object.fromEntries(new FormData(event.target).entries()) }); notify('Đã tạo tài khoản nhân viên'); modal.remove(); document.body.classList.remove('modal-open'); loadAdminTab('users'); } catch (error) { notify(error.message); } };
+    };
+  }
   async function adminAnalytics(main) {
     const data = await request('/api/admin/analytics');
     main.innerHTML = `<h1 class="admin-title">Lượt truy cập</h1><p class="admin-sub">Số liệu nội bộ 30 ngày gần nhất. Pixel Facebook/TikTok được cấu hình trong Nội dung website.</p><div class="admin-grid"><div class="metric"><b>${data.total}</b><span>Lượt xem trang / 30 ngày</span></div></div><div class="admin-card"><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Ngày</th><th>Lượt xem</th><th>Khách gần đúng</th></tr></thead><tbody>${data.days.map(day => `<tr><td>${escapeHTML(day.day)}</td><td>${day.visits}</td><td>${day.visitors}</td></tr>`).join('') || '<tr><td colspan="3" class="admin-empty">Chưa có dữ liệu.</td></tr>'}</tbody></table></div></div>`;
