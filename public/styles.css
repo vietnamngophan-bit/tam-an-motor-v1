@@ -386,3 +386,73 @@ body:has(.site-header) [id="showroom"] {
   .notice-close { width:28px; height:28px; border-radius:10px; }
 }
 @media (prefers-reduced-motion: reduce) { .notice-ticker, .notice-orbit { animation:none; } .notice-copy p { transition:none; } }
+
+/* ==================================================================
+   STABILITY PATCH — overlays, chat close, notification lifecycle
+   Keeps controls usable above fixed headers and contact dock on every screen.
+   ================================================================== */
+body.modal-open { overflow: hidden !important; }
+.modal { z-index: 3000 !important; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)) !important; }
+.modal-card { isolation: isolate; overscroll-behavior: contain; }
+.modal-close {
+  z-index: 30 !important;
+  cursor: pointer !important;
+  touch-action: manipulation;
+  display: grid !important;
+  place-items: center;
+  color: #321416;
+  font-weight: 900;
+}
+.modal-close:hover { background: #fff0f1 !important; color: var(--red) !important; }
+.modal-open .floating,
+.modal-open .chat-launch,
+.modal-open .notice-ticker {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+.lightbox { z-index: 3100 !important; }
+
+/* Chat panel always sits above the fixed header and its name screen never covers X. */
+.chat-panel { z-index: 2600 !important; position: fixed !important; isolation: isolate; }
+.chat-head { position: relative; z-index: 8; }
+#chatClose {
+  position: relative;
+  z-index: 12;
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  border: 0;
+  color: #2d1517;
+  background: #fff;
+  cursor: pointer;
+  touch-action: manipulation;
+  font-size: 23px;
+  line-height: 1;
+  box-shadow: 0 5px 16px rgba(0,0,0,.16);
+}
+#chatClose:active { transform: scale(.94); }
+.chat-name { top: 70px !important; z-index: 5 !important; border-radius: 0 0 20px 20px; }
+
+.notice-ticker { transition: opacity .42s ease, transform .42s ease !important; }
+.notice-ticker.is-fading { opacity: 0; transform: translateY(12px); pointer-events: none; }
+.notice-ticker.notice-right { left: auto !important; right: max(18px, env(safe-area-inset-right)); }
+.notice-ticker.notice-center { right: auto !important; }
+
+@media (max-width: 720px) {
+  .modal { align-items: flex-start !important; overflow-y: auto !important; }
+  .modal-card { width: 100% !important; max-height: calc(100dvh - 24px) !important; margin: 0 !important; border-radius: 22px !important; }
+  .modal-close { position: sticky !important; top: 10px !important; margin-left: auto; right: 10px !important; }
+  .chat-panel {
+    top: calc(var(--ta-fixed-header-height, 96px) + 10px) !important;
+    right: 12px !important;
+    bottom: max(12px, env(safe-area-inset-bottom)) !important;
+    width: calc(100vw - 24px) !important;
+    height: auto !important;
+    max-height: none !important;
+    border-radius: 20px !important;
+  }
+  .chat-name { top: 72px !important; }
+  .notice-ticker.notice-right { left: 12px !important; right: auto !important; }
+  .notice-ticker.notice-center { left: 50% !important; }
+}
+.notice-ticker.notice-center.is-fading { transform: translate(-50%, 12px); }
