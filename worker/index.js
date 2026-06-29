@@ -12,7 +12,6 @@ const DEFAULT_SITE = {
   hero_title: 'Chọn xe ưng ý.\nLên đường an tâm.',
   hero_subtitle: 'Xe máy mới, xe máy cũ và xe điện tuyển chọn. Hỗ trợ trả góp minh bạch, tư vấn nhanh tại Hải Phòng.',
   hero_image: '/assets/tam-an-promo.jpg',
-  hero_images: '[]',
   showroom_image: '/assets/showroom.jpg',
   logo_url: '/assets/logo.jpg',
   favicon_url: '/assets/logo.jpg',
@@ -97,27 +96,9 @@ function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers } });
 }
 function text(data, status = 200) { return new Response(data, { status, headers: { 'content-type': 'text/plain; charset=utf-8' } }); }
-function asNumber(v) { if (v===null || v===undefined || v==='') return null; const cleaned = typeof v === 'string' ? v.replace(/[^0-9.-]/g, '') : v; const n = Number(cleaned); return Number.isFinite(n) ? n : null; }
+function asNumber(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
 function parseJSON(v, fallback) { try { return v ? JSON.parse(v) : fallback; } catch { return fallback; } }
 function safeStr(v, max = 10000) { return String(v ?? '').trim().slice(0, max); }
-function sanitizeRichHtml(value, max = 12000) {
-  const source = String(value ?? '').slice(0, max).replace(/<!--[\s\S]*?-->/g, '');
-  const allowed = new Set(['p','br','strong','b','em','i','u','ul','ol','li','div','span','font','h2','h3','h4','blockquote']);
-  const cleanStyle = raw => String(raw || '').split(';').map(part => part.trim()).filter(part => /^(color|font-family|font-size|font-weight|font-style|text-decoration|text-align)\s*:/i.test(part) && !/(expression|url\s*\(|javascript:)/i.test(part)).join('; ');
-  return source.replace(/<\/?([a-z0-9]+)([^>]*)>/gi, (full, rawTag, attrs) => {
-    const tag = rawTag.toLowerCase();
-    if (!allowed.has(tag)) return '';
-    if (full.startsWith('</')) return `</${tag}>`;
-    const styleMatch = String(attrs || '').match(/\sstyle\s*=\s*(["'])([\s\S]*?)\1/i);
-    const faceMatch = String(attrs || '').match(/\sface\s*=\s*(["'])([^"']{0,80})\1/i);
-    const colorMatch = String(attrs || '').match(/\scolor\s*=\s*(["'])([^"']{0,30})\1/i);
-    const sizeMatch = String(attrs || '').match(/\ssize\s*=\s*(["']?)([1-7])\1/i);
-    const style = cleanStyle(styleMatch?.[2]);
-    const attrsOut = [style ? `style="${escapeHtml(style)}"` : '', faceMatch ? `face="${escapeHtml(faceMatch[2])}"` : '', colorMatch ? `color="${escapeHtml(colorMatch[2])}"` : '', sizeMatch ? `size="${sizeMatch[2]}"` : ''].filter(Boolean).join(' ');
-    return `<${tag}${attrsOut ? ' ' + attrsOut : ''}>`;
-  });
-}
-function stripHtml(value) { return String(value || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/?(p|div|li|h[2-4]|blockquote)[^>]*>/gi, '\n').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim(); }
 
 // D1 stores CURRENT_TIMESTAMP as UTC. Vietnam day boundaries use GMT+7.
 function vnDateKey(date = new Date()) {
@@ -207,10 +188,17 @@ async function productPayload(req) {
   const name = safeStr(b.name,160); if (!name) throw new Error('Tên xe là bắt buộc.');
   const category = CATEGORIES.some(([id])=>id===b.category) ? b.category : 'motor_new';
   const images = Array.isArray(b.images) ? b.images.filter(x=>typeof x==='string' && x).slice(0,30) : [];
-  const normalizeColor = c => ({ name:safeStr(c?.name,60), hex:safeStr(c?.hex,20)||'#d71920', images:Array.isArray(c?.images)?c.images.filter(x=>typeof x==='string'&&x).slice(0,12):[] });
+  const validHex = value => /^#[0-9a-fA-F]{6}$/.test(String(value || '').trim()) ? String(value).trim() : '';
+  const normalizeColor = c => {
+    const raw = Array.isArray(c?.swatches) ? c.swatches : [];
+    const swatches = raw.map(validHex).filter(Boolean).slice(0, 3);
+    const fallback = validHex(c?.hex) || '#d71920';
+    if (!swatches.length) swatches.push(fallback);
+    return { name:safeStr(c?.name,60), hex:swatches[0], swatches, images:Array.isArray(c?.images)?c.images.filter(x=>typeof x==='string'&&x).slice(0,12):[] };
+  };
   const colors = Array.isArray(b.colors) ? b.colors.slice(0,20).map(normalizeColor).filter(c=>c.name) : [];
   const versions = Array.isArray(b.versions) ? b.versions.slice(0,20).map(v=>({ name:safeStr(v?.name,80), description:safeStr(v?.description,500), price:asNumber(v?.price), old_price:asNumber(v?.old_price), colors:Array.isArray(v?.colors)?v.colors.slice(0,20).map(normalizeColor).filter(c=>c.name):[] })).filter(v=>v.name) : [];
-  return { name, slug:slugify(b.slug || name), brand:safeStr(b.brand,80), category, status:['in_stock','incoming','reserved','sold'].includes(b.status)?b.status:'in_stock', price:asNumber(b.price), old_price:asNumber(b.old_price), year:asNumber(b.year), mileage:asNumber(b.mileage), engine:safeStr(b.engine,60), documents:safeStr(b.documents,300), description:sanitizeRichHtml(b.description,12000), installment_from:asNumber(b.installment_from), bad_debt_from:asNumber(b.bad_debt_from), images, colors, versions, featured:b.featured?1:0, published:b.published===false?0:1, sort_order:asNumber(b.sort_order)||0 };
+  return { name, slug:slugify(b.slug || name), brand:safeStr(b.brand,80), category, status:['in_stock','incoming','reserved','sold'].includes(b.status)?b.status:'in_stock', price:asNumber(b.price), old_price:asNumber(b.old_price), year:asNumber(b.year), mileage:asNumber(b.mileage), engine:safeStr(b.engine,60), documents:safeStr(b.documents,300), description:safeStr(b.description,30000), installment_from:asNumber(b.installment_from), bad_debt_from:asNumber(b.bad_debt_from), images, colors, versions, featured:b.featured?1:0, published:b.published===false?0:1, sort_order:asNumber(b.sort_order)||0 };
 }
 async function sendLeadEmail(env, site, lead) {
   if (!env.RESEND_API_KEY || !env.NOTIFY_EMAIL) return;
@@ -285,7 +273,7 @@ async function publicApi(req, env, url) {
   if (url.pathname === '/api/chat/messages' && req.method==='POST') {
     const b=await req.json(); const visitorKey=safeStr(b.visitor_key,80), body=safeStr(b.body,2000); if(!visitorKey||!body)return json({ok:false,error:'Tin nhắn trống.'},400);
     let conv=await env.DB.prepare('SELECT * FROM conversations WHERE visitor_key=?').bind(visitorKey).first(); if(!conv)return json({ok:false,error:'Hãy bắt đầu cuộc trò chuyện trước.'},400);
-    if(conv.status==='done') return json({ok:false,error:'Hội thoại đã hoàn tất; vui lòng gửi form tư vấn mới hoặc gọi hotline để được hỗ trợ.'},409);
+    if(conv.status==='done'){await env.DB.prepare("UPDATE conversations SET status='open',updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(conv.id).run();conv.status='open';}
     await env.DB.prepare('INSERT INTO chat_messages(conversation_id,sender_type,sender_name,body) VALUES (?,?,?,?)').bind(conv.id,'visitor',conv.visitor_name||'Khách',body).run();
     await env.DB.prepare('UPDATE conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(conv.id).run();
     const site=await getSite(env);
@@ -334,6 +322,7 @@ function cleanAiColor(c) {
   return {
     name: safeStr(c?.name, 60),
     hex: safeStr(c?.hex, 20),
+    swatches: Array.isArray(c?.swatches) ? c.swatches.slice(0,3).map(x=>safeStr(x,20)) : [safeStr(c?.hex,20)],
     images: Array.isArray(c?.images) ? c.images.length : 0,
   };
 }
@@ -357,7 +346,7 @@ function productAiRecord(row) {
     year: product.year,
     mileage: product.mileage,
     engine: product.engine || '',
-    description: stripHtml(product.description).slice(0, 700),
+    description: safeStr(product.description, 700),
     installment_from: product.installment_from,
     bad_debt_from: product.bad_debt_from,
     colors: (product.colors || []).map(cleanAiColor).filter(c => c.name),
@@ -372,7 +361,7 @@ function aiCategoryLabel(category) {
 }
 function aiProductSearchText(p) {
   return [
-    p.name, p.brand, aiCategoryLabel(p.category), p.engine, stripHtml(p.description),
+    p.name, p.brand, aiCategoryLabel(p.category), p.engine, p.description,
     ...(p.colors || []).map(c => c.name),
     ...(p.versions || []).flatMap(v => [v.name, v.description, ...(v.colors || []).map(c => c.name)]),
   ].filter(Boolean).join(' ');
@@ -402,7 +391,7 @@ function compactProductForPrompt(p) {
   const versionText = (p.versions || []).length
     ? p.versions.map(v => `• ${v.name}${v.price ? ` — ${formatMoneyAi(v.price)}` : ''}${v.old_price ? ` (giá cũ ${formatMoneyAi(v.old_price)})` : ''}; màu: ${(v.colors || []).map(c=>c.name).join(', ') || 'chưa khai báo'}${v.description ? `; ${v.description}` : ''}`).join('\n')
     : 'Không tách phiên bản';
-  return `XE #${p.id}: ${p.name} | ${p.brand || 'Không rõ hãng'} | ${aiCategoryLabel(p.category)} | Trạng thái: ${aiStatusLabel(p.status)} | Giá chung: ${formatMoneyAi(p.price)}${p.old_price ? ` | Giá cũ: ${formatMoneyAi(p.old_price)}` : ''} | Năm: ${p.year || '—'} | ODO: ${p.mileage ? `${Number(p.mileage).toLocaleString('vi-VN')} km` : '—'} | Máy: ${p.engine || '—'} | Trả trước từ: ${p.installment_from ? formatMoneyAi(p.installment_from) : 'chưa nhập'} | Màu chung: ${baseColors}\nMô tả: ${stripHtml(p.description) || '—'}\nPhiên bản:\n${versionText}`;
+  return `XE #${p.id}: ${p.name} | ${p.brand || 'Không rõ hãng'} | ${aiCategoryLabel(p.category)} | Trạng thái: ${aiStatusLabel(p.status)} | Giá chung: ${formatMoneyAi(p.price)}${p.old_price ? ` | Giá cũ: ${formatMoneyAi(p.old_price)}` : ''} | Năm: ${p.year || '—'} | ODO: ${p.mileage ? `${Number(p.mileage).toLocaleString('vi-VN')} km` : '—'} | Máy: ${p.engine || '—'} | Trả trước từ: ${p.installment_from ? formatMoneyAi(p.installment_from) : 'chưa nhập'} | Màu chung: ${baseColors}\nMô tả: ${p.description || '—'}\nPhiên bản:\n${versionText}`;
 }
 function plainFallbackAi(site, matches, latest) {
   if (!matches.length) {
@@ -594,11 +583,11 @@ async function adminApi(req, env, url, user) {
   if(polMatch){if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được quản lý chính sách.'},403);const id=Number(polMatch[1]);if(req.method==='PUT'){const b=await req.json();const title=safeStr(b.title,160);await env.DB.prepare('UPDATE policies SET slug=?,title=?,content=?,published=?,sort_order=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(await uniquePolicySlug(env,slugify(b.slug||title),id),title,safeStr(b.content,10000),b.published===false?0:1,asNumber(b.sort_order)||0,id).run();await log(env,user,'Cập nhật bài chính sách','policy',id,title);return json({ok:true});}if(req.method==='DELETE'){await env.DB.prepare('DELETE FROM policies WHERE id=?').bind(id).run();await log(env,user,'Xoá bài chính sách','policy',id);return json({ok:true});}}
   if(url.pathname==='/api/admin/leads'&&req.method==='GET'){const params=[];let sql='SELECT l.*,u.full_name assigned_name FROM leads l LEFT JOIN users u ON u.id=l.assigned_to WHERE 1=1';if(q(url,'status')){sql+=' AND l.status=?';params.push(q(url,'status'));}if(q(url,'from')){sql+=" AND date(l.created_at, '+7 hours')>=date(?)";params.push(q(url,'from'));}if(q(url,'to')){sql+=" AND date(l.created_at, '+7 hours')<=date(?)";params.push(q(url,'to'));}if(q(url,'assigned_to')){sql+=' AND l.assigned_to=?';params.push(Number(q(url,'assigned_to')));}sql+=' ORDER BY l.updated_at DESC,l.id DESC';return json({ok:true,leads:(await env.DB.prepare(sql).bind(...params).all()).results||[]});}
   const leadMatch=url.pathname.match(/^\/api\/admin\/leads\/(\d+)$/);
-  if(leadMatch){const id=Number(leadMatch[1]);if(req.method==='PUT'){if(!can(user,'lead:update'))return json({ok:false,error:'Bạn không có quyền.'},403);const b=await req.json();const existing=await env.DB.prepare('SELECT status,assigned_to FROM leads WHERE id=?').bind(id).first();if(!existing)return json({ok:false,error:'Không tìm thấy form.'},404);if(existing.status==='done')return json({ok:false,error:'Form đã xong, chỉ được xem lại.'},409);const assigned=Object.prototype.hasOwnProperty.call(b,'assigned_to')?asNumber(b.assigned_to):existing.assigned_to??null;const status=['new','in_progress','done'].includes(b.status)?b.status:'new';await env.DB.prepare('UPDATE leads SET status=?,assigned_to=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(status,assigned,id).run();await log(env,user,status==='done'?'Hoàn tất form khách':'Cập nhật form khách','lead',id,status);return json({ok:true});}if(req.method==='DELETE'){if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được xoá form.'},403);await env.DB.prepare('DELETE FROM leads WHERE id=?').bind(id).run();await log(env,user,'Xoá form khách','lead',id);return json({ok:true});}}
+  if(leadMatch){const id=Number(leadMatch[1]);if(req.method==='PUT'){if(!can(user,'lead:update'))return json({ok:false,error:'Bạn không có quyền.'},403);const b=await req.json();const existing=await env.DB.prepare('SELECT assigned_to FROM leads WHERE id=?').bind(id).first();const assigned=Object.prototype.hasOwnProperty.call(b,'assigned_to')?asNumber(b.assigned_to):existing?.assigned_to??null;const status=['new','in_progress','done'].includes(b.status)?b.status:'new';await env.DB.prepare('UPDATE leads SET status=?,assigned_to=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(status,assigned,id).run();await log(env,user,'Cập nhật form khách','lead',id,status);return json({ok:true});}if(req.method==='DELETE'){if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được xoá form.'},403);await env.DB.prepare('DELETE FROM leads WHERE id=?').bind(id).run();await log(env,user,'Xoá form khách','lead',id);return json({ok:true});}}
   if(url.pathname==='/api/admin/conversations'&&req.method==='GET'){const params=[];let sql='SELECT c.*,u.full_name assigned_name,(SELECT body FROM chat_messages m WHERE m.conversation_id=c.id ORDER BY id DESC LIMIT 1) last_message FROM conversations c LEFT JOIN users u ON u.id=c.assigned_to WHERE 1=1';if(q(url,'status')){sql+=' AND c.status=?';params.push(q(url,'status'));}if(q(url,'from')){sql+=" AND date(c.updated_at, '+7 hours')>=date(?)";params.push(q(url,'from'));}if(q(url,'to')){sql+=" AND date(c.updated_at, '+7 hours')<=date(?)";params.push(q(url,'to'));}if(q(url,'assigned_to')){sql+=' AND c.assigned_to=?';params.push(Number(q(url,'assigned_to')));}sql+=' ORDER BY c.updated_at DESC';return json({ok:true,conversations:(await env.DB.prepare(sql).bind(...params).all()).results||[]});}
   const convMatch=url.pathname.match(/^\/api\/admin\/conversations\/(\d+)$/);
-  if(convMatch){const id=Number(convMatch[1]); if(req.method==='GET'){const conv=await env.DB.prepare('SELECT c.*,u.full_name assigned_name FROM conversations c LEFT JOIN users u ON u.id=c.assigned_to WHERE c.id=?').bind(id).first();const messages=(await env.DB.prepare('SELECT * FROM chat_messages WHERE conversation_id=? ORDER BY id').bind(id).all()).results||[];return json({ok:true,conversation:conv,messages});}if(req.method==='PUT'){if(!can(user,'chat:reply'))return json({ok:false,error:'Bạn không có quyền.'},403);const b=await req.json();const existing=await env.DB.prepare('SELECT status,assigned_to FROM conversations WHERE id=?').bind(id).first();if(!existing)return json({ok:false,error:'Không tìm thấy hội thoại.'},404);if(existing.status==='done')return json({ok:false,error:'Hội thoại đã xong, chỉ được xem lại.'},409);const status=['open','done'].includes(b.status)?b.status:'open';const assigned=Object.prototype.hasOwnProperty.call(b,'assigned_to')?asNumber(b.assigned_to):existing.assigned_to??null;await env.DB.prepare('UPDATE conversations SET status=?,assigned_to=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(status,assigned,id).run();await log(env,user,status==='done'?'Hoàn tất hội thoại':'Cập nhật hội thoại','chat',id,status);return json({ok:true});}if(req.method==='DELETE'){if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được xoá hội thoại.'},403);await env.DB.prepare('DELETE FROM chat_messages WHERE conversation_id=?').bind(id).run();await env.DB.prepare('DELETE FROM conversations WHERE id=?').bind(id).run();await log(env,user,'Xoá hội thoại','chat',id);return json({ok:true});}}
-  if(url.pathname.match(/^\/api\/admin\/conversations\/\d+\/messages$/)&&req.method==='POST'){if(!can(user,'chat:reply'))return json({ok:false,error:'Bạn không có quyền.'},403);const id=Number(url.pathname.split('/')[4]);const conv=await env.DB.prepare('SELECT status FROM conversations WHERE id=?').bind(id).first();if(!conv)return json({ok:false,error:'Không tìm thấy hội thoại.'},404);if(conv.status==='done')return json({ok:false,error:'Hội thoại đã hoàn tất, chỉ được xem lại.'},409);const b=await req.json();const body=safeStr(b.body,2000);if(!body)return json({ok:false,error:'Tin nhắn trống'},400);await env.DB.prepare('INSERT INTO chat_messages(conversation_id,sender_type,sender_name,body) VALUES (?,?,?,?)').bind(id,'staff',user.name,body).run();await env.DB.prepare("UPDATE conversations SET status='open',assigned_to=COALESCE(assigned_to,?),updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(user.id,id).run();await log(env,user,'Trả lời khách','chat',id);return json({ok:true});}
+  if(convMatch){const id=Number(convMatch[1]); if(req.method==='GET'){const conv=await env.DB.prepare('SELECT c.*,u.full_name assigned_name FROM conversations c LEFT JOIN users u ON u.id=c.assigned_to WHERE c.id=?').bind(id).first();const messages=(await env.DB.prepare('SELECT * FROM chat_messages WHERE conversation_id=? ORDER BY id').bind(id).all()).results||[];return json({ok:true,conversation:conv,messages});}if(req.method==='PUT'){const b=await req.json();const existing=await env.DB.prepare('SELECT assigned_to FROM conversations WHERE id=?').bind(id).first();const status=['open','done'].includes(b.status)?b.status:'open';const assigned=Object.prototype.hasOwnProperty.call(b,'assigned_to')?asNumber(b.assigned_to):existing?.assigned_to??null;await env.DB.prepare('UPDATE conversations SET status=?,assigned_to=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(status,assigned,id).run();await log(env,user,'Cập nhật hội thoại','chat',id,status);return json({ok:true});}if(req.method==='DELETE'){if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được xoá hội thoại.'},403);await env.DB.prepare('DELETE FROM chat_messages WHERE conversation_id=?').bind(id).run();await env.DB.prepare('DELETE FROM conversations WHERE id=?').bind(id).run();await log(env,user,'Xoá hội thoại','chat',id);return json({ok:true});}}
+  if(url.pathname.match(/^\/api\/admin\/conversations\/\d+\/messages$/)&&req.method==='POST'){if(!can(user,'chat:reply'))return json({ok:false,error:'Bạn không có quyền.'},403);const id=Number(url.pathname.split('/')[4]);const b=await req.json();const body=safeStr(b.body,2000);if(!body)return json({ok:false,error:'Tin nhắn trống'},400);await env.DB.prepare('INSERT INTO chat_messages(conversation_id,sender_type,sender_name,body) VALUES (?,?,?,?)').bind(id,'staff',user.name,body).run();await env.DB.prepare("UPDATE conversations SET status='open',assigned_to=COALESCE(assigned_to,?),updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(user.id,id).run();await log(env,user,'Trả lời khách','chat',id);return json({ok:true});}
   if(url.pathname==='/api/admin/users'){
     if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được quản lý nhân viên.'},403);
     if(req.method==='GET')return json({ok:true,users:(await env.DB.prepare('SELECT id,username,full_name,role,active,created_at FROM users ORDER BY role,id').all()).results||[]});
