@@ -39,7 +39,7 @@ const DEFAULT_SITE = {
   address: 'Cổng phụ KCN Nomura, Hải Phòng',
   map_embed_url: 'https://www.google.com/maps?q=C%E1%BB%95ng%20ph%E1%BB%A5%20KCN%20Nomura%20H%E1%BA%A3i%20Ph%C3%B2ng&output=embed',
   business_hours: 'Bán hàng: 08:00 – 21:00\nDịch vụ: 08:00 – 17:30',
-  support_email: 'hethongxetaman@gmail.com',
+  support_email: 'xemaytamancs1@gmail.com',
   primary_color: '#c81924',
   accent_color: '#ff6b76',
   background_color: '#ffffff',
