@@ -42,6 +42,10 @@
   function escapeHTML(value = '') {
     return String(value).replace(/[&<>'"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[c]));
   }
+  function parseJSON(value, fallback = null) {
+    try { return value ? JSON.parse(value) : fallback; }
+    catch { return fallback; }
+  }
   function money(value) {
     return value === null || value === undefined || value === '' ? '' : `${Number(value).toLocaleString('vi-VN')}đ`;
   }
