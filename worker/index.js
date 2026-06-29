@@ -12,6 +12,7 @@ const DEFAULT_SITE = {
   hero_title: 'Chọn xe ưng ý.\nLên đường an tâm.',
   hero_subtitle: 'Xe máy mới, xe máy cũ và xe điện tuyển chọn. Hỗ trợ trả góp minh bạch, tư vấn nhanh tại Hải Phòng.',
   hero_image: '/assets/tam-an-promo.jpg',
+  hero_images: '[]',
   showroom_image: '/assets/showroom.jpg',
   logo_url: '/assets/logo.jpg',
   favicon_url: '/assets/logo.jpg',
