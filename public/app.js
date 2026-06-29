@@ -69,6 +69,30 @@
     clearTimeout(notify.timer);
     notify.timer = setTimeout(() => toastBox.classList.remove('show'), 3500);
   }
+
+  // Overlay helpers: every modal/lightbox can be closed by X, clicking the dark backdrop,
+  // or pressing Escape. This avoids fixed header/contact buttons intercepting touch events.
+  function removeOverlay(element) {
+    if (!element) return;
+    element.remove();
+    if (!document.querySelector('.modal, .lightbox')) document.body.classList.remove('modal-open');
+  }
+  function bindOverlayDismissal(overlay, selector = '.modal-close') {
+    const onKey = event => { if (event.key === 'Escape') close(); };
+    const close = () => {
+      document.removeEventListener('keydown', onKey);
+      removeOverlay(overlay);
+    };
+    const button = $(selector, overlay);
+    if (button) {
+      button.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); close(); });
+      button.addEventListener('pointerup', event => { event.preventDefault(); event.stopPropagation(); close(); });
+    }
+    overlay.addEventListener('pointerdown', event => { if (event.target === overlay) close(); });
+    document.addEventListener('keydown', onKey);
+    return close;
+  }
+
   function productVariantColors(product) {
     return (product.versions || []).flatMap(version => Array.isArray(version.colors) ? version.colors : []);
   }
@@ -131,8 +155,9 @@
     const s = state.site || {};
     const rows = noticeRows();
     if (!s.notice_enabled || !rows.length) return '';
-    const position = s.notice_position === 'center' ? 'notice-center' : 'notice-left';
-    return `<aside id="noticeTicker" class="notice-ticker ${position}" role="status" aria-live="polite" aria-label="${escapeHTML(s.notice_title || 'Thông báo nổi bật')}">
+    const position = ['left', 'center', 'right'].includes(s.notice_position) ? s.notice_position : 'left';
+    const positionClass = `notice-${position}`;
+    return `<aside id="noticeTicker" class="notice-ticker ${positionClass}" role="status" aria-live="polite" aria-label="${escapeHTML(s.notice_title || 'Thông báo nổi bật')}">
       <span class="notice-orbit" aria-hidden="true"></span>
       <div class="notice-symbol" aria-hidden="true">✦</div>
       <div class="notice-copy"><span class="notice-title">${escapeHTML(s.notice_title || 'Thông báo nổi bật')}</span><p id="noticeMessage"></p></div>
@@ -146,27 +171,46 @@
     if (!ticker || !output) return;
     const rows = noticeRows();
     if (!rows.length) return;
-    const duration = Math.max(3000, Math.min(30000, Number(state.site?.notice_interval || 6000)));
+
+    const interval = Math.max(3500, Math.min(30000, Number(state.site?.notice_interval || 6000)));
+    // A single notice visibly appears, then fades away before the next one shows.
+    const visibleFor = Math.max(2100, interval - 1100);
     let index = 0;
-    const render = () => {
+    let timer = null;
+    let stopped = false;
+
+    const clearTimers = () => { if (timer) window.clearTimeout(timer); timer = null; };
+    const showNext = () => {
+      if (stopped) return;
       const row = rows[index % rows.length];
+      ticker.classList.remove('is-fading');
       output.classList.remove('is-visible');
       window.setTimeout(() => {
+        if (stopped) return;
         output.innerHTML = `<b>${escapeHTML(row.label)}</b><span>${escapeHTML(row.message)}</span>`;
         output.classList.add('is-visible');
-      }, 120);
-      index += 1;
+        timer = window.setTimeout(() => {
+          if (stopped) return;
+          ticker.classList.add('is-fading');
+          output.classList.remove('is-visible');
+          timer = window.setTimeout(() => {
+            index = (index + 1) % rows.length;
+            showNext();
+          }, 460);
+        }, visibleFor);
+      }, 110);
     };
-    render();
-    let timer = rows.length > 1 ? window.setInterval(render, duration) : null;
-    const pause = () => { if (timer) { window.clearInterval(timer); timer = null; } };
-    const resume = () => { if (!timer && rows.length > 1) timer = window.setInterval(render, duration); };
+    const pause = () => { clearTimers(); };
+    const resume = () => { clearTimers(); showNext(); };
+
+    showNext();
     ticker.addEventListener('mouseenter', pause);
     ticker.addEventListener('mouseleave', resume);
     ticker.addEventListener('touchstart', pause, { passive:true });
-    ticker.addEventListener('touchend', resume, { passive:true });
-    $('#noticeClose')?.addEventListener('click', () => { pause(); ticker.remove(); });
+    ticker.addEventListener('touchend', () => { timer = window.setTimeout(resume, 1800); }, { passive:true });
+    $('#noticeClose')?.addEventListener('click', () => { stopped = true; clearTimers(); ticker.remove(); });
   }
+
 
 
   const PAYMENT_PLAN_LABEL = {
@@ -558,9 +602,7 @@
       modal.className = 'modal';
       modal.innerHTML = `<div class="modal-card"><button class="modal-close">×</button><div class="product-modal"><div class="gallery"><div class="gallery-main"><img id="galleryImage" alt="${escapeHTML(product.name)}"></div><div id="thumbs" class="thumb-row"></div><div id="versionChoices" class="version-choices"></div><div id="colorChoices" class="gallery-colors"></div></div><div class="product-content"><span class="status-badge" style="position:static;display:inline-block">${statusName(product.status)}</span><div class="product-meta" style="margin-top:12px">${escapeHTML(product.brand || 'TÂM AN')} • ${escapeHTML(CATEGORY[product.category] || '')}</div><h2>${escapeHTML(product.name)}</h2><div id="selectedVersionInfo" class="selected-version-info"></div><div id="dynamicPrice" class="price-line"></div><p>${escapeHTML(product.description || '')}</p><div class="detail-grid"><div class="detail-item"><small>Năm sản xuất</small><b>${product.year || '—'}</b></div><div class="detail-item"><small>Số km</small><b>${product.mileage === null || product.mileage === undefined ? '—' : `${Number(product.mileage).toLocaleString('vi-VN')} km`}</b></div><div class="detail-item"><small>Động cơ</small><b>${escapeHTML(product.engine || '—')}</b></div><div class="detail-item"><small>Giấy tờ</small><b>${escapeHTML(product.documents || '—')}</b></div></div>${product.installment_from || product.bad_debt_from ? `<div class="finance-box"><b>Hỗ trợ trả góp</b><div>${product.installment_from ? `Trả trước tham khảo từ ${money(product.installment_from)}. ` : ''}${product.bad_debt_from ? `Thông tin hỗ trợ hồ sơ từ ${money(product.bad_debt_from)}.` : ''}</div><small>Thông tin tham khảo, Tâm An kiểm tra hồ sơ trước khi xác nhận.</small></div>` : ''}<div class="consult-box"><h3>Để lại thông tin tư vấn</h3><p class="muted">Nhân viên Tâm An sẽ liên hệ theo số điện thoại của bạn.</p><form id="detailLead" class="form-grid"><input type="hidden" name="product_id" value="${product.id}"><div class="field"><label>Họ và tên *</label><input name="name" required></div><div class="field"><label>Số điện thoại *</label><input name="phone" required inputmode="tel"></div>${paymentIntentFields(product.installment_from)}<div class="field full"><label>Ghi chú</label><textarea name="note" placeholder="Muốn xem xe, giữ xe hoặc hỏi trả góp…"></textarea></div><div class="field full"><button class="btn btn-primary">Gửi yêu cầu tư vấn</button></div></form></div></div></div>${data.related?.length ? `<div class="related"><div class="section-kicker">Gợi ý thêm</div><h2 style="font-size:34px">Xe tương tự</h2><div class="product-row">${data.related.map(card).join('')}</div></div>` : ''}</div>`;
       document.body.appendChild(modal); document.body.classList.add('modal-open');
-      const close = () => { modal.remove(); document.body.classList.remove('modal-open'); };
-      $('.modal-close', modal).onclick = close;
-      modal.addEventListener('click', event => { if (event.target === modal) close(); });
+      const close = bindOverlayDismissal(modal);
       const hasVersions = Array.isArray(product.versions) && product.versions.length;
       let versionIndex = hasVersions ? 0 : -1;
       let colorIndex = 0;
@@ -607,12 +649,11 @@
     const box = document.createElement('div');
     box.className = 'lightbox';
     box.innerHTML = `<button class="lb-close">×</button><button class="lb-prev">‹</button><img src="${escapeHTML(images[index] || current)}" alt=""><button class="lb-next">›</button>`;
-    document.body.appendChild(box);
+    document.body.appendChild(box); document.body.classList.add('modal-open');
     const paint = () => $('img', box).src = images[index] || current;
-    $('.lb-close', box).onclick = () => box.remove();
+    bindOverlayDismissal(box, '.lb-close');
     $('.lb-prev', box).onclick = () => { index = (index - 1 + images.length) % images.length; paint(); };
     $('.lb-next', box).onclick = () => { index = (index + 1) % images.length; paint(); };
-    box.addEventListener('click', event => { if (event.target === box) box.remove(); });
   }
 
   function openLeadModal(info = {}) {
@@ -620,8 +661,7 @@
     modal.className = 'modal';
     modal.innerHTML = `<div class="modal-card" style="width:min(560px,100%)"><button class="modal-close">×</button><div class="policy-modal"><div class="section-kicker">Tư vấn Tâm An</div><h2>Để lại thông tin.</h2><p class="muted">${escapeHTML(info.name || 'Tâm An sẽ gọi lại để tư vấn nhanh nhất.')}</p><form id="quickLead" class="form-grid"><div class="field"><label>Họ và tên *</label><input name="name" required></div><div class="field"><label>Số điện thoại *</label><input name="phone" required inputmode="tel"></div>${paymentIntentFields()}<div class="field full"><label>Nhu cầu</label><textarea name="note"></textarea></div><div class="field full"><button class="btn btn-primary">Gửi yêu cầu</button></div></form></div></div>`;
     document.body.appendChild(modal); document.body.classList.add('modal-open');
-    const close = () => { modal.remove(); document.body.classList.remove('modal-open'); };
-    $('.modal-close', modal).onclick = close;
+    const close = bindOverlayDismissal(modal);
     const quickLeadForm = $('#quickLead', modal);
     bindPaymentIntent(quickLeadForm);
     quickLeadForm.onsubmit = async event => {
@@ -637,7 +677,7 @@
       const modal = document.createElement('div'); modal.className = 'modal';
       modal.innerHTML = `<div class="modal-card" style="width:min(760px,100%)"><button class="modal-close">×</button><article class="policy-modal"><div class="section-kicker">Chính sách Tâm An</div><h2>${escapeHTML(data.policy.title)}</h2><div class="policy-content">${escapeHTML(data.policy.content)}</div></article></div>`;
       document.body.appendChild(modal); document.body.classList.add('modal-open');
-      $('.modal-close', modal).onclick = () => { modal.remove(); document.body.classList.remove('modal-open'); };
+      bindOverlayDismissal(modal);
     } catch (error) { notify(error.message); }
   }
 
@@ -673,8 +713,29 @@
       if (!savedName) return;
       try { await request('/api/chat/start', { method:'POST', body:{ visitor_key:state.visitorKey, visitor_name:savedName } }); } catch {}
     };
-    $('#chatOpen')?.addEventListener('click', async () => { panel.classList.add('show'); await ensureConversation(); refreshChat(); });
-    $('#chatClose')?.addEventListener('click', () => panel.classList.remove('show'));
+    const closeChat = () => {
+      panel.classList.remove('show');
+      panel.setAttribute('aria-hidden', 'true');
+    };
+    $('#chatOpen')?.addEventListener('click', async () => {
+      panel.classList.add('show');
+      panel.setAttribute('aria-hidden', 'false');
+      await ensureConversation();
+      refreshChat();
+    });
+    // Delegation makes the close action resilient when the chat panel is re-rendered.
+    panel.addEventListener('click', event => {
+      if (event.target.closest('#chatClose')) { event.preventDefault(); event.stopPropagation(); closeChat(); }
+    });
+    panel.addEventListener('pointerup', event => {
+      if (event.target.closest('#chatClose')) { event.preventDefault(); event.stopPropagation(); closeChat(); }
+    });
+    if (!state.chatEscapeBound) {
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') $('#chatPanel')?.classList.remove('show');
+      });
+      state.chatEscapeBound = true;
+    }
     $('#chatStart')?.addEventListener('click', async () => {
       const name = $('#visitorName').value.trim(); if (!name) return notify('Nhập tên của bạn trước nhé.');
       try { await request('/api/chat/start', { method:'POST', body:{ visitor_key:state.visitorKey, visitor_name:name } }); localStorage.setItem('ta_visitor_name', name); $('#chatNameBox').classList.add('hidden'); refreshChat(); }
@@ -761,7 +822,7 @@
     const modal = document.createElement('div'); modal.className = 'modal';
     modal.innerHTML = `<div class="modal-card" style="width:min(1040px,100%)"><button class="modal-close">×</button><div class="policy-modal"><div class="section-kicker">Quản trị</div><h2>${escapeHTML(title)}</h2>${content}</div></div>`;
     document.body.appendChild(modal); document.body.classList.add('modal-open');
-    $('.modal-close', modal).onclick = () => { modal.remove(); document.body.classList.remove('modal-open'); };
+    bindOverlayDismissal(modal);
     return modal;
   }
   async function uploadFile(file) {
@@ -954,7 +1015,7 @@
         <fieldset class="fieldset"><legend>Bật và hiển thị</legend><div class="form-three">
           <div class="field"><label class="admin-check"><input name="notice_enabled" type="checkbox" ${s.notice_enabled ? 'checked' : ''}><span>✓</span> Hiện thông báo ngoài website</label></div>
           <div class="field"><label>Tiêu đề nhãn</label><input name="notice_title" value="${escapeHTML(s.notice_title || 'Thông báo nổi bật')}" maxlength="48"></div>
-          <div class="field"><label>Vị trí</label><select name="notice_position"><option value="left" ${s.notice_position !== 'center' ? 'selected' : ''}>Góc trái phía dưới</option><option value="center" ${s.notice_position === 'center' ? 'selected' : ''}>Giữa đáy màn hình</option></select></div>
+          <div class="field"><label>Vị trí</label><select name="notice_position"><option value="left" ${(!s.notice_position || s.notice_position === 'left') ? 'selected' : ''}>Góc trái phía dưới</option><option value="right" ${s.notice_position === 'right' ? 'selected' : ''}>Góc phải phía dưới</option><option value="center" ${s.notice_position === 'center' ? 'selected' : ''}>Giữa đáy màn hình</option></select></div>
           <div class="field"><label>Tốc độ chuyển (giây)</label><input name="notice_interval_seconds" type="number" min="3" max="30" value="${Math.round(Number(s.notice_interval || 6000) / 1000)}"></div>
         </div></fieldset>
         <fieldset class="fieldset"><legend>Nội dung thông báo</legend>
