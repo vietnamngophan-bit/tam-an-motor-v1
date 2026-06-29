@@ -387,7 +387,7 @@ function compactProductForPrompt(p) {
 }
 function plainFallbackAi(site, matches, latest) {
   if (!matches.length) {
-    return `Em chưa xác định được đúng mẫu xe anh/chị đang hỏi. Anh/chị cho em xin tên xe hoặc gửi ảnh/màu quan tâm, em kiểm tra đúng phiên bản và tình trạng kho ngay ạ.`;
+    return `Website Tâm An hiện chưa có dữ liệu của mẫu xe anh/chị vừa hỏi, nên em không thể xác nhận giá, màu hay tình trạng kho. Anh/chị cho em xin tên xe chính xác hoặc phiên bản/màu quan tâm để nhân viên kiểm tra thực tế giúp mình nhé.`;
   }
   const p = matches[0];
   const versions = p.versions || [];
@@ -421,7 +421,9 @@ async function buildAiPrompt(env, site, latest, conversation = null) {
     const result = await env.DB.prepare('SELECT sender_type,sender_name,body FROM chat_messages WHERE conversation_id=? ORDER BY id DESC LIMIT 8').bind(conversation.id).all();
     history = (result.results || []).reverse().map(m => `${m.sender_type === 'visitor' ? 'KHÁCH' : (m.sender_type === 'staff' ? 'NHÂN VIÊN' : 'AI')}: ${safeStr(m.body, 600)}`);
   }
-  const contextProducts = matches.length ? matches : products.slice(0, 10);
+  // Never send an unrelated catalogue as a fallback. It caused the model to mention
+  // products that the visitor did not ask about. Unknown products receive no vehicle data.
+  const contextProducts = matches;
   const prompt = `VAI TRÒ\nBạn là ${site.ai_name || 'Tâm An AI'}, tư vấn viên bán xe của ${site.brand_name}. Trả lời bằng tiếng Việt tự nhiên, chính xác và thân thiện.\n\nQUY TẮC BẮT BUỘC\n1) Chỉ dùng dữ liệu trong mục DỮ LIỆU KHO XE và THÔNG TIN CỬA HÀNG. Không đoán giá, màu, phiên bản hoặc tình trạng.\n2) Nếu câu hỏi nhắc tới màu/phiên bản, phải kiểm tra quan hệ PHIÊN BẢN → MÀU. Không nói một màu có ở bản khác khi dữ liệu không có.\n3) Khi có mẫu xe phù hợp: nêu rõ tên xe, trạng thái, phiên bản/màu liên quan, giá công khai nếu có, và trả góp nếu có.\n4) Khi không xác định được mẫu: hỏi đúng 1 câu làm rõ (tên mẫu, phiên bản hoặc màu), KHÔNG đẩy ngay sang hotline/showroom.\n5) Không hứa duyệt trả góp/nợ xấu, không chốt giá cuối cùng.\n6) Chỉ nhắc hotline/showroom khi khách hỏi liên hệ/địa chỉ hoặc dữ liệu thực sự thiếu sau khi đã hỏi làm rõ.\n7) Câu trả lời 70–160 từ, chia 2–4 đoạn ngắn hoặc gạch đầu dòng khi có nhiều thông tin.\n8) Kết thúc bằng một câu hỏi ngắn để tiếp tục tư vấn.\n\nTHÔNG TIN CỬA HÀNG\nĐịa chỉ: ${site.address}\nHotline: ${site.hotline}\nKiến thức vận hành: ${site.ai_knowledge || 'Không cam kết giá chốt hoặc duyệt hồ sơ trước khi nhân viên xác nhận.'}\n\nDỮ LIỆU KHO XE\n${contextProducts.map(compactProductForPrompt).join('\n\n')}\n\nLỊCH SỬ HỘI THOẠI\n${history.join('\n') || 'Chưa có'}\n\nCÂU HỎI MỚI CỦA KHÁCH\n${latest}`;
   return { prompt, matches, products };
 }
@@ -483,8 +485,16 @@ async function maybeAiReply(env, site, conv, latest) {
   if(words.some(w=>latest.toLowerCase().includes(w)))return { status:'handoff' };
   try {
     const aiContext=await buildAiPrompt(env,site,latest,conv);
-    let out=await callAi(env,site,aiContext.prompt,conv);
-    if (isTooGenericAiReply(out, aiContext.matches)) out=plainFallbackAi(site, aiContext.matches, latest);
+    // Product data is deterministic. When no matching product exists in D1, do not call a
+    // generative model at all: this prevents hallucinated names, colours, stock and prices.
+    let out;
+    if (!aiContext.matches.length) {
+      out = plainFallbackAi(site, [], latest);
+    } else {
+      out = await callAi(env,site,aiContext.prompt,conv);
+      // For any generic / unsafe answer, fall back to the exact D1-backed summary.
+      if (isTooGenericAiReply(out, aiContext.matches)) out = plainFallbackAi(site, aiContext.matches, latest);
+    }
     await env.DB.prepare('INSERT INTO chat_messages(conversation_id,sender_type,sender_name,body) VALUES (?,?,?,?)').bind(conv.id,'ai',site.ai_name||'Tâm An AI',out).run();
     await env.DB.prepare('UPDATE conversations SET ai_count=ai_count+1,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(conv.id).run();
     return { status:'replied' };
