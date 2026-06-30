@@ -850,74 +850,25 @@ body.modal-open { overflow: hidden !important; }
 }
 @media (prefers-reduced-motion:reduce){.hero-slider .hero-slide{transition:none}.hero-arrow,.hero-dot{transition:none}}
 
-/* ===== V1.14 — hoàn thiện UX desktop/mobile & quản trị ===== */
-.hero-slider { touch-action: pan-y; cursor: grab; }
-.hero-slider:active { cursor: grabbing; }
-.hero-slider-ui { inset:0; left:0; bottom:auto; transform:none; width:100%; pointer-events:none; }
-.hero-slider-arrows { position:absolute; inset:0; display:block; pointer-events:none; }
-.hero-slider-arrows .hero-arrow { position:absolute; top:50%; z-index:4; transform:translateY(-50%); pointer-events:auto; box-shadow:0 8px 22px rgba(15,4,5,.2); }
-.hero-slider-arrows .hero-arrow:first-child { left:max(18px, calc((100vw - 1180px)/2 + 12px)); }
-.hero-slider-arrows .hero-arrow:last-child { right:max(18px, calc((100vw - 1180px)/2 + 12px)); }
-.hero-slider-arrows .hero-arrow:hover { transform:translateY(-50%) scale(1.06); }
-.hero-dots { position:absolute; left:50%; bottom:22px; transform:translateX(-50%); pointer-events:auto; }
-
-.trust-grid { grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); }
-.trust-item { border-right:1px solid var(--line); border-bottom:1px solid var(--line); }
-.trust-item:nth-last-child(-n+4) { border-bottom:0; }
-
-.catalog-filters { display:flex; flex-wrap:wrap; gap:10px; align-items:end; margin:15px 0 4px; }
-.catalog-filters label { display:grid; gap:5px; min-width:150px; flex:1 1 160px; color:#6e6062; font-weight:800; font-size:12px; }
-.catalog-filters select { width:100%; border:1px solid var(--line); border-radius:12px; background:#fff; color:var(--ink); padding:10px 12px; font-weight:700; }
-
-.float-btn.is-pulsing, .chat-launch.is-pulsing { position:relative; isolation:isolate; overflow:visible!important; animation:ta-float-breathe 1.55s ease-in-out infinite; }
-.float-btn.is-pulsing::before, .float-btn.is-pulsing::after, .chat-launch.is-pulsing::before, .chat-launch.is-pulsing::after { content:""; position:absolute; inset:-6px; z-index:-1; border:2px solid color-mix(in srgb, var(--float-color, var(--red)) 65%, transparent); border-radius:inherit; opacity:0; pointer-events:none; animation:ta-float-ring 1.55s ease-out infinite; }
-.float-btn.is-pulsing::after, .chat-launch.is-pulsing::after { animation-delay:.74s; }
-.float-btn.pulse-slow.is-pulsing,.chat-launch.pulse-slow.is-pulsing { animation-duration:2.35s; }
-.float-btn.pulse-slow.is-pulsing::before,.float-btn.pulse-slow.is-pulsing::after,.chat-launch.pulse-slow.is-pulsing::before,.chat-launch.pulse-slow.is-pulsing::after{animation-duration:2.35s}
-.float-btn.pulse-fast.is-pulsing,.chat-launch.pulse-fast.is-pulsing { animation-duration:.92s; }
-.float-btn.pulse-fast.is-pulsing::before,.float-btn.pulse-fast.is-pulsing::after,.chat-launch.pulse-fast.is-pulsing::before,.chat-launch.pulse-fast.is-pulsing::after{animation-duration:.92s}
-@keyframes ta-float-breathe { 0%,100%{transform:translateY(0) scale(1)} 48%{transform:translateY(-2px) scale(1.035)} }
-@keyframes ta-float-ring { 0%{transform:scale(.8);opacity:.58} 100%{transform:scale(1.35);opacity:0} }
-@media (prefers-reduced-motion:reduce){.float-btn.is-pulsing,.chat-launch.is-pulsing{animation:none}.float-btn.is-pulsing::before,.float-btn.is-pulsing::after,.chat-launch.is-pulsing::before,.chat-launch.is-pulsing::after{animation:none;display:none}}
-
-.location-consent .consent-control { align-items:flex-start; }
-.location-link { display:inline-flex; margin-top:5px; color:var(--red); font-size:12px; font-weight:800; }
-.vnd-input { font-variant-numeric:tabular-nums; }
-.vnd-input::placeholder { color:#a89b9d; }
-
-.stack-editor { display:grid; gap:12px; }
-.editor-row { border:1px solid #ead8da; border-radius:16px; background:#fffdfd; padding:14px; }
-.editor-row-action { display:flex; align-items:end; }
-.admin-kicker { display:block; color:var(--red); font-size:11px; font-weight:900; letter-spacing:.14em; text-transform:uppercase; margin-bottom:4px; }
-.admin-toolbar-pro { align-items:flex-end; }
-.admin-filter-row { margin-bottom:16px; padding:13px; border:1px solid #eadbdd; border-radius:16px; background:#fff; }
-.admin-data-card { overflow:hidden; }
-.pro-table tbody tr.row-done { background:#f6fbf7; }
-.done-badge { display:inline-flex; align-items:center; gap:6px; background:#e7f6eb; color:#20643c; border-radius:999px; padding:7px 10px; font-size:12px; font-weight:900; white-space:nowrap; }
-.thread-read-only { margin-top:10px; padding:12px; border-radius:12px; background:#f2f8f3; color:#286342; font-size:13px; font-weight:800; }
-.security-card { max-width:900px; }
-
-.admin-chat { min-height:580px; max-height:calc(100vh - 250px); }
-.chat-admin-thread { min-height:0!important; overflow:hidden!important; display:flex!important; flex-direction:column!important; }
-.chat-admin-thread .chat-body, .admin-message-scroll { flex:1 1 auto; min-height:0!important; overflow-y:auto!important; overscroll-behavior:contain; padding-bottom:16px; }
-.chat-thread-actions { flex:0 0 auto; padding:12px; border-top:1px solid var(--line); background:#fff; }
-.chat-msg.optimistic { opacity:.72; }
-.chat-msg.optimistic.failed { opacity:1; border-color:#e69ca4; }
-
-@media (max-width:720px){
-  .hero-slider { min-height:420px; }
-  .hero-slider-arrows .hero-arrow { width:36px; height:36px; top:auto; bottom:18px; transform:none; background:rgba(32,7,9,.58); }
-  .hero-slider-arrows .hero-arrow:first-child { left:16px; }
-  .hero-slider-arrows .hero-arrow:last-child { right:16px; }
-  .hero-slider-arrows .hero-arrow:hover { transform:none; }
-  .hero-dots { bottom:26px; max-width:calc(100vw - 120px); overflow:hidden; }
-  .trust-grid { grid-template-columns:1fr; border-radius:18px; }
-  .trust-item, .trust-item:nth-last-child(-n+4) { border-right:0; border-bottom:1px solid var(--line); }
-  .trust-item:last-child { border-bottom:0; }
-  .catalog-filters { display:grid; grid-template-columns:1fr 1fr; }
-  .catalog-filters label:last-child { grid-column:1/-1; }
-  .admin-chat { min-height:520px; max-height:calc(100dvh - 185px); grid-template-columns:1fr!important; }
-  .chat-list-admin { max-height:170px; overflow:auto; }
-  .chat-admin-thread { min-height:370px; }
-  .editor-row-action { align-items:stretch; }
-}
+/* V1.15 — Tồn kho theo phiên bản và phối màu */
+.form-four{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.status-badge.status-in_stock,.availability-inline.status-in_stock{background:#edf8f0;color:#18733a}
+.status-badge.status-incoming,.availability-inline.status-incoming{background:#fff6dc;color:#9b6500}
+.status-badge.status-reserved,.availability-inline.status-reserved{background:#edf3ff;color:#205fb3}
+.status-badge.status-sold,.availability-inline.status-sold{background:#f2eeee;color:#7b6d70}
+.availability-inline{display:inline-flex;align-items:center;margin-left:7px;padding:3px 7px;border-radius:999px;font-size:10px;line-height:1;font-family:var(--body);vertical-align:middle;letter-spacing:.02em}
+.version-choice{display:grid;gap:3px;text-align:left}
+.version-choice small{font-size:10px;font-weight:800;opacity:.8}
+.version-choice.status-sold{opacity:.55;text-decoration:line-through}
+.version-choice.status-incoming small{color:#a86600}.version-choice.status-reserved small{color:#2565ba}.version-choice.status-sold small{color:#7b6d70}
+.product-unavailable .product-media img{filter:grayscale(.28)}
+.paint-preview{position:relative}.paint-preview.is-unavailable{opacity:.52}.paint-preview em{font-style:normal;font-size:9px;color:#967b7d;font-weight:800;line-height:1}
+.product-modal-card .color-choice{position:relative;display:grid;justify-items:start;gap:6px;min-width:105px;padding-bottom:14px}
+.product-modal-card .color-choice small{font-size:10px;color:#7d6b6e;font-weight:800;line-height:1.1}
+.product-modal-card .color-choice.status-sold{opacity:.56;filter:grayscale(.35)}
+.product-modal-card .color-choice.status-sold small{color:#8e777a}
+.product-modal-card .color-choice.status-incoming small{color:#a86600}
+.product-modal-card .color-choice.status-reserved small{color:#2565ba}
+.nested-color-box .form-four{align-items:start}
+@media(max-width:960px){.form-four{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.form-four{grid-template-columns:1fr}.product-modal-card .color-choice{min-width:118px}}
