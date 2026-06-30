@@ -1799,3 +1799,127 @@ body.modal-open { overflow: hidden !important; }
   .landing-contact-row { display:block; }
   .landing-contact-row .field { margin-bottom:12px; }
 }
+
+
+/* ===== V7: Kho xe ngoài website theo Nhóm xe → Dòng xe → Sản phẩm ===== */
+.public-inventory-explorer {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #ecdfe0;
+  border-radius: 20px;
+  background: linear-gradient(145deg, #fff 0%, #fffafa 100%);
+  box-shadow: 0 10px 26px rgba(76, 24, 30, .045);
+}
+.public-inventory-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: auto;
+  padding-bottom: 9px;
+  color: #8d7376;
+  font-size: 12px;
+  font-weight: 760;
+  white-space: nowrap;
+}
+.public-inventory-breadcrumb i { color: #c9b5b7; font-style: normal; }
+.public-inventory-breadcrumb b { color: #3a272a; }
+.public-inventory-breadcrumb strong { color: var(--red); font-weight: 850; }
+.public-folder-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 2px 0 12px;
+}
+.public-folder-overline {
+  display: block;
+  color: var(--red);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .13em;
+}
+.public-folder-head p { margin: 3px 0 0; color: #756365; font-size: 12px; line-height: 1.45; }
+.public-folder-landing {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid #edd4d6;
+  border-radius: 10px;
+  background: #fff;
+  color: #ab1822;
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+.public-folder-landing:hover { border-color: var(--red); background: #fff7f7; }
+.public-folder-rail {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 9px;
+}
+.public-folder-card {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  min-height: 58px;
+  padding: 7px 9px;
+  border: 1px solid #ebdfe0;
+  border-radius: 14px;
+  background: #fff;
+  color: #332426;
+  text-align: left;
+  transition: .18s ease;
+}
+.public-folder-card:hover { border-color: #d7a4a8; transform: translateY(-1px); box-shadow: 0 8px 16px rgba(69, 23, 28, .06); }
+.public-folder-card.active { border-color: var(--red); background: #fff6f6; box-shadow: 0 8px 18px rgba(200, 25, 36, .09); }
+.public-folder-thumb {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  overflow: hidden;
+  border: 1px solid #efe5e5;
+  border-radius: 10px;
+  background: #faf7f7;
+}
+.public-folder-thumb img { width: 100%; height: 100%; object-fit: contain; }
+.public-folder-all-thumb { background: #fff0f1; border-color: #f0d9da; color: var(--red); font-size: 21px; font-weight: 900; }
+.public-folder-copy { display: grid; min-width: 0; gap: 2px; }
+.public-folder-copy b { overflow: hidden; color: #352326; font-size: 13px; font-weight: 900; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.public-folder-copy small { overflow: hidden; color: #857174; font-size: 10px; font-weight: 720; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.public-folder-arrow { color: #bf232d; font-size: 21px; line-height: 1; }
+.public-folder-empty { display: flex; align-items: center; min-height: 58px; padding: 11px 13px; border: 1px dashed #dcc4c6; border-radius: 14px; color: #8a7476; font-size: 12px; }
+.inventory-products-head { margin-top: 18px; }
+
+@media (max-width: 720px) {
+  .public-inventory-explorer { margin-top: 13px; padding: 13px; border-radius: 17px; }
+  .public-folder-head { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .public-folder-landing { width: 100%; justify-content: center; }
+  .public-folder-rail {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 1px 1px 5px;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+  .public-folder-rail::-webkit-scrollbar { display: none; }
+  .public-folder-card {
+    grid-template-columns: 37px minmax(0, 1fr) 13px;
+    flex: 0 0 min(76vw, 258px);
+    min-height: 54px;
+    padding: 7px;
+    scroll-snap-align: start;
+  }
+  .public-folder-thumb { width: 37px; height: 37px; border-radius: 9px; }
+  .public-folder-copy b { font-size: 12px; }
+  .public-folder-copy small { font-size: 9px; }
+  .public-folder-arrow { font-size: 18px; }
+  .public-folder-empty { flex: 0 0 86%; }
+  .inventory-products-head { margin-top: 15px; }
+}
