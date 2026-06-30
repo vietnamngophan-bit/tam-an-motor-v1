@@ -203,33 +203,77 @@ async function getSite(env) {
 }
 async function saveSite(env, patch, user) { const before = await getSite(env); const data = { ...before, ...patch }; await env.DB.prepare('UPDATE site_settings SET data=?,updated_at=CURRENT_TIMESTAMP WHERE id=1').bind(JSON.stringify(data)).run(); await log(env,user,'Cập nhật nội dung website','site','1'); return data; }
 
+const COLOR_AVAILABILITY = new Set(['in_stock', 'out_of_stock', 'incoming']);
+
+// A color is a sellable paint combination. Its inventory is kept inside the
+// existing JSON fields so old products continue to work without a D1 migration.
+function normalizeInventoryColor(c = {}) {
+  const validHex = value => /^#[0-9a-fA-F]{6}$/.test(String(value || '').trim()) ? String(value).trim() : '';
+  const raw = Array.isArray(c?.swatches) ? c.swatches : [];
+  const swatches = raw.map(validHex).filter(Boolean).slice(0, 3);
+  const fallback = validHex(c?.hex) || '#d71920';
+  if (!swatches.length) swatches.push(fallback);
+  const quantity = asNumber(c?.stock_quantity);
+  return {
+    name: safeStr(c?.name, 60),
+    hex: swatches[0],
+    swatches,
+    images: Array.isArray(c?.images) ? c.images.filter(x => typeof x === 'string' && x).slice(0, 12) : [],
+    availability: COLOR_AVAILABILITY.has(c?.availability) ? c.availability : 'in_stock',
+    stock_quantity: quantity === null ? null : Math.max(0, Math.floor(quantity)),
+  };
+}
+function normalizeInventoryVersion(v = {}) {
+  return {
+    ...v,
+    name: safeStr(v?.name, 80),
+    description: safeStr(v?.description, 500),
+    price: v?.price == null ? null : asNumber(v.price),
+    old_price: v?.old_price == null ? null : asNumber(v.old_price),
+    colors: Array.isArray(v?.colors) ? v.colors.map(normalizeInventoryColor).filter(c => c.name) : [],
+  };
+}
 function productOut(row) {
   if (!row) return null;
-  return { ...row, price:row.price==null?null:Number(row.price), old_price:row.old_price==null?null:Number(row.old_price), mileage:row.mileage==null?null:Number(row.mileage), installment_from:row.installment_from==null?null:Number(row.installment_from), bad_debt_from:row.bad_debt_from==null?null:Number(row.bad_debt_from), images:parseJSON(row.images_json,[]), colors:parseJSON(row.colors_json,[]), versions:parseJSON(row.versions_json,[]) };
+  return {
+    ...row,
+    price:row.price==null?null:Number(row.price), old_price:row.old_price==null?null:Number(row.old_price), mileage:row.mileage==null?null:Number(row.mileage), installment_from:row.installment_from==null?null:Number(row.installment_from), bad_debt_from:row.bad_debt_from==null?null:Number(row.bad_debt_from),
+    images:parseJSON(row.images_json,[]),
+    colors:parseJSON(row.colors_json,[]).map(normalizeInventoryColor),
+    versions:parseJSON(row.versions_json,[]).map(normalizeInventoryVersion),
+  };
 }
 async function productPayload(req) {
   const b = await req.json();
   const name = safeStr(b.name,160); if (!name) throw new Error('Tên xe là bắt buộc.');
   const category = safeStr(b.category,80).replace(/[^a-z0-9_-]/gi,'') || 'motor_new';
   const images = Array.isArray(b.images) ? b.images.filter(x=>typeof x==='string' && x).slice(0,30) : [];
-  const validHex = value => /^#[0-9a-fA-F]{6}$/.test(String(value || '').trim()) ? String(value).trim() : '';
-  const normalizeColor = c => {
-    const raw = Array.isArray(c?.swatches) ? c.swatches : [];
-    const swatches = raw.map(validHex).filter(Boolean).slice(0, 3);
-    const fallback = validHex(c?.hex) || '#d71920';
-    if (!swatches.length) swatches.push(fallback);
-    return { name:safeStr(c?.name,60), hex:swatches[0], swatches, images:Array.isArray(c?.images)?c.images.filter(x=>typeof x==='string'&&x).slice(0,12):[] };
-  };
-  const colors = Array.isArray(b.colors) ? b.colors.slice(0,20).map(normalizeColor).filter(c=>c.name) : [];
-  const versions = Array.isArray(b.versions) ? b.versions.slice(0,20).map(v=>({ name:safeStr(v?.name,80), description:safeStr(v?.description,500), price:asNumber(v?.price), old_price:asNumber(v?.old_price), colors:Array.isArray(v?.colors)?v.colors.slice(0,20).map(normalizeColor).filter(c=>c.name):[] })).filter(v=>v.name) : [];
+  const colors = Array.isArray(b.colors) ? b.colors.slice(0,20).map(normalizeInventoryColor).filter(c=>c.name) : [];
+  const versions = Array.isArray(b.versions) ? b.versions.slice(0,20).map(normalizeInventoryVersion).filter(v=>v.name) : [];
   return { name, slug:slugify(b.slug || name), brand:safeStr(b.brand,80), category, status:['in_stock','incoming','reserved','sold'].includes(b.status)?b.status:'in_stock', price:asNumber(b.price), old_price:asNumber(b.old_price), year:asNumber(b.year), mileage:asNumber(b.mileage), engine:safeStr(b.engine,60), documents:safeStr(b.documents,300), description:safeStr(b.description,30000), installment_from:asNumber(b.installment_from), bad_debt_from:asNumber(b.bad_debt_from), images, colors, versions, featured:b.featured?1:0, published:b.published===false?0:1, sort_order:asNumber(b.sort_order)||0 };
 }
-async function sendLeadEmail(env, site, lead) {
+async function sendNotificationEmail(env, subject, html) {
   if (!env.RESEND_API_KEY || !env.NOTIFY_EMAIL) return;
-  const subject = `[Tâm An] Yêu cầu mới: ${lead.type}`;
+  const from = safeStr(env.RESEND_FROM_EMAIL, 180) || 'Tâm An Website <onboarding@resend.dev>';
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method:'POST',
+      headers:{Authorization:`Bearer ${env.RESEND_API_KEY}`,'content-type':'application/json'},
+      body:JSON.stringify({from,to:[env.NOTIFY_EMAIL],subject,html})
+    });
+  } catch {}
+}
+async function sendLeadEmail(env, site, lead) {
+  const subject = `[Tâm An] Form mới: ${lead.type}`;
   const planName = {cash:'Trả thẳng',installment:'Trả góp',bad_debt:'Hồ sơ có nợ xấu / cần kiểm tra'}[lead.payment_plan] || 'Chưa chọn';
-  const html = `<h2>Khách để lại yêu cầu</h2><p><b>Họ tên:</b> ${escapeHtml(lead.name)}</p><p><b>SĐT:</b> ${escapeHtml(lead.phone)}</p><p><b>Dự kiến thanh toán:</b> ${escapeHtml(planName)}${lead.down_payment ? ` — ${escapeHtml(lead.down_payment)}` : ''}</p>${lead.location_text ? `<p><b>Vị trí gần đúng:</b> ${escapeHtml(lead.location_text)}</p>` : ''}<p><b>Nội dung:</b> ${escapeHtml(lead.note||'')}</p>`;
-  try { await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${env.RESEND_API_KEY}`,'content-type':'application/json'},body:JSON.stringify({from:'Tâm An Website <onboarding@resend.dev>',to:[env.NOTIFY_EMAIL],subject,html})}); } catch {}
+  const html = `<h2>Khách để lại form tư vấn</h2><p><b>Họ tên:</b> ${escapeHtml(lead.name)}</p><p><b>SĐT:</b> ${escapeHtml(lead.phone)}</p><p><b>Dự kiến thanh toán:</b> ${escapeHtml(planName)}${lead.down_payment ? ` — ${escapeHtml(lead.down_payment)}` : ''}</p>${lead.location_text ? `<p><b>Khu vực / vị trí:</b> ${escapeHtml(lead.location_text)}</p>` : ''}<p><b>Nội dung:</b> ${escapeHtml(lead.note||'')}</p>`;
+  await sendNotificationEmail(env, subject, html);
+}
+async function sendChatEmail(env, conversation, body) {
+  const visitor = safeStr(conversation?.visitor_name, 80) || 'Khách';
+  const subject = `[Tâm An] Chat mới từ ${visitor}`;
+  const html = `<h2>Có tin nhắn chat mới</h2><p><b>Khách:</b> ${escapeHtml(visitor)}</p><p><b>Nội dung:</b></p><blockquote style="margin:0;padding:12px 14px;border-left:4px solid #c81924;background:#fff7f7">${escapeHtml(body)}</blockquote><p>Mở Admin → Chat trực tuyến để phản hồi khách.</p>`;
+  await sendNotificationEmail(env, subject, html);
 }
 function escapeHtml(s) { return String(s||'').replace(/[&<>'"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m])); }
 function q(url,k){return url.searchParams.get(k)||''}
@@ -280,6 +324,7 @@ async function publicApi(req, env, url) {
     if (!paymentPlan) return json({ok:false,error:'Vui lòng chọn dự kiến thanh toán.'},400);
     if (paymentPlan==='installment' && !downPayment) return json({ok:false,error:'Vui lòng chọn mức trả trước dự kiến.'},400);
     const r=await env.DB.prepare('INSERT INTO leads(type,name,phone,note,payment_plan,down_payment,location_text,product_id) VALUES (?,?,?,?,?,?,?,?)').bind(type,name,phone,note,paymentPlan,downPayment,locationText,productId).run();
+    await log(env,{name:'Khách'},'Khách gửi form tư vấn','lead',r.meta.last_row_id,`${name} • ${phone}${locationText ? ` • ${locationText}` : ''}`);
     const site=await getSite(env); await sendLeadEmail(env,site,{type,name,phone,note,payment_plan:paymentPlan,down_payment:downPayment,location_text:locationText});
     return json({ok:true,id:r.meta.last_row_id,message:'Tâm An đã nhận thông tin. Nhân viên sẽ liên hệ sớm.'});
   }
@@ -301,6 +346,8 @@ async function publicApi(req, env, url) {
     if(conv.status==='done') return json({ok:false,error:'Hội thoại này đã hoàn tất. Vui lòng gọi hotline hoặc tạo yêu cầu tư vấn mới để Tâm An hỗ trợ.'},409);
     await env.DB.prepare('INSERT INTO chat_messages(conversation_id,sender_type,sender_name,body) VALUES (?,?,?,?)').bind(conv.id,'visitor',conv.visitor_name||'Khách',body).run();
     await env.DB.prepare('UPDATE conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(conv.id).run();
+    await log(env,{name:conv.visitor_name||'Khách'},'Khách nhắn chat','chat',conv.id,body);
+    await sendChatEmail(env,conv,body);
     const site=await getSite(env);
     let ai = { status:'disabled' };
     if (site.ai_enabled && !conv.assigned_to) ai = await maybeAiReply(env,site,conv,body);
@@ -551,6 +598,15 @@ async function adminApi(req, env, url, user) {
     const [ps,ls,cs,as,vs]=await Promise.all([
       env.DB.prepare('SELECT COUNT(*) c FROM products').first(),env.DB.prepare('SELECT COUNT(*) c FROM leads WHERE status<>\'done\'').first(),env.DB.prepare("SELECT COUNT(*) c FROM conversations WHERE status='open'").first(),env.DB.prepare('SELECT COUNT(*) c FROM accessories').first(),env.DB.prepare("SELECT COUNT(*) c FROM page_views WHERE date(created_at, '+7 hours')>=date('now', '+7 hours', '-30 day')").first()
     ]); return json({ok:true,counts:{products:ps.c,leads:ls.c,chats:cs.c,accessories:as.c,visits:vs.c}});
+  }
+  if(url.pathname==='/api/admin/activity'&&req.method==='GET'){
+    const [newLeads,openChats,latestLead,latestChat]=await Promise.all([
+      env.DB.prepare("SELECT COUNT(*) c FROM leads WHERE status='new'").first(),
+      env.DB.prepare("SELECT COUNT(*) c FROM conversations WHERE status='open'").first(),
+      env.DB.prepare('SELECT id,created_at,name FROM leads ORDER BY id DESC LIMIT 1').first(),
+      env.DB.prepare("SELECT m.id,m.created_at,m.body,c.visitor_name FROM chat_messages m JOIN conversations c ON c.id=m.conversation_id WHERE m.sender_type='visitor' ORDER BY m.id DESC LIMIT 1").first(),
+    ]);
+    return json({ok:true,new_leads:Number(newLeads?.c||0),open_chats:Number(openChats?.c||0),latest_lead:latestLead||null,latest_chat:latestChat||null});
   }
   if(url.pathname==='/api/admin/ai/status'&&req.method==='GET'){
     if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được kiểm tra chatbot AI.'},403);
