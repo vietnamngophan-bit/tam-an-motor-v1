@@ -2640,5 +2640,213 @@
     }
   };
 
+
+
+  /* ==================================================================
+     V10 — Menu mobile kiểu hãng xe: full-screen, rõ cấu trúc, không vỡ header
+     Kho xe là accordion; các thư mục Air Blade / Vision / Winner... nằm bên trong.
+     ================================================================== */
+  function inventoryMobileFolderGroupsV10() {
+    const visibleCollections = publicCollections();
+    const groups = categoryDefinitions()
+      .map(category => ({ ...category, items: visibleCollections.filter(item => item.category === category.id) }))
+      .filter(group => group.items.length);
+    if (!groups.length) {
+      return `<div class="mobile-folder-empty"><b>Kho xe đang cập nhật</b><span>Chọn “Xem toàn bộ kho xe” để theo dõi các mẫu mới.</span></div>`;
+    }
+    return groups.map(group => `<section class="mobile-folder-group">
+      <div class="mobile-folder-group-title"><span>${escapeHTML(group.label)}</span><small>${group.items.length} dòng xe</small></div>
+      <div class="mobile-folder-list">${group.items.map(item => {
+        const count = productsInCollection(item).length;
+        return `<a class="mobile-folder-link" data-inventory-folder="${escapeHTML(item.slug)}" href="${escapeHTML(inventoryFolderHref(item))}" data-search-text="${escapeHTML(`${item.title} ${group.label}`.toLowerCase())}">
+          <b>${escapeHTML(item.title)}</b><span>${count ? `${count} xe đang có` : 'Đang cập nhật'}</span><i aria-hidden="true">›</i>
+        </a>`;
+      }).join('')}</div>
+    </section>`).join('');
+  }
+
+  function inventoryDesktopFolderGroupsV10() {
+    const visibleCollections = publicCollections();
+    const groups = categoryDefinitions()
+      .map(category => ({ ...category, items: visibleCollections.filter(item => item.category === category.id) }))
+      .filter(group => group.items.length);
+    if (!groups.length) return `<div class="inventory-v10-empty">Kho xe đang được cập nhật.</div>`;
+    return groups.map(group => `<section class="inventory-v10-group"><div class="inventory-v10-group-title">${escapeHTML(group.label)}</div>${group.items.map(item => {
+      const count = productsInCollection(item).length;
+      return `<a class="inventory-v10-folder-link" data-inventory-folder="${escapeHTML(item.slug)}" href="${escapeHTML(inventoryFolderHref(item))}"><span>${escapeHTML(item.title)}</span><small>${count ? `${count} xe` : 'Mới'}</small><i>›</i></a>`;
+    }).join('')}</section>`).join('');
+  }
+
+  nav = function(active = '') {
+    const s = state.site;
+    const standardLinks = [
+      ['/#promo', 'Khuyến mại', 'promo'],
+      ...(state.accessories?.length ? [['/#accessories', 'Phụ kiện', 'accessories']] : []),
+      ['/tra-gop', 'Trả góp', 'finance'],
+      ['/#showroom', 'Showroom', 'showroom']
+    ];
+    const desktopInventory = `<div id="inventoryDesktopMenu" class="inventory-desktop-menu ${active === 'inventory' ? 'active' : ''}">
+      <a class="inventory-desktop-trigger" href="/#inventory"><span>Kho xe</span><i aria-hidden="true">⌄</i></a>
+      <div class="inventory-desktop-panel" aria-label="Thư mục xe">
+        <div class="inventory-desktop-panel-head"><span>KHO XE</span><b>Chọn dòng xe đang quan tâm</b></div>
+        <div class="inventory-v10-groups">${inventoryDesktopFolderGroupsV10()}</div>
+        <a class="inventory-desktop-all" href="/#inventory">Xem toàn bộ kho xe <i>→</i></a>
+      </div>
+    </div>`;
+    const mobileDrawer = `<div id="mobileNavDrawer" class="mobile-nav-drawer" aria-hidden="true">
+      <div class="mobile-nav-drawer-bar">
+        <a class="mobile-nav-brand" href="/" aria-label="Về trang chủ"><img src="${escapeHTML(s.logo_url || '/assets/logo.jpg')}" alt=""><span><b>${escapeHTML(s.brand_name || 'TÂM AN')}</b><small>XE MÁY CHÍNH HÃNG</small></span></a>
+        <button id="mobileNavClose" class="mobile-nav-close" type="button" aria-label="Đóng menu">×</button>
+      </div>
+      <div class="mobile-nav-drawer-content">
+        <label class="mobile-nav-search" for="mobileNavSearch"><span class="sr-only">Tìm dòng xe</span><input id="mobileNavSearch" type="search" autocomplete="off" placeholder="Nhập tên dòng xe để tìm kiếm"><i aria-hidden="true">⌕</i></label>
+        <section id="mobileInventorySection" class="mobile-inventory-section is-open">
+          <button id="mobileInventoryToggle" class="mobile-inventory-trigger" type="button" aria-expanded="true"><span>Kho xe</span><i aria-hidden="true">⌃</i></button>
+          <div class="mobile-inventory-body">
+            <a class="mobile-inventory-all" href="/#inventory"><span>☷</span><b>Xem toàn bộ kho xe</b><i>›</i></a>
+            <div id="mobileFolderGroups" class="mobile-folder-groups">${inventoryMobileFolderGroupsV10()}</div>
+            <p id="mobileFolderNoResult" class="mobile-folder-no-result" hidden>Không tìm thấy dòng xe phù hợp.</p>
+          </div>
+        </section>
+        <nav class="mobile-primary-links" aria-label="Điều hướng chính">
+          ${standardLinks.map(([url, label, key]) => `<a class="${key === active ? 'active' : ''}" href="${url}"><span>${label}</span><i aria-hidden="true">›</i></a>`).join('')}
+        </nav>
+        <a class="mobile-nav-hotline" href="tel:${String(s.hotline || '').replace(/\s/g, '')}"><span>☎</span><b>Gọi tư vấn</b><strong>${escapeHTML(s.hotline || '')}</strong></a>
+      </div>
+    </div>`;
+    return `<header class="site-header v10-header">
+      <div class="topbar"><div class="container topbar-inner"><span>${escapeHTML(s.address || '')}</span><a href="tel:${String(s.hotline || '').replace(/\s/g, '')}">☎ ${escapeHTML(s.hotline || '')}</a></div></div>
+      <div class="container nav">
+        <a class="brand" href="/"><img class="brand-logo" src="${escapeHTML(s.logo_url || '/assets/logo.jpg')}" alt=""><span class="brand-copy"><b>${escapeHTML(s.brand_name || 'TÂM AN')}</b><span>XE MỚI • XE CŨ • XE ĐIỆN</span></span></a>
+        <nav id="mainNav" class="main-nav">${desktopInventory}${standardLinks.map(([url, label, key]) => `<a href="${url}" class="${key === active ? 'active' : ''}">${label}</a>`).join('')}</nav>
+        <div class="header-actions"><a class="phone-pill" href="tel:${String(s.hotline || '').replace(/\s/g, '')}">☎ ${escapeHTML(s.hotline || '')}</a><button id="menuBtn" class="menu-btn v10-menu-btn" type="button" aria-label="Mở menu" aria-controls="mobileNavDrawer" aria-expanded="false"><span></span><span></span><span></span></button></div>
+      </div>${mobileDrawer}
+    </header>`;
+  };
+
+  bindFolderDropdown = function(onFolderSelect = null) {
+    const desktop = $('#inventoryDesktopMenu');
+    const drawer = $('#mobileNavDrawer');
+    if ((!desktop && !drawer) || document.documentElement.dataset.mobileMenuV10Bound === 'true') {
+      // bind selection for each fresh page even after global menu controls have been registered
+    }
+
+    const closeDrawer = () => {
+      if (!drawer) return;
+      drawer.classList.remove('is-open');
+      drawer.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('mobile-nav-lock');
+      $('#menuBtn')?.setAttribute('aria-expanded', 'false');
+    };
+    const openDrawer = () => {
+      if (!drawer) return;
+      drawer.classList.add('is-open');
+      drawer.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('mobile-nav-lock');
+      $('#menuBtn')?.setAttribute('aria-expanded', 'true');
+      setTimeout(() => $('#mobileNavSearch')?.focus(), 50);
+    };
+
+    const handleFolderClick = event => {
+      const link = event.currentTarget;
+      if (typeof onFolderSelect === 'function') {
+        event.preventDefault();
+        onFolderSelect(link.dataset.inventoryFolder || '');
+      }
+      closeDrawer();
+      desktop?.classList.remove('is-open');
+    };
+
+    $$('.inventory-v10-folder-link, .mobile-folder-link').forEach(link => {
+      if (link.dataset.v10SelectionBound === 'true') return;
+      link.dataset.v10SelectionBound = 'true';
+      link.addEventListener('click', handleFolderClick);
+    });
+    $$('.inventory-desktop-all, .mobile-inventory-all').forEach(link => {
+      if (link.dataset.v10AllBound === 'true') return;
+      link.dataset.v10AllBound = 'true';
+      link.addEventListener('click', event => {
+        if (typeof onFolderSelect === 'function') {
+          event.preventDefault();
+          onFolderSelect('');
+        }
+        closeDrawer();
+        desktop?.classList.remove('is-open');
+      });
+    });
+
+    if (desktop && desktop.dataset.v10DesktopBound !== 'true') {
+      desktop.dataset.v10DesktopBound = 'true';
+      const trigger = $('.inventory-desktop-trigger', desktop);
+      const closeDesktop = () => desktop.classList.remove('is-open');
+      trigger?.addEventListener('click', event => {
+        if (typeof onFolderSelect === 'function') {
+          event.preventDefault();
+          onFolderSelect('');
+        }
+        closeDesktop();
+      });
+      desktop.addEventListener('mouseenter', () => desktop.classList.add('is-open'));
+      desktop.addEventListener('mouseleave', closeDesktop);
+      trigger?.addEventListener('focus', () => desktop.classList.add('is-open'));
+    }
+
+    if (drawer && drawer.dataset.v10DrawerBound !== 'true') {
+      drawer.dataset.v10DrawerBound = 'true';
+      $('#mobileNavClose', drawer)?.addEventListener('click', closeDrawer);
+      $('#mobileInventoryToggle', drawer)?.addEventListener('click', () => {
+        const section = $('#mobileInventorySection', drawer);
+        const opened = section?.classList.toggle('is-open');
+        $('#mobileInventoryToggle', drawer)?.setAttribute('aria-expanded', String(Boolean(opened)));
+      });
+      $('#mobileNavSearch', drawer)?.addEventListener('input', event => {
+        const term = String(event.target.value || '').trim().toLowerCase();
+        let found = 0;
+        $$('.mobile-folder-link', drawer).forEach(link => {
+          const visible = !term || String(link.dataset.searchText || '').includes(term);
+          link.hidden = !visible;
+          if (visible) found += 1;
+        });
+        $$('.mobile-folder-group', drawer).forEach(group => {
+          group.hidden = !$$('.mobile-folder-link:not([hidden])', group).length;
+        });
+        const none = $('#mobileFolderNoResult', drawer);
+        if (none) none.hidden = Boolean(found);
+      });
+      $$('.mobile-primary-links a, .mobile-nav-brand', drawer).forEach(link => link.addEventListener('click', closeDrawer));
+    }
+
+    const menuBtn = $('#menuBtn');
+    if (menuBtn && menuBtn.dataset.v10ButtonBound !== 'true') {
+      menuBtn.dataset.v10ButtonBound = 'true';
+      // Capture blocks legacy "mainNav.mobile-open" listeners left by older patches.
+      menuBtn.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        drawer?.classList.contains('is-open') ? closeDrawer() : openDrawer();
+      }, true);
+    }
+
+    if (document.documentElement.dataset.v10GlobalMenuBound !== 'true') {
+      document.documentElement.dataset.v10GlobalMenuBound = 'true';
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+          $('#mobileNavDrawer')?.classList.remove('is-open');
+          $('#mobileNavDrawer')?.setAttribute('aria-hidden', 'true');
+          document.body.classList.remove('mobile-nav-lock');
+          $('#menuBtn')?.setAttribute('aria-expanded', 'false');
+        }
+      });
+      window.addEventListener('resize', () => {
+        if (window.innerWidth > 1219) {
+          $('#mobileNavDrawer')?.classList.remove('is-open');
+          $('#mobileNavDrawer')?.setAttribute('aria-hidden', 'true');
+          document.body.classList.remove('mobile-nav-lock');
+          $('#menuBtn')?.setAttribute('aria-expanded', 'false');
+        }
+      }, { passive:true });
+    }
+  };
+
   boot();
 })();
