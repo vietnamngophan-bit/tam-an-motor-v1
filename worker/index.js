@@ -5,6 +5,17 @@ const CATEGORIES = [
   ['electric_used', 'Xe điện cũ'],
 ];
 
+// URL folders for advertising landing pages. A collection belongs to one vehicle group,
+// for example: /xe-moi/air-blade, /xe-moi/vision, /xe-moi/winner.
+const CATEGORY_PATHS = {
+  motor_new: 'xe-moi',
+  motor_used: 'xe-cu',
+  electric_new: 'xe-dien-moi',
+  electric_used: 'xe-dien-cu',
+};
+function categoryPath(category) { return CATEGORY_PATHS[category] || 'xe-moi'; }
+function categoryFromPath(path) { return Object.entries(CATEGORY_PATHS).find(([, value]) => value === path)?.[0] || ''; }
+
 const DEFAULT_SITE = {
   brand_name: 'XE MÁY TÂM AN NOMURA',
   page_title: 'Xe Máy Tâm An Nomura | Xe mới, xe cũ, trả góp',
@@ -91,9 +102,10 @@ const DEFAULT_SITE = {
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS site_settings (id INTEGER PRIMARY KEY CHECK (id=1), data TEXT NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, full_name TEXT NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'employee', active INTEGER NOT NULL DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL, name TEXT NOT NULL, brand TEXT, category TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'in_stock', price INTEGER, old_price INTEGER, year INTEGER, mileage INTEGER, engine TEXT, documents TEXT, description TEXT, installment_from INTEGER, bad_debt_from INTEGER, images_json TEXT NOT NULL DEFAULT '[]', colors_json TEXT NOT NULL DEFAULT '[]', versions_json TEXT NOT NULL DEFAULT '[]', featured INTEGER NOT NULL DEFAULT 0, published INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_by INTEGER, updated_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL, name TEXT NOT NULL, brand TEXT, category TEXT NOT NULL, collection_slug TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'in_stock', price INTEGER, old_price INTEGER, year INTEGER, mileage INTEGER, engine TEXT, documents TEXT, description TEXT, installment_from INTEGER, bad_debt_from INTEGER, images_json TEXT NOT NULL DEFAULT '[]', colors_json TEXT NOT NULL DEFAULT '[]', versions_json TEXT NOT NULL DEFAULT '[]', featured INTEGER NOT NULL DEFAULT 0, published INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_by INTEGER, updated_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS promotions (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, content TEXT, image_url TEXT, active INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS accessories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, price INTEGER, image_url TEXT, description TEXT, published INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS landing_collections (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL, title TEXT NOT NULL, category TEXT NOT NULL DEFAULT 'motor_new', description TEXT, image_url TEXT, visible INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS policies (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL, published INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS leads (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL DEFAULT 'consultation', name TEXT NOT NULL, phone TEXT NOT NULL, note TEXT, payment_plan TEXT, down_payment TEXT, location_text TEXT, product_id INTEGER, status TEXT NOT NULL DEFAULT 'new', assigned_to INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS conversations (id INTEGER PRIMARY KEY AUTOINCREMENT, visitor_key TEXT UNIQUE NOT NULL, visitor_name TEXT, status TEXT NOT NULL DEFAULT 'open', assigned_to INTEGER, ai_count INTEGER NOT NULL DEFAULT 0, ai_day TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -101,6 +113,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, 
 CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, actor_id INTEGER, actor_name TEXT, action TEXT NOT NULL, entity_type TEXT, entity_id TEXT, detail TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS page_views (id INTEGER PRIMARY KEY AUTOINCREMENT, visitor_key TEXT, path TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category, published, status);
+CREATE INDEX IF NOT EXISTS idx_landing_collections_visible ON landing_collections(visible, category, sort_order);
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_chat_conv ON chat_messages(conversation_id, created_at);
 `;
@@ -138,12 +151,19 @@ async function ensureLeadColumns(env) {
   if (!cols.has('down_payment')) await env.DB.exec('ALTER TABLE leads ADD COLUMN down_payment TEXT');
   if (!cols.has('location_text')) await env.DB.exec('ALTER TABLE leads ADD COLUMN location_text TEXT');
 }
+async function ensureProductColumns(env) {
+  const info = await env.DB.prepare('PRAGMA table_info(products)').all();
+  const cols = new Set((info.results || []).map(row => row.name));
+  if (!cols.has('collection_slug')) await env.DB.exec("ALTER TABLE products ADD COLUMN collection_slug TEXT NOT NULL DEFAULT ''");
+}
 function slugify(s) { return safeStr(s, 160).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/đ/g, 'd').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `xe-${Date.now()}`; }
 
 async function ensureSchema(env) {
   if (!initPromise) initPromise = (async () => {
     await env.DB.exec(SCHEMA);
     await ensureLeadColumns(env);
+    await ensureProductColumns(env);
+    await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_products_collection ON products(collection_slug, published, status)');
     const existing = await env.DB.prepare('SELECT id FROM site_settings WHERE id=1').first();
     if (!existing) await env.DB.prepare('INSERT INTO site_settings (id,data) VALUES (1,?)').bind(JSON.stringify(DEFAULT_SITE)).run();
     const p = await env.DB.prepare('SELECT COUNT(*) c FROM policies').first();
@@ -237,6 +257,7 @@ function productOut(row) {
   if (!row) return null;
   return {
     ...row,
+    collection_slug: safeStr(row.collection_slug, 80),
     price:row.price==null?null:Number(row.price), old_price:row.old_price==null?null:Number(row.old_price), mileage:row.mileage==null?null:Number(row.mileage), installment_from:row.installment_from==null?null:Number(row.installment_from), bad_debt_from:row.bad_debt_from==null?null:Number(row.bad_debt_from),
     images:parseJSON(row.images_json,[]),
     colors:parseJSON(row.colors_json,[]).map(normalizeInventoryColor),
@@ -250,7 +271,37 @@ async function productPayload(req) {
   const images = Array.isArray(b.images) ? b.images.filter(x=>typeof x==='string' && x).slice(0,30) : [];
   const colors = Array.isArray(b.colors) ? b.colors.slice(0,20).map(normalizeInventoryColor).filter(c=>c.name) : [];
   const versions = Array.isArray(b.versions) ? b.versions.slice(0,20).map(normalizeInventoryVersion).filter(v=>v.name) : [];
-  return { name, slug:slugify(b.slug || name), brand:safeStr(b.brand,80), category, status:['in_stock','incoming','reserved','sold'].includes(b.status)?b.status:'in_stock', price:asNumber(b.price), old_price:asNumber(b.old_price), year:asNumber(b.year), mileage:asNumber(b.mileage), engine:safeStr(b.engine,60), documents:safeStr(b.documents,300), description:safeStr(b.description,30000), installment_from:asNumber(b.installment_from), bad_debt_from:asNumber(b.bad_debt_from), images, colors, versions, featured:b.featured?1:0, published:b.published===false?0:1, sort_order:asNumber(b.sort_order)||0 };
+  const collection_slug = safeStr(b.collection_slug,80).replace(/[^a-z0-9-]/gi,'').toLowerCase();
+  return { name, slug:slugify(b.slug || name), brand:safeStr(b.brand,80), category, collection_slug, status:['in_stock','incoming','reserved','sold'].includes(b.status)?b.status:'in_stock', price:asNumber(b.price), old_price:asNumber(b.old_price), year:asNumber(b.year), mileage:asNumber(b.mileage), engine:safeStr(b.engine,60), documents:safeStr(b.documents,300), description:safeStr(b.description,30000), installment_from:asNumber(b.installment_from), bad_debt_from:asNumber(b.bad_debt_from), images, colors, versions, featured:b.featured?1:0, published:b.published===false?0:1, sort_order:asNumber(b.sort_order)||0 };
+}
+async function validateProductCollection(env, product) {
+  if (!product.collection_slug) return;
+  const row = await env.DB.prepare('SELECT slug,category FROM landing_collections WHERE slug=?').bind(product.collection_slug).first();
+  if (!row) throw new Error('Thư mục dòng xe đã bị xoá hoặc chưa tồn tại.');
+  if (row.category !== product.category) throw new Error('Thư mục dòng xe phải thuộc đúng nhóm xe đã chọn.');
+}
+function collectionPayload(raw = {}) {
+  const title = safeStr(raw.title,100); if (!title) throw new Error('Tên dòng xe là bắt buộc.');
+  const category = safeStr(raw.category,80).replace(/[^a-z0-9_-]/gi,'') || 'motor_new';
+  if (!CATEGORIES.some(([id]) => id === category)) throw new Error('Nhóm xe không hợp lệ.');
+  return {
+    title,
+    slug: slugify(raw.slug || title),
+    category,
+    description: safeStr(raw.description,800),
+    image_url: safeStr(raw.image_url,1000),
+    visible: raw.visible === false ? 0 : 1,
+    sort_order: asNumber(raw.sort_order) || 0,
+  };
+}
+async function uniqueCollectionSlug(env, base, currentId = null) {
+  const root = slugify(base);
+  for (let i=0; i<30; i++) {
+    const candidate = i ? `${root}-${i+1}` : root;
+    const row = await env.DB.prepare('SELECT id FROM landing_collections WHERE slug=?').bind(candidate).first();
+    if (!row || Number(row.id) === Number(currentId)) return candidate;
+  }
+  return `${root}-${Date.now()}`;
 }
 async function sendNotificationEmail(env, subject, html) {
   if (!env.RESEND_API_KEY || !env.NOTIFY_EMAIL) return;
@@ -281,19 +332,21 @@ function q(url,k){return url.searchParams.get(k)||''}
 async function publicApi(req, env, url) {
   if (url.pathname === '/api/health') return json({ok:true,status:'ready'});
   if (url.pathname === '/api/site') {
-    const [site, cats, promos, accessories, policies] = await Promise.all([
+    const [site, cats, promos, accessories, policies, collections] = await Promise.all([
       getSite(env),
       env.DB.prepare("SELECT category,COUNT(*) count FROM products WHERE published=1 GROUP BY category").all(),
       env.DB.prepare('SELECT * FROM promotions WHERE active=1 ORDER BY sort_order,id DESC').all(),
       env.DB.prepare('SELECT * FROM accessories WHERE published=1 ORDER BY sort_order,id DESC').all(),
       env.DB.prepare('SELECT id,slug,title,sort_order FROM policies WHERE published=1 ORDER BY sort_order,id').all(),
+      env.DB.prepare("SELECT c.*,COUNT(p.id) product_count FROM landing_collections c LEFT JOIN products p ON p.collection_slug=c.slug AND p.category=c.category AND p.published=1 WHERE c.visible=1 GROUP BY c.id ORDER BY c.sort_order,c.id").all(),
     ]);
-    return json({ok:true,site,categories:cats.results||[],promotions:promos.results||[],accessories:accessories.results||[],policies:policies.results||[]});
+    return json({ok:true,site,categories:cats.results||[],promotions:promos.results||[],accessories:accessories.results||[],policies:policies.results||[],collections:collections.results||[]});
   }
   if (url.pathname === '/api/products') {
-    const category=q(url,'category'); const search=safeStr(q(url,'search'),100).toLowerCase(); const status=q(url,'status');
+    const category=q(url,'category'); const collection=q(url,'collection'); const search=safeStr(q(url,'search'),100).toLowerCase(); const status=q(url,'status');
     let sql='SELECT * FROM products WHERE published=1'; const binds=[];
     if (category && /^[a-z0-9_-]{1,80}$/i.test(category)) { sql+=' AND category=?'; binds.push(category); }
+    if (collection && /^[a-z0-9-]{1,80}$/i.test(collection)) { sql+=' AND collection_slug=?'; binds.push(collection); }
     if (status && ['in_stock','incoming','reserved','sold'].includes(status)) { sql+=' AND status=?'; binds.push(status); }
     const rows=(await env.DB.prepare(sql+' ORDER BY featured DESC,sort_order,id DESC').bind(...binds).all()).results||[];
     let data=rows.map(productOut);
@@ -307,6 +360,10 @@ async function publicApi(req, env, url) {
     const product=productOut(row);
     const related=(await env.DB.prepare('SELECT * FROM products WHERE published=1 AND id<>? AND category=? ORDER BY featured DESC,sort_order,id DESC LIMIT 6').bind(row.id,row.category).all()).results.map(productOut);
     return json({ok:true,product,related});
+  }
+  if (url.pathname === '/api/collections' && req.method==='GET') {
+    const rows = (await env.DB.prepare("SELECT c.*,COUNT(p.id) product_count FROM landing_collections c LEFT JOIN products p ON p.collection_slug=c.slug AND p.category=c.category AND p.published=1 WHERE c.visible=1 GROUP BY c.id ORDER BY c.sort_order,c.id").all()).results || [];
+    return json({ok:true,collections:rows});
   }
   if (url.pathname === '/api/policies' && req.method==='GET') { return json({ok:true,policies:(await env.DB.prepare('SELECT * FROM policies WHERE published=1 ORDER BY sort_order,id').all()).results||[]}); }
   if (url.pathname.startsWith('/api/policies/') && req.method==='GET') { const slug=decodeURIComponent(url.pathname.slice('/api/policies/'.length)); const row=await env.DB.prepare('SELECT * FROM policies WHERE slug=? AND published=1').bind(slug).first(); return row?json({ok:true,policy:row}):json({ok:false,error:'Không tìm thấy bài viết'},404); }
@@ -636,12 +693,49 @@ async function adminApi(req, env, url, user) {
     if(!env.IMAGES)return json({ok:false,error:'Chưa cấu hình R2 bucket IMAGES.'},500); const form=await req.formData(); const file=form.get('file'); if(!(file instanceof File))return json({ok:false,error:'Chưa chọn ảnh.'},400); if(file.size>8*1024*1024)return json({ok:false,error:'Ảnh tối đa 8MB.'},400); if(!file.type.startsWith('image/'))return json({ok:false,error:'Chỉ nhận ảnh.'},400);
     const ext=(file.name.split('.').pop()||'jpg').replace(/[^a-z0-9]/gi,'').slice(0,8);const key=`uploads/${Date.now()}-${crypto.randomUUID().slice(0,8)}.${ext}`; await env.IMAGES.put(key,file.stream(),{httpMetadata:{contentType:file.type}}); return json({ok:true,url:`/media/${key}`});
   }
+  if(url.pathname==='/api/admin/collections'){
+    if(req.method==='GET') {
+      const rows=(await env.DB.prepare("SELECT c.*,COUNT(p.id) product_count FROM landing_collections c LEFT JOIN products p ON p.collection_slug=c.slug AND p.category=c.category GROUP BY c.id ORDER BY c.sort_order,c.id").all()).results||[];
+      return json({ok:true,collections:rows});
+    }
+    if(user.role!=='admin') return json({ok:false,error:'Chỉ admin được quản lý thư mục dòng xe.'},403);
+    if(req.method==='POST') {
+      const b=await req.json(); const c=collectionPayload(b); c.slug=await uniqueCollectionSlug(env,c.slug);
+      const r=await env.DB.prepare('INSERT INTO landing_collections(slug,title,category,description,image_url,visible,sort_order) VALUES (?,?,?,?,?,?,?)').bind(c.slug,c.title,c.category,c.description,c.image_url,c.visible,c.sort_order).run();
+      await log(env,user,'Tạo thư mục dòng xe','collection',r.meta.last_row_id,`${c.title} • /${categoryPath(c.category)}/${c.slug}`);
+      return json({ok:true,id:r.meta.last_row_id,collection:{...c,id:r.meta.last_row_id}});
+    }
+  }
+  const collectionMatch=url.pathname.match(/^\/api\/admin\/collections\/(\d+)$/);
+  if(collectionMatch){
+    if(user.role!=='admin') return json({ok:false,error:'Chỉ admin được quản lý thư mục dòng xe.'},403);
+    const id=Number(collectionMatch[1]);
+    const existing=await env.DB.prepare('SELECT * FROM landing_collections WHERE id=?').bind(id).first();
+    if(!existing) return json({ok:false,error:'Không tìm thấy thư mục dòng xe.'},404);
+    if(req.method==='PUT') {
+      const b=await req.json(); const c=collectionPayload(b); c.slug=await uniqueCollectionSlug(env,c.slug,id);
+      if (existing.category !== c.category) {
+        const linked = await env.DB.prepare('SELECT COUNT(*) c FROM products WHERE collection_slug=?').bind(existing.slug).first();
+        if (Number(linked?.c || 0) > 0) return json({ok:false,error:'Không thể đổi nhóm xe khi thư mục đang có xe. Hãy bỏ/gán lại xe trước.'},400);
+      }
+      if (existing.slug !== c.slug) await env.DB.prepare('UPDATE products SET collection_slug=? WHERE collection_slug=?').bind(c.slug,existing.slug).run();
+      await env.DB.prepare('UPDATE landing_collections SET slug=?,title=?,category=?,description=?,image_url=?,visible=?,sort_order=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(c.slug,c.title,c.category,c.description,c.image_url,c.visible,c.sort_order,id).run();
+      await log(env,user,'Cập nhật thư mục dòng xe','collection',id,`${c.title} • /${categoryPath(c.category)}/${c.slug}`);
+      return json({ok:true,collection:{...c,id}});
+    }
+    if(req.method==='DELETE') {
+      await env.DB.prepare("UPDATE products SET collection_slug='' WHERE collection_slug=?").bind(existing.slug).run();
+      await env.DB.prepare('DELETE FROM landing_collections WHERE id=?').bind(id).run();
+      await log(env,user,'Xoá thư mục dòng xe','collection',id,existing.title);
+      return json({ok:true});
+    }
+  }
   if(url.pathname==='/api/admin/products'){
     if(req.method==='GET'){const rows=(await env.DB.prepare('SELECT * FROM products ORDER BY updated_at DESC,id DESC').all()).results||[];return json({ok:true,products:rows.map(productOut)});}
-    if(req.method==='POST'){if(!can(user,'product:create'))return json({ok:false,error:'Bạn không có quyền thêm xe.'},403);const p=await productPayload(req); const slug=await uniqueSlug(env,p.slug); const r=await env.DB.prepare('INSERT INTO products(slug,name,brand,category,status,price,old_price,year,mileage,engine,documents,description,installment_from,bad_debt_from,images_json,colors_json,versions_json,featured,published,sort_order,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(slug,p.name,p.brand,p.category,p.status,p.price,p.old_price,p.year,p.mileage,p.engine,p.documents,p.description,p.installment_from,p.bad_debt_from,JSON.stringify(p.images),JSON.stringify(p.colors),JSON.stringify(p.versions),p.featured,p.published,p.sort_order,user.id,user.id).run();await log(env,user,'Thêm sản phẩm','product',r.meta.last_row_id,p.name);return json({ok:true,id:r.meta.last_row_id});}
+    if(req.method==='POST'){if(!can(user,'product:create'))return json({ok:false,error:'Bạn không có quyền thêm xe.'},403);const p=await productPayload(req); await validateProductCollection(env,p); const slug=await uniqueSlug(env,p.slug); const r=await env.DB.prepare('INSERT INTO products(slug,name,brand,category,collection_slug,status,price,old_price,year,mileage,engine,documents,description,installment_from,bad_debt_from,images_json,colors_json,versions_json,featured,published,sort_order,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(slug,p.name,p.brand,p.category,p.collection_slug,p.status,p.price,p.old_price,p.year,p.mileage,p.engine,p.documents,p.description,p.installment_from,p.bad_debt_from,JSON.stringify(p.images),JSON.stringify(p.colors),JSON.stringify(p.versions),p.featured,p.published,p.sort_order,user.id,user.id).run();await log(env,user,'Thêm sản phẩm','product',r.meta.last_row_id,p.name);return json({ok:true,id:r.meta.last_row_id});}
   }
   const prodMatch=url.pathname.match(/^\/api\/admin\/products\/(\d+)$/);
-  if(prodMatch){const id=Number(prodMatch[1]);if(req.method==='PUT'){if(!can(user,'product:update'))return json({ok:false,error:'Bạn không có quyền sửa xe.'},403);const p=await productPayload(req);const slug=await uniqueSlug(env,p.slug,id);await env.DB.prepare('UPDATE products SET slug=?,name=?,brand=?,category=?,status=?,price=?,old_price=?,year=?,mileage=?,engine=?,documents=?,description=?,installment_from=?,bad_debt_from=?,images_json=?,colors_json=?,versions_json=?,featured=?,published=?,sort_order=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(slug,p.name,p.brand,p.category,p.status,p.price,p.old_price,p.year,p.mileage,p.engine,p.documents,p.description,p.installment_from,p.bad_debt_from,JSON.stringify(p.images),JSON.stringify(p.colors),JSON.stringify(p.versions),p.featured,p.published,p.sort_order,user.id,id).run();await log(env,user,'Cập nhật sản phẩm','product',id,p.name);return json({ok:true});}
+  if(prodMatch){const id=Number(prodMatch[1]);if(req.method==='PUT'){if(!can(user,'product:update'))return json({ok:false,error:'Bạn không có quyền sửa xe.'},403);const p=await productPayload(req);await validateProductCollection(env,p);const slug=await uniqueSlug(env,p.slug,id);await env.DB.prepare('UPDATE products SET slug=?,name=?,brand=?,category=?,collection_slug=?,status=?,price=?,old_price=?,year=?,mileage=?,engine=?,documents=?,description=?,installment_from=?,bad_debt_from=?,images_json=?,colors_json=?,versions_json=?,featured=?,published=?,sort_order=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(slug,p.name,p.brand,p.category,p.collection_slug,p.status,p.price,p.old_price,p.year,p.mileage,p.engine,p.documents,p.description,p.installment_from,p.bad_debt_from,JSON.stringify(p.images),JSON.stringify(p.colors),JSON.stringify(p.versions),p.featured,p.published,p.sort_order,user.id,id).run();await log(env,user,'Cập nhật sản phẩm','product',id,p.name);return json({ok:true});}
     if(req.method==='DELETE'){if(user.role!=='admin')return json({ok:false,error:'Chỉ chủ cửa hàng được xoá sản phẩm.'},403);await env.DB.prepare('DELETE FROM products WHERE id=?').bind(id).run();await log(env,user,'Xoá sản phẩm','product',id);return json({ok:true});}
   }
   if(url.pathname==='/api/admin/promotions'){
@@ -725,7 +819,7 @@ function moneyForShare(value) {
   return Number.isFinite(n) && n > 0 ? `${n.toLocaleString('vi-VN')}đ` : '';
 }
 function escMeta(value = '') { return escapeHtml(String(value || '')); }
-function socialMeta(req, site, product = null) {
+function socialMeta(req, site, product = null, collection = null) {
   const url = new URL(req.url);
   const canonical = new URL(url.origin);
   let title = site.share_title || site.page_title || site.brand_name || 'Xe Máy Tâm An';
@@ -740,6 +834,12 @@ function socialMeta(req, site, product = null) {
     description = `${prefix}${product.description ? ` — ${textForShare(product.description, 150)}` : ''}`.slice(0, 280);
     image = shareProductImage(product) || image;
     type = 'product';
+  }
+  if (collection) {
+    canonical.pathname = `/${categoryPath(collection.category)}/${encodeURIComponent(collection.slug)}`;
+    title = `${collection.title} | ${site.brand_name || 'Xe Máy Tâm An'}`;
+    description = collection.description || `Xem các mẫu ${collection.title} đang có tại ${site.brand_name || 'Xe Máy Tâm An'}.`;
+    image = collection.image_url || image;
   }
   image = absoluteShareUrl(url.origin, image);
   const tags = [
@@ -768,13 +868,19 @@ async function serveWithShareMeta(req, env, url) {
   if (req.method !== 'GET' || !type.includes('text/html')) return asset;
   const site = await getSite(env);
   const pathMatch = url.pathname.match(/^\/xe\/([^/]+)$/);
+  const collectionMatch = url.pathname.match(/^\/(xe-moi|xe-cu|xe-dien-moi|xe-dien-cu)\/([^/]+)$/);
   const slug = safeStr(url.searchParams.get('xe') || pathMatch?.[1] || '', 180);
   let product = null;
+  let collection = null;
   if (slug) {
     const row = await env.DB.prepare('SELECT * FROM products WHERE slug=? AND published=1').bind(decodeURIComponent(slug)).first();
     product = productOut(row);
   }
-  const meta = socialMeta(req, site, product);
+  if (collectionMatch) {
+    const category = categoryFromPath(collectionMatch[1]);
+    collection = await env.DB.prepare('SELECT * FROM landing_collections WHERE slug=? AND category=? AND visible=1').bind(decodeURIComponent(collectionMatch[2]),category).first();
+  }
+  const meta = socialMeta(req, site, product, collection);
   const html = await asset.text();
   const clean = html
     .replace(/<meta\s+(?:property|name)=["'](?:og:[^"']+|twitter:[^"']+|description)["'][^>]*>\s*/gi, '')
