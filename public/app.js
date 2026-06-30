@@ -250,8 +250,8 @@
     const status = color.availability || 'in_stock';
     const quantity = color.stock_quantity === '' || color.stock_quantity === undefined || color.stock_quantity === null ? null : Number(color.stock_quantity);
     if (status === 'out_of_stock') return 'Tạm hết';
-    if (status === 'incoming') return Number.isFinite(quantity) && quantity > 0 ? `Về ${Math.max(0, Math.floor(quantity))}` : 'Sắp về';
-    return Number.isFinite(quantity) ? `Sẵn ${Math.max(0, Math.floor(quantity))}` : 'Sẵn kho';
+    if (status === 'incoming') return Number.isFinite(quantity) && quantity > 0 ? `Sắp về · ${Math.max(0, Math.floor(quantity))}` : 'Sắp về';
+    return Number.isFinite(quantity) ? `Còn ${Math.max(0, Math.floor(quantity))}` : 'Sẵn kho';
   }
   function colorStockClass(color = {}) { return `stock-${String(color.availability || 'in_stock').replace(/[^a-z_]/g, '')}`; }
   function inventorySummary(product = {}) {
@@ -582,7 +582,7 @@
       <div class="product-body"><div class="product-meta">${escapeHTML(product.brand || 'TÂM AN')} • ${escapeHTML(categoryLabel(product.category))}</div><h3>${escapeHTML(product.name)}</h3>
       <div class="product-details">${product.year ? `<span class="mini-tag">${product.year}</span>` : ''}${product.engine ? `<span class="mini-tag">${escapeHTML(product.engine)}</span>` : ''}</div>
       <div class="price-line">${product.price ? `<span class="price">${money(product.price)}</span>${product.old_price ? `<span class="old-price">${money(product.old_price)}</span>` : ''}` : `<span class="price-hidden">Liên hệ nhận giá</span>`}</div>
-      ${colors.length ? `<div class="color-dots paint-preview-row">${colors.map(c => `<button class="paint-preview preview-color ${colorStockClass(c)}" data-image="${escapeHTML(c.images?.[0] || productImage(product))}" title="${escapeHTML(`${c.name} — ${colorStockText(c)}`)}">${paletteStrip(c)}<span class="paint-preview-copy"><b>${escapeHTML(c.name)}</b><small><i class="availability-dot" aria-hidden="true"></i>${escapeHTML(colorCardStockText(c))}</small></span></button>`).join('')}</div>` : ''}
+      ${colors.length ? `<div class="color-dots paint-preview-row">${colors.map(c => `<button class="paint-preview preview-color ${colorStockClass(c)}" data-image="${escapeHTML(c.images?.[0] || productImage(product))}" title="${escapeHTML(`${c.name} — ${colorStockText(c)}`)}">${paletteStrip(c)}<span class="paint-preview-copy"><b>${escapeHTML(c.name)}</b><small>${escapeHTML(colorCardStockText(c))}</small></span></button>`).join('')}</div>` : ''}
       <div class="product-cta"><button class="btn btn-ghost open-product" data-slug="${escapeHTML(product.slug)}">Xem chi tiết</button><button class="btn btn-primary lead-button" data-product="${product.id}" data-name="${escapeHTML(product.name)}">Giữ xe</button></div></div>
     </article>`;
   }
@@ -1578,7 +1578,7 @@
   }
   function locationConsentField() {
     if (state.site?.location_capture_enabled !== true && state.site?.location_capture_enabled !== 'true') return '';
-    return `<div class="field full location-consent"><label class="consent-control"><input name="location_consent" type="checkbox"><span class="consent-box" aria-hidden="true">✓</span><span><b>${escapeHTML(state.site.location_consent_text || 'Tôi đồng ý chia sẻ vị trí gần đúng để Tâm An tư vấn giao xe thuận tiện hơn.')}</b><small>Chỉ lấy vị trí khi bạn tự đồng ý. Có thể từ chối mà vẫn gửi yêu cầu bình thường.</small></span></label></div>`;
+    return `<div class="field full location-consent"><label class="consent-control"><input class="consent-input" name="location_consent" type="checkbox"><span class="consent-box" aria-hidden="true">✓</span><span class="consent-copy"><b>${escapeHTML(state.site.location_consent_text || 'Tôi đồng ý chia sẻ vị trí gần đúng để Tâm An tư vấn giao xe thuận tiện hơn.')}</b><small>Chỉ lấy vị trí khi bạn tự đồng ý. Có thể từ chối mà vẫn gửi yêu cầu bình thường.</small></span></label></div>`;
   }
   function manualLocationField() {
     return `<div class="field full"><label>Khu vực đang ở <span class="muted">(không bắt buộc)</span></label><input name="customer_location" maxlength="180" autocomplete="address-level2" placeholder="Ví dụ: Cái Dầu, Châu Phú, An Giang"><small class="field-help">Nhân viên sẽ thấy khu vực này trong Form khách hàng. Bạn có thể nhập tay hoặc bật chia sẻ vị trí gần đúng bên dưới.</small></div>`;
