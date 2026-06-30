@@ -2848,5 +2848,280 @@
     }
   };
 
+  /* ==================================================================
+     V11 — Kho xe dạng menu thư mục thực sự
+     - Desktop: rê chuột vào “Kho xe” là chọn ngay Air Blade / Vision…
+     - Mobile: menu full màn hình, nút mở/đóng và thư mục hoạt động độc lập.
+     - Trang kho: chỉ gợi ý bằng chip gọn, không lôi landing/card lên web tổng.
+     ================================================================== */
+  function v11CollectionsByCategory() {
+    return categoryDefinitions()
+      .map(category => ({ ...category, items: publicCollections().filter(item => item.category === category.id) }))
+      .filter(group => group.items.length);
+  }
+
+  function v11DesktopFoldersMarkup() {
+    const groups = v11CollectionsByCategory();
+    if (!groups.length) return '<p class="v11-menu-empty">Kho xe đang được cập nhật.</p>';
+    return groups.map(group => `<section class="v11-desktop-group">
+      <span class="v11-desktop-group-label">${escapeHTML(group.label)}</span>
+      <div class="v11-desktop-folder-list">${group.items.map(item => {
+        const amount = productsInCollection(item).length;
+        return `<a class="v11-folder-link" data-inventory-folder="${escapeHTML(item.slug)}" href="${escapeHTML(inventoryFolderHref(item))}"><b>${escapeHTML(item.title)}</b><small>${amount ? `${amount} xe` : 'Mới'}</small><i aria-hidden="true">›</i></a>`;
+      }).join('')}</div>
+    </section>`).join('');
+  }
+
+  function v11MobileFoldersMarkup() {
+    const groups = v11CollectionsByCategory();
+    if (!groups.length) return '<p class="v11-mobile-empty">Kho xe đang được cập nhật.</p>';
+    return groups.map(group => `<section class="v11-mobile-group">
+      <h3>${escapeHTML(group.label)}</h3>
+      <div>${group.items.map(item => {
+        const amount = productsInCollection(item).length;
+        return `<a class="v11-mobile-folder-link" data-inventory-folder="${escapeHTML(item.slug)}" href="${escapeHTML(inventoryFolderHref(item))}" data-folder-search="${escapeHTML(`${item.title} ${group.label}`.toLowerCase())}"><b>${escapeHTML(item.title)}</b><small>${amount ? `${amount} xe đang có` : 'Đang cập nhật'}</small><i aria-hidden="true">›</i></a>`;
+      }).join('')}</div>
+    </section>`).join('');
+  }
+
+  nav = function(active = '') {
+    const s = state.site || {};
+    const standardLinks = [
+      ['/#promo', 'Khuyến mại', 'promo'],
+      ...(state.accessories?.length ? [['/#accessories', 'Phụ kiện', 'accessories']] : []),
+      ['/tra-gop', 'Trả góp', 'finance'],
+      ['/#showroom', 'Showroom', 'showroom']
+    ];
+    const desktopInventory = `<div id="inventoryDesktopMenu" class="v11-desktop-inventory ${active === 'inventory' ? 'active' : ''}">
+      <a class="v11-desktop-trigger" href="/#inventory" aria-haspopup="true"><span>Kho xe</span><i aria-hidden="true">⌄</i></a>
+      <div class="v11-desktop-panel" role="navigation" aria-label="Chọn dòng xe trong kho">
+        <div class="v11-desktop-panel-title"><span>KHO XE</span><b>Chọn dòng xe đang quan tâm</b></div>
+        <div class="v11-desktop-groups">${v11DesktopFoldersMarkup()}</div>
+        <a class="v11-desktop-all" data-inventory-all href="/#inventory"><span>☷</span> Xem tất cả xe <i aria-hidden="true">→</i></a>
+      </div>
+    </div>`;
+
+    const mobileDrawer = `<aside id="mobileNavDrawer" class="v11-mobile-drawer" aria-hidden="true">
+      <div class="v11-mobile-bar">
+        <a class="v11-mobile-brand" href="/" aria-label="Về trang chủ"><img src="${escapeHTML(s.logo_url || '/assets/logo.jpg')}" alt=""><span><b>${escapeHTML(s.brand_name || 'XE MÁY TÂM AN')}</b><small>XE MỚI • XE CŨ • XE ĐIỆN</small></span></a>
+        <button id="mobileNavClose" class="v11-mobile-close" type="button" aria-label="Đóng menu">×</button>
+      </div>
+      <div class="v11-mobile-content">
+        <label class="v11-mobile-search"><span class="sr-only">Tìm dòng xe</span><input id="mobileNavSearch" type="search" autocomplete="off" placeholder="Nhập tên dòng xe để tìm"><i aria-hidden="true">⌕</i></label>
+        <section id="mobileInventorySection" class="v11-mobile-inventory is-open">
+          <button id="mobileInventoryToggle" type="button" class="v11-mobile-inventory-title" aria-expanded="true"><span>Kho xe</span><i aria-hidden="true">⌃</i></button>
+          <div class="v11-mobile-inventory-body">
+            <a class="v11-mobile-all" data-inventory-all href="/#inventory"><span>☷</span><b>Xem tất cả xe</b><i aria-hidden="true">›</i></a>
+            <div id="mobileFolderGroups" class="v11-mobile-folder-groups">${v11MobileFoldersMarkup()}</div>
+            <p id="mobileFolderNoResult" class="v11-mobile-no-result" hidden>Chưa có dòng xe phù hợp.</p>
+          </div>
+        </section>
+        <nav class="v11-mobile-links" aria-label="Điều hướng">
+          ${standardLinks.map(([url, label, key]) => `<a class="${key === active ? 'active' : ''}" href="${url}"><span>${label}</span><i aria-hidden="true">›</i></a>`).join('')}
+        </nav>
+        <a class="v11-mobile-hotline" href="tel:${String(s.hotline || '').replace(/\s/g, '')}"><span>☎</span><b>Gọi tư vấn</b><strong>${escapeHTML(s.hotline || '')}</strong></a>
+      </div>
+    </aside>`;
+
+    return `<header class="site-header v11-header">
+      <div class="topbar"><div class="container topbar-inner"><span>${escapeHTML(s.address || '')}</span><a href="tel:${String(s.hotline || '').replace(/\s/g, '')}">☎ ${escapeHTML(s.hotline || '')}</a></div></div>
+      <div class="container nav">
+        <a class="brand" href="/"><img class="brand-logo" src="${escapeHTML(s.logo_url || '/assets/logo.jpg')}" alt=""><span class="brand-copy"><b>${escapeHTML(s.brand_name || 'TÂM AN')}</b><span>XE MỚI • XE CŨ • XE ĐIỆN</span></span></a>
+        <nav id="mainNav" class="main-nav v11-main-nav">${desktopInventory}${standardLinks.map(([url, label, key]) => `<a href="${url}" class="${key === active ? 'active' : ''}">${label}</a>`).join('')}</nav>
+        <div class="header-actions"><a class="phone-pill" href="tel:${String(s.hotline || '').replace(/\s/g, '')}">☎ ${escapeHTML(s.hotline || '')}</a><button id="menuBtn" class="menu-btn v11-menu-btn" type="button" aria-label="Mở menu" aria-controls="mobileNavDrawer" aria-expanded="false"><span></span><span></span><span></span></button></div>
+      </div>${mobileDrawer}
+    </header>`;
+  };
+
+  bindFolderDropdown = function(onFolderSelect = null) {
+    const desktop = $('#inventoryDesktopMenu');
+    const drawer = $('#mobileNavDrawer');
+    const menuButton = $('#menuBtn');
+    if (!desktop && !drawer) return;
+
+    const closeDrawer = () => {
+      if (!drawer) return;
+      drawer.classList.remove('is-open');
+      drawer.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('v11-menu-open');
+      menuButton?.setAttribute('aria-expanded', 'false');
+    };
+    const openDrawer = () => {
+      if (!drawer) return;
+      drawer.classList.add('is-open');
+      drawer.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('v11-menu-open');
+      menuButton?.setAttribute('aria-expanded', 'true');
+      window.setTimeout(() => $('#mobileNavSearch', drawer)?.focus(), 120);
+    };
+    const select = event => {
+      const item = event.currentTarget;
+      if (typeof onFolderSelect === 'function') {
+        event.preventDefault();
+        onFolderSelect(item.dataset.inventoryFolder || '');
+      }
+      closeDrawer();
+    };
+
+    $$('.v11-folder-link, .v11-mobile-folder-link').forEach(link => {
+      if (link.dataset.v11Bound) return;
+      link.dataset.v11Bound = '1';
+      link.addEventListener('click', select);
+    });
+    $$('[data-inventory-all]').forEach(link => {
+      if (link.dataset.v11Bound) return;
+      link.dataset.v11Bound = '1';
+      link.addEventListener('click', event => {
+        if (typeof onFolderSelect === 'function') {
+          event.preventDefault();
+          onFolderSelect('');
+        }
+        closeDrawer();
+      });
+    });
+
+    if (menuButton && !menuButton.dataset.v11Bound) {
+      menuButton.dataset.v11Bound = '1';
+      // Capture phase prevents old menu code from toggling a second menu layer.
+      menuButton.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        drawer?.classList.contains('is-open') ? closeDrawer() : openDrawer();
+      }, true);
+    }
+    if (drawer && !drawer.dataset.v11Bound) {
+      drawer.dataset.v11Bound = '1';
+      $('#mobileNavClose', drawer)?.addEventListener('click', closeDrawer);
+      $('#mobileInventoryToggle', drawer)?.addEventListener('click', () => {
+        const section = $('#mobileInventorySection', drawer);
+        const isOpen = section?.classList.toggle('is-open');
+        $('#mobileInventoryToggle', drawer)?.setAttribute('aria-expanded', String(Boolean(isOpen)));
+      });
+      $('#mobileNavSearch', drawer)?.addEventListener('input', event => {
+        const query = String(event.target.value || '').trim().toLowerCase();
+        let visible = 0;
+        $$('.v11-mobile-folder-link', drawer).forEach(link => {
+          const matches = !query || String(link.dataset.folderSearch || '').includes(query);
+          link.hidden = !matches;
+          if (matches) visible += 1;
+        });
+        $$('.v11-mobile-group', drawer).forEach(group => {
+          group.hidden = !$$('.v11-mobile-folder-link:not([hidden])', group).length;
+        });
+        const noResult = $('#mobileFolderNoResult', drawer);
+        if (noResult) noResult.hidden = visible > 0;
+      });
+      $$('.v11-mobile-links a, .v11-mobile-brand', drawer).forEach(link => link.addEventListener('click', closeDrawer));
+    }
+    if (desktop && !desktop.dataset.v11Bound) {
+      desktop.dataset.v11Bound = '1';
+      const trigger = $('.v11-desktop-trigger', desktop);
+      trigger?.addEventListener('keydown', event => {
+        if (event.key === 'Escape') trigger.blur();
+      });
+    }
+    if (!window.__v11MenuGlobalBound) {
+      window.__v11MenuGlobalBound = true;
+      document.addEventListener('keydown', event => { if (event.key === 'Escape') $('#mobileNavClose')?.click(); });
+      window.addEventListener('resize', () => { if (window.innerWidth >= 1024) $('#mobileNavClose')?.click(); }, { passive:true });
+    }
+  };
+
+  bindHomeEvents = function() {
+    $('.public-inventory-explorer')?.remove();
+    const inventory = $('#inventory');
+    if (!inventory) return;
+    const counts = Object.fromEntries((state.categories || []).map(item => [item.category, Number(item.count || 0)]));
+    const visibleCategories = categoryDefinitions().filter(item => item.visible && Number(counts[item.id] || 0) > 0);
+    const categories = visibleCategories.length ? visibleCategories : categoryDefinitions().filter(item => item.visible);
+    const chips = $('#categoryChips');
+    const categoryGrid = $('.category-grid');
+    if (categoryGrid) categoryGrid.innerHTML = categories.map(category => `<a href="/#inventory" class="category-card filter-category" data-category="${escapeHTML(category.id)}"><b>${escapeHTML(category.label)}</b><span>${counts[category.id] || 0} xe đang hiển thị</span><i>${escapeHTML(category.icon)}</i></a>`).join('');
+    if (chips) chips.innerHTML = `<button class="chip active" data-category="">Tất cả xe</button>${categories.map(category => `<button class="chip" data-category="${escapeHTML(category.id)}">${escapeHTML(category.label)}</button>`).join('')}`;
+
+    $('#catalogFilters')?.remove();
+    $('#inventoryActiveFolder')?.remove();
+    $('#inventoryFolderSuggestions')?.remove();
+    chips?.insertAdjacentHTML('afterend', `<div id="inventoryFolderSuggestions" class="inventory-folder-suggestions" aria-label="Gợi ý dòng xe"><div class="inventory-folder-suggestion-head"><span>GỢI Ý DÒNG XE</span><p id="inventoryFolderSuggestionText">Chọn nhanh dòng xe đang quan tâm</p></div><div id="inventoryFolderSuggestionList" class="inventory-folder-suggestion-list"></div></div><div id="inventoryActiveFolder" class="inventory-active-folder" hidden><span>Đang xem</span><b id="inventoryActiveFolderName"></b><button type="button" id="clearInventoryFolder" aria-label="Bỏ lọc">×</button></div>`);
+
+    const queryFolder = new URLSearchParams(location.search).get('kho') || '';
+    const firstCategory = categories[0]?.id || '';
+    const selectedCollection = publicCollections().find(item => item.slug === queryFolder) || null;
+    let activeCategory = selectedCollection?.category || '';
+    let activeFolder = selectedCollection?.slug || '';
+
+    const updateUrl = folder => {
+      const url = new URL(location.href);
+      url.searchParams.delete('kho');
+      if (folder) url.searchParams.set('kho', folder);
+      url.hash = 'inventory';
+      history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    };
+    const currentCollection = () => publicCollections().find(item => item.slug === activeFolder) || null;
+    const filteredProducts = () => {
+      const search = $('#searchInput')?.value || '';
+      return (state.products || []).filter(product => {
+        if (product.published === 0) return false;
+        if (activeCategory && product.category !== activeCategory) return false;
+        if (activeFolder && product.collection_slug !== activeFolder) return false;
+        return fuzzyMatch(product, search);
+      });
+    };
+    const renderSuggestions = () => {
+      const list = $('#inventoryFolderSuggestionList');
+      const text = $('#inventoryFolderSuggestionText');
+      if (!list) return;
+      const relevant = publicCollections().filter(item => !activeCategory || item.category === activeCategory);
+      const categoryName = activeCategory ? categoryLabel(activeCategory) : 'tất cả nhóm xe';
+      if (text) text.textContent = relevant.length ? `Đang có ${relevant.length} dòng xe trong ${categoryName}` : 'Chưa có dòng xe được tạo';
+      list.innerHTML = `<button type="button" class="inventory-folder-suggestion ${!activeFolder ? 'active' : ''}" data-folder="" aria-pressed="${!activeFolder}"><span class="inventory-folder-suggestion-dot"></span><b>Tất cả</b></button>${relevant.map(item => `<button type="button" class="inventory-folder-suggestion ${activeFolder === item.slug ? 'active' : ''}" data-folder="${escapeHTML(item.slug)}" aria-pressed="${activeFolder === item.slug}"><span class="inventory-folder-suggestion-dot"></span><b>${escapeHTML(item.title)}</b><small>${productsInCollection(item).length || 0}</small></button>`).join('') || '<span class="inventory-folder-no-items">Đang cập nhật dòng xe.</span>'}`;
+      $$('.inventory-folder-suggestion', list).forEach(button => button.addEventListener('click', () => selectFolder(button.dataset.folder || '')));
+    };
+    const render = () => {
+      const items = filteredProducts();
+      const row = $('#productRow');
+      if (row) row.innerHTML = items.map(card).join('') || '<div class="admin-empty">Không tìm thấy xe phù hợp.</div>';
+      const count = $('#productCount');
+      if (count) count.textContent = `${items.length} xe phù hợp`;
+      $$('#categoryChips .chip').forEach(button => button.classList.toggle('active', button.dataset.category === activeCategory));
+      const activeBar = $('#inventoryActiveFolder');
+      const selected = currentCollection();
+      if (activeBar) {
+        activeBar.hidden = !selected;
+        $('#inventoryActiveFolderName').textContent = selected?.title || '';
+      }
+      renderSuggestions();
+      bindProductEvents();
+    };
+    const selectCategory = category => {
+      activeCategory = category || '';
+      activeFolder = '';
+      updateUrl('');
+      render();
+    };
+    const selectFolder = folder => {
+      const collection = publicCollections().find(item => item.slug === folder) || null;
+      activeFolder = collection?.slug || '';
+      if (collection) activeCategory = collection.category;
+      updateUrl(activeFolder);
+      render();
+      inventory.scrollIntoView({ behavior:'smooth', block:'start' });
+    };
+
+    $('#searchInput')?.addEventListener('input', render);
+    $$('#categoryChips .chip').forEach(button => button.addEventListener('click', () => selectCategory(button.dataset.category || '')));
+    $$('.filter-category').forEach(link => link.addEventListener('click', event => { event.preventDefault(); selectCategory(link.dataset.category || ''); inventory.scrollIntoView({ behavior:'smooth', block:'start' }); }));
+    $('#clearInventoryFolder')?.addEventListener('click', () => selectCategory(activeCategory));
+    $('#slideLeft')?.addEventListener('click', () => $('#productRow')?.scrollBy({ left:-340, behavior:'smooth' }));
+    $('#slideRight')?.addEventListener('click', () => $('#productRow')?.scrollBy({ left:340, behavior:'smooth' }));
+    $('#backTop')?.addEventListener('click', () => window.scrollTo({ top:0, behavior:'smooth' }));
+    window.addEventListener('scroll', () => $('#backTop')?.classList.toggle('show', window.scrollY > 400), { passive:true });
+    $$('.footer-links [data-policy]').forEach(link => link.addEventListener('click', event => { event.preventDefault(); openPolicy(link.dataset.policy); }));
+    bindFolderDropdown(selectFolder);
+    render();
+    if (selectedCollection && location.hash === '#inventory') window.setTimeout(() => inventory.scrollIntoView({ behavior:'auto', block:'start' }), 0);
+    initChat();
+  };
+
   boot();
 })();
