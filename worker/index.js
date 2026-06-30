@@ -18,6 +18,14 @@ const DEFAULT_SITE = {
   hero_image: '/assets/tam-an-promo.jpg',
   // Danh sách ảnh slider Hero (JSON). Nếu trống sẽ dùng hero_image cũ.
   hero_images_json: '',
+  hero_autoplay_seconds: 5,
+  // Nhóm sản phẩm động: admin có thể thêm/sửa/xóa/ẩn/sắp xếp.
+  categories_json: '',
+  // Các khối lợi ích phía dưới Hero, admin quản lý toàn bộ.
+  trust_blocks_json: '',
+  // Chỉ thu thập vị trí khi khách tự tick đồng ý.
+  location_capture_enabled: false,
+  location_consent_text: 'Tôi đồng ý chia sẻ vị trí gần đúng để Tâm An tư vấn giao xe thuận tiện hơn.',
   showroom_image: '/assets/showroom.jpg',
   logo_url: '/assets/logo.jpg',
   favicon_url: '/assets/logo.jpg',
@@ -87,7 +95,7 @@ CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, slug 
 CREATE TABLE IF NOT EXISTS promotions (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, content TEXT, image_url TEXT, active INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS accessories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, price INTEGER, image_url TEXT, description TEXT, published INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS policies (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL, published INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS leads (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL DEFAULT 'consultation', name TEXT NOT NULL, phone TEXT NOT NULL, note TEXT, payment_plan TEXT, down_payment TEXT, product_id INTEGER, status TEXT NOT NULL DEFAULT 'new', assigned_to INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS leads (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL DEFAULT 'consultation', name TEXT NOT NULL, phone TEXT NOT NULL, note TEXT, payment_plan TEXT, down_payment TEXT, location_text TEXT, product_id INTEGER, status TEXT NOT NULL DEFAULT 'new', assigned_to INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS conversations (id INTEGER PRIMARY KEY AUTOINCREMENT, visitor_key TEXT UNIQUE NOT NULL, visitor_name TEXT, status TEXT NOT NULL DEFAULT 'open', assigned_to INTEGER, ai_count INTEGER NOT NULL DEFAULT 0, ai_day TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS chat_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id INTEGER NOT NULL, sender_type TEXT NOT NULL, sender_name TEXT, body TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, actor_id INTEGER, actor_name TEXT, action TEXT NOT NULL, entity_type TEXT, entity_id TEXT, detail TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -102,7 +110,16 @@ function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers } });
 }
 function text(data, status = 200) { return new Response(data, { status, headers: { 'content-type': 'text/plain; charset=utf-8' } }); }
-function asNumber(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
+function asNumber(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  const raw = String(v).trim();
+  const negative = raw.startsWith('-');
+  const digits = raw.replace(/[^0-9]/g, '');
+  if (!digits) return null;
+  const n = Number(digits) * (negative ? -1 : 1);
+  return Number.isFinite(n) ? n : null;
+}
 function parseJSON(v, fallback) { try { return v ? JSON.parse(v) : fallback; } catch { return fallback; } }
 function safeStr(v, max = 10000) { return String(v ?? '').trim().slice(0, max); }
 
@@ -119,6 +136,7 @@ async function ensureLeadColumns(env) {
   const cols = new Set((info.results || []).map(row => row.name));
   if (!cols.has('payment_plan')) await env.DB.exec('ALTER TABLE leads ADD COLUMN payment_plan TEXT');
   if (!cols.has('down_payment')) await env.DB.exec('ALTER TABLE leads ADD COLUMN down_payment TEXT');
+  if (!cols.has('location_text')) await env.DB.exec('ALTER TABLE leads ADD COLUMN location_text TEXT');
 }
 function slugify(s) { return safeStr(s, 160).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/đ/g, 'd').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `xe-${Date.now()}`; }
 
@@ -192,29 +210,25 @@ function productOut(row) {
 async function productPayload(req) {
   const b = await req.json();
   const name = safeStr(b.name,160); if (!name) throw new Error('Tên xe là bắt buộc.');
-  const category = CATEGORIES.some(([id])=>id===b.category) ? b.category : 'motor_new';
+  const category = safeStr(b.category,80).replace(/[^a-z0-9_-]/gi,'') || 'motor_new';
   const images = Array.isArray(b.images) ? b.images.filter(x=>typeof x==='string' && x).slice(0,30) : [];
   const validHex = value => /^#[0-9a-fA-F]{6}$/.test(String(value || '').trim()) ? String(value).trim() : '';
-  const statuses = new Set(['in_stock','incoming','reserved','sold','inherit']);
-  const normalizeStatus = (value, fallback = 'in_stock') => statuses.has(value) ? value : fallback;
-  const normalizeColor = (c, fallbackStatus = 'in_stock') => {
+  const normalizeColor = c => {
     const raw = Array.isArray(c?.swatches) ? c.swatches : [];
     const swatches = raw.map(validHex).filter(Boolean).slice(0, 3);
     const fallback = validHex(c?.hex) || '#d71920';
     if (!swatches.length) swatches.push(fallback);
-    let status = normalizeStatus(c?.status, fallbackStatus);
-    if (fallbackStatus !== 'inherit' && status === 'inherit') status = fallbackStatus;
-    return { name:safeStr(c?.name,60), hex:swatches[0], swatches, status, images:Array.isArray(c?.images)?c.images.filter(x=>typeof x==='string'&&x).slice(0,12):[] };
+    return { name:safeStr(c?.name,60), hex:swatches[0], swatches, images:Array.isArray(c?.images)?c.images.filter(x=>typeof x==='string'&&x).slice(0,12):[] };
   };
-  const colors = Array.isArray(b.colors) ? b.colors.slice(0,20).map(c => normalizeColor(c, 'in_stock')).filter(c=>c.name) : [];
-  const versions = Array.isArray(b.versions) ? b.versions.slice(0,20).map(v=>({ name:safeStr(v?.name,80), description:safeStr(v?.description,500), status:normalizeStatus(v?.status, 'in_stock'), price:asNumber(v?.price), old_price:asNumber(v?.old_price), colors:Array.isArray(v?.colors)?v.colors.slice(0,20).map(c => normalizeColor(c, 'inherit')).filter(c=>c.name):[] })).filter(v=>v.name) : [];
+  const colors = Array.isArray(b.colors) ? b.colors.slice(0,20).map(normalizeColor).filter(c=>c.name) : [];
+  const versions = Array.isArray(b.versions) ? b.versions.slice(0,20).map(v=>({ name:safeStr(v?.name,80), description:safeStr(v?.description,500), price:asNumber(v?.price), old_price:asNumber(v?.old_price), colors:Array.isArray(v?.colors)?v.colors.slice(0,20).map(normalizeColor).filter(c=>c.name):[] })).filter(v=>v.name) : [];
   return { name, slug:slugify(b.slug || name), brand:safeStr(b.brand,80), category, status:['in_stock','incoming','reserved','sold'].includes(b.status)?b.status:'in_stock', price:asNumber(b.price), old_price:asNumber(b.old_price), year:asNumber(b.year), mileage:asNumber(b.mileage), engine:safeStr(b.engine,60), documents:safeStr(b.documents,300), description:safeStr(b.description,30000), installment_from:asNumber(b.installment_from), bad_debt_from:asNumber(b.bad_debt_from), images, colors, versions, featured:b.featured?1:0, published:b.published===false?0:1, sort_order:asNumber(b.sort_order)||0 };
 }
 async function sendLeadEmail(env, site, lead) {
   if (!env.RESEND_API_KEY || !env.NOTIFY_EMAIL) return;
   const subject = `[Tâm An] Yêu cầu mới: ${lead.type}`;
   const planName = {cash:'Trả thẳng',installment:'Trả góp',bad_debt:'Hồ sơ có nợ xấu / cần kiểm tra'}[lead.payment_plan] || 'Chưa chọn';
-  const html = `<h2>Khách để lại yêu cầu</h2><p><b>Họ tên:</b> ${escapeHtml(lead.name)}</p><p><b>SĐT:</b> ${escapeHtml(lead.phone)}</p><p><b>Dự kiến thanh toán:</b> ${escapeHtml(planName)}${lead.down_payment ? ` — ${escapeHtml(lead.down_payment)}` : ''}</p><p><b>Nội dung:</b> ${escapeHtml(lead.note||'')}</p>`;
+  const html = `<h2>Khách để lại yêu cầu</h2><p><b>Họ tên:</b> ${escapeHtml(lead.name)}</p><p><b>SĐT:</b> ${escapeHtml(lead.phone)}</p><p><b>Dự kiến thanh toán:</b> ${escapeHtml(planName)}${lead.down_payment ? ` — ${escapeHtml(lead.down_payment)}` : ''}</p>${lead.location_text ? `<p><b>Vị trí gần đúng:</b> ${escapeHtml(lead.location_text)}</p>` : ''}<p><b>Nội dung:</b> ${escapeHtml(lead.note||'')}</p>`;
   try { await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${env.RESEND_API_KEY}`,'content-type':'application/json'},body:JSON.stringify({from:'Tâm An Website <onboarding@resend.dev>',to:[env.NOTIFY_EMAIL],subject,html})}); } catch {}
 }
 function escapeHtml(s) { return String(s||'').replace(/[&<>'"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m])); }
@@ -235,7 +249,7 @@ async function publicApi(req, env, url) {
   if (url.pathname === '/api/products') {
     const category=q(url,'category'); const search=safeStr(q(url,'search'),100).toLowerCase(); const status=q(url,'status');
     let sql='SELECT * FROM products WHERE published=1'; const binds=[];
-    if (category && CATEGORIES.some(([id])=>id===category)) { sql+=' AND category=?'; binds.push(category); }
+    if (category && /^[a-z0-9_-]{1,80}$/i.test(category)) { sql+=' AND category=?'; binds.push(category); }
     if (status && ['in_stock','incoming','reserved','sold'].includes(status)) { sql+=' AND status=?'; binds.push(status); }
     const rows=(await env.DB.prepare(sql+' ORDER BY featured DESC,sort_order,id DESC').bind(...binds).all()).results||[];
     let data=rows.map(productOut);
@@ -262,10 +276,11 @@ async function publicApi(req, env, url) {
     const note=safeStr(b.note,3000); const type=safeStr(b.type,80)||'consultation'; const productId=asNumber(b.product_id);
     const paymentPlan=['cash','installment','bad_debt'].includes(b.payment_plan) ? b.payment_plan : '';
     const downPayment=paymentPlan==='installment' ? safeStr(b.down_payment,120) : '';
+    const locationText=safeStr(b.location_text,500);
     if (!paymentPlan) return json({ok:false,error:'Vui lòng chọn dự kiến thanh toán.'},400);
     if (paymentPlan==='installment' && !downPayment) return json({ok:false,error:'Vui lòng chọn mức trả trước dự kiến.'},400);
-    const r=await env.DB.prepare('INSERT INTO leads(type,name,phone,note,payment_plan,down_payment,product_id) VALUES (?,?,?,?,?,?,?)').bind(type,name,phone,note,paymentPlan,downPayment,productId).run();
-    const site=await getSite(env); await sendLeadEmail(env,site,{type,name,phone,note,payment_plan:paymentPlan,down_payment:downPayment});
+    const r=await env.DB.prepare('INSERT INTO leads(type,name,phone,note,payment_plan,down_payment,location_text,product_id) VALUES (?,?,?,?,?,?,?,?)').bind(type,name,phone,note,paymentPlan,downPayment,locationText,productId).run();
+    const site=await getSite(env); await sendLeadEmail(env,site,{type,name,phone,note,payment_plan:paymentPlan,down_payment:downPayment,location_text:locationText});
     return json({ok:true,id:r.meta.last_row_id,message:'Tâm An đã nhận thông tin. Nhân viên sẽ liên hệ sớm.'});
   }
   if (url.pathname === '/api/chat/start' && req.method==='POST') {
@@ -283,7 +298,7 @@ async function publicApi(req, env, url) {
   if (url.pathname === '/api/chat/messages' && req.method==='POST') {
     const b=await req.json(); const visitorKey=safeStr(b.visitor_key,80), body=safeStr(b.body,2000); if(!visitorKey||!body)return json({ok:false,error:'Tin nhắn trống.'},400);
     let conv=await env.DB.prepare('SELECT * FROM conversations WHERE visitor_key=?').bind(visitorKey).first(); if(!conv)return json({ok:false,error:'Hãy bắt đầu cuộc trò chuyện trước.'},400);
-    if(conv.status==='done'){await env.DB.prepare("UPDATE conversations SET status='open',updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(conv.id).run();conv.status='open';}
+    if(conv.status==='done') return json({ok:false,error:'Hội thoại này đã hoàn tất. Vui lòng gọi hotline hoặc tạo yêu cầu tư vấn mới để Tâm An hỗ trợ.'},409);
     await env.DB.prepare('INSERT INTO chat_messages(conversation_id,sender_type,sender_name,body) VALUES (?,?,?,?)').bind(conv.id,'visitor',conv.visitor_name||'Khách',body).run();
     await env.DB.prepare('UPDATE conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(conv.id).run();
     const site=await getSite(env);
@@ -331,7 +346,6 @@ function formatMoneyAi(v) {
 function cleanAiColor(c) {
   return {
     name: safeStr(c?.name, 60),
-    status: safeStr(c?.status, 20) || 'in_stock',
     hex: safeStr(c?.hex, 20),
     swatches: Array.isArray(c?.swatches) ? c.swatches.slice(0,3).map(x=>safeStr(x,20)) : [safeStr(c?.hex,20)],
     images: Array.isArray(c?.images) ? c.images.length : 0,
@@ -342,7 +356,6 @@ function productAiRecord(row) {
   const versions = (product.versions || []).map(v => ({
     name: safeStr(v?.name, 80),
     description: safeStr(v?.description, 240),
-    status: safeStr(v?.status, 20) || 'in_stock',
     price: v?.price == null ? null : Number(v.price),
     old_price: v?.old_price == null ? null : Number(v.old_price),
     colors: (v?.colors || []).map(cleanAiColor).filter(c => c.name),
@@ -398,18 +411,12 @@ function matchProductsForAi(products, question) {
   }).filter(x => x.score > 0).sort((a,b) => b.score-a.score);
   return scored.slice(0, 4).map(x => x.p);
 }
-function aiResolvedColorStatus(color, versionStatus = 'in_stock') {
-  return color?.status && color.status !== 'inherit' ? color.status : (versionStatus || 'in_stock');
-}
-function aiColorList(colors = [], versionStatus = 'in_stock') {
-  return colors.map(color => `${color.name} [${aiStatusLabel(aiResolvedColorStatus(color, versionStatus))}]`).join(', ') || 'chưa khai báo';
-}
 function compactProductForPrompt(p) {
-  const baseColors = aiColorList(p.colors || [], p.status);
+  const baseColors = (p.colors || []).map(c => c.name).join(', ') || 'Không khai báo';
   const versionText = (p.versions || []).length
-    ? p.versions.map(v => `• ${v.name} [${aiStatusLabel(v.status || p.status)}]${v.price ? ` — ${formatMoneyAi(v.price)}` : ''}${v.old_price ? ` (giá cũ ${formatMoneyAi(v.old_price)})` : ''}; màu: ${aiColorList(v.colors || [], v.status || p.status)}${v.description ? `; ${v.description}` : ''}`).join('\n')
+    ? p.versions.map(v => `• ${v.name}${v.price ? ` — ${formatMoneyAi(v.price)}` : ''}${v.old_price ? ` (giá cũ ${formatMoneyAi(v.old_price)})` : ''}; màu: ${(v.colors || []).map(c=>c.name).join(', ') || 'chưa khai báo'}${v.description ? `; ${v.description}` : ''}`).join('\n')
     : 'Không tách phiên bản';
-  return `XE #${p.id}: ${p.name} | ${p.brand || 'Không rõ hãng'} | ${aiCategoryLabel(p.category)} | Trạng thái mẫu: ${aiStatusLabel(p.status)} | Giá chung: ${formatMoneyAi(p.price)}${p.old_price ? ` | Giá cũ: ${formatMoneyAi(p.old_price)}` : ''} | Năm: ${p.year || '—'} | ODO: ${p.mileage ? `${Number(p.mileage).toLocaleString('vi-VN')} km` : '—'} | Máy: ${p.engine || '—'} | Trả trước từ: ${p.installment_from ? formatMoneyAi(p.installment_from) : 'chưa nhập'} | Màu chung: ${baseColors}\nMô tả: ${p.description || '—'}\nPhiên bản:\n${versionText}`;
+  return `XE #${p.id}: ${p.name} | ${p.brand || 'Không rõ hãng'} | ${aiCategoryLabel(p.category)} | Trạng thái: ${aiStatusLabel(p.status)} | Giá chung: ${formatMoneyAi(p.price)}${p.old_price ? ` | Giá cũ: ${formatMoneyAi(p.old_price)}` : ''} | Năm: ${p.year || '—'} | ODO: ${p.mileage ? `${Number(p.mileage).toLocaleString('vi-VN')} km` : '—'} | Máy: ${p.engine || '—'} | Trả trước từ: ${p.installment_from ? formatMoneyAi(p.installment_from) : 'chưa nhập'} | Màu chung: ${baseColors}\nMô tả: ${p.description || '—'}\nPhiên bản:\n${versionText}`;
 }
 function plainFallbackAi(site, matches, latest) {
   if (!matches.length) {
@@ -422,13 +429,11 @@ function plainFallbackAi(site, matches, latest) {
   if (!version && /sport|the thao/.test(q)) version = versions.find(v => /sport|the thao/i.test(v.name));
   const colors = version ? (version.colors || []) : (p.colors || []);
   const colorNames = colors.map(c => c.name).filter(Boolean);
-  const exactColor = colors.find(c => q.includes(normAiText(c.name || '')));
-  const exactColorStatus = exactColor ? aiResolvedColorStatus(exactColor, version?.status || p.status) : '';
-  const colorText = colors.map(c => `${c.name} (${aiStatusLabel(aiResolvedColorStatus(c, version?.status || p.status))})`).join(', ');
+  const exactColor = colorNames.find(c => q.includes(normAiText(c)));
   const lines = [
     `${p.name} hiện đang ở trạng thái **${aiStatusLabel(p.status)}**.`,
-    version ? `Bản phù hợp: **${version.name}** — ${aiStatusLabel(version.status || p.status)}${version.price ? `, giá tham khảo ${formatMoneyAi(version.price)}` : ''}.` : (p.price ? `Giá tham khảo đang hiển thị: ${formatMoneyAi(p.price)}.` : 'Giá hiện chưa công khai.'),
-    colorNames.length ? `Phối màu của ${version ? `bản ${version.name}` : 'mẫu này'}: ${colorText}.${exactColor ? ` Màu ${exactColor.name} hiện ${aiStatusLabel(exactColorStatus).toLowerCase()}.` : ''}` : '',
+    version ? `Bản phù hợp: **${version.name}**${version.price ? `, giá tham khảo ${formatMoneyAi(version.price)}` : ''}.` : (p.price ? `Giá tham khảo đang hiển thị: ${formatMoneyAi(p.price)}.` : 'Giá hiện chưa công khai.'),
+    colorNames.length ? `Màu của ${version ? `bản ${version.name}` : 'mẫu này'}: ${colorNames.join(', ')}.${exactColor ? ` Anh/chị đang hỏi đúng màu ${exactColor}.` : ''}` : '',
     p.installment_from ? `Trả góp tham khảo từ ${formatMoneyAi(p.installment_from)} trả trước; hồ sơ thực tế sẽ do nhân viên kiểm tra.` : '',
     `Anh/chị muốn em kiểm tra thêm ảnh thực tế hay phương án trả góp của mẫu này ạ?`,
   ].filter(Boolean);
@@ -452,7 +457,7 @@ async function buildAiPrompt(env, site, latest, conversation = null) {
   // Never send an unrelated catalogue as a fallback. It caused the model to mention
   // products that the visitor did not ask about. Unknown products receive no vehicle data.
   const contextProducts = matches;
-  const prompt = `VAI TRÒ\nBạn là ${site.ai_name || 'Tâm An AI'}, tư vấn viên bán xe của ${site.brand_name}. Trả lời bằng tiếng Việt tự nhiên, chính xác và thân thiện.\n\nQUY TẮC BẮT BUỘC\n1) Chỉ dùng dữ liệu trong mục DỮ LIỆU KHO XE và THÔNG TIN CỬA HÀNG. Không đoán giá, màu, phiên bản hoặc tình trạng.\n2) Nếu câu hỏi nhắc tới màu/phiên bản, phải kiểm tra quan hệ PHIÊN BẢN → PHỐI MÀU và TÌNH TRẠNG trong ngoặc vuông. Không nói một màu có ở bản khác; không nói còn hàng nếu phối màu ghi [Hết hàng].\n3) Khi có mẫu xe phù hợp: nêu rõ tên xe, trạng thái, phiên bản/màu liên quan, giá công khai nếu có, và trả góp nếu có.\n4) Khi không xác định được mẫu: hỏi đúng 1 câu làm rõ (tên mẫu, phiên bản hoặc màu), KHÔNG đẩy ngay sang hotline/showroom.\n5) Không hứa duyệt trả góp/nợ xấu, không chốt giá cuối cùng.\n6) Chỉ nhắc hotline/showroom khi khách hỏi liên hệ/địa chỉ hoặc dữ liệu thực sự thiếu sau khi đã hỏi làm rõ.\n7) Câu trả lời 70–160 từ, chia 2–4 đoạn ngắn hoặc gạch đầu dòng khi có nhiều thông tin.\n8) Kết thúc bằng một câu hỏi ngắn để tiếp tục tư vấn.\n\nTHÔNG TIN CỬA HÀNG\nĐịa chỉ: ${site.address}\nHotline: ${site.hotline}\nKiến thức vận hành: ${site.ai_knowledge || 'Không cam kết giá chốt hoặc duyệt hồ sơ trước khi nhân viên xác nhận.'}\n\nDỮ LIỆU KHO XE\n${contextProducts.map(compactProductForPrompt).join('\n\n')}\n\nLỊCH SỬ HỘI THOẠI\n${history.join('\n') || 'Chưa có'}\n\nCÂU HỎI MỚI CỦA KHÁCH\n${latest}`;
+  const prompt = `VAI TRÒ\nBạn là ${site.ai_name || 'Tâm An AI'}, tư vấn viên bán xe của ${site.brand_name}. Trả lời bằng tiếng Việt tự nhiên, chính xác và thân thiện.\n\nQUY TẮC BẮT BUỘC\n1) Chỉ dùng dữ liệu trong mục DỮ LIỆU KHO XE và THÔNG TIN CỬA HÀNG. Không đoán giá, màu, phiên bản hoặc tình trạng.\n2) Nếu câu hỏi nhắc tới màu/phiên bản, phải kiểm tra quan hệ PHIÊN BẢN → MÀU. Không nói một màu có ở bản khác khi dữ liệu không có.\n3) Khi có mẫu xe phù hợp: nêu rõ tên xe, trạng thái, phiên bản/màu liên quan, giá công khai nếu có, và trả góp nếu có.\n4) Khi không xác định được mẫu: hỏi đúng 1 câu làm rõ (tên mẫu, phiên bản hoặc màu), KHÔNG đẩy ngay sang hotline/showroom.\n5) Không hứa duyệt trả góp/nợ xấu, không chốt giá cuối cùng.\n6) Chỉ nhắc hotline/showroom khi khách hỏi liên hệ/địa chỉ hoặc dữ liệu thực sự thiếu sau khi đã hỏi làm rõ.\n7) Câu trả lời 70–160 từ, chia 2–4 đoạn ngắn hoặc gạch đầu dòng khi có nhiều thông tin.\n8) Kết thúc bằng một câu hỏi ngắn để tiếp tục tư vấn.\n\nTHÔNG TIN CỬA HÀNG\nĐịa chỉ: ${site.address}\nHotline: ${site.hotline}\nKiến thức vận hành: ${site.ai_knowledge || 'Không cam kết giá chốt hoặc duyệt hồ sơ trước khi nhân viên xác nhận.'}\n\nDỮ LIỆU KHO XE\n${contextProducts.map(compactProductForPrompt).join('\n\n')}\n\nLỊCH SỬ HỘI THOẠI\n${history.join('\n') || 'Chưa có'}\n\nCÂU HỎI MỚI CỦA KHÁCH\n${latest}`;
   return { prompt, matches, products };
 }
 
@@ -603,11 +608,11 @@ async function adminApi(req, env, url, user) {
   if(polMatch){if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được quản lý chính sách.'},403);const id=Number(polMatch[1]);if(req.method==='PUT'){const b=await req.json();const title=safeStr(b.title,160);await env.DB.prepare('UPDATE policies SET slug=?,title=?,content=?,published=?,sort_order=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(await uniquePolicySlug(env,slugify(b.slug||title),id),title,safeStr(b.content,10000),b.published===false?0:1,asNumber(b.sort_order)||0,id).run();await log(env,user,'Cập nhật bài chính sách','policy',id,title);return json({ok:true});}if(req.method==='DELETE'){await env.DB.prepare('DELETE FROM policies WHERE id=?').bind(id).run();await log(env,user,'Xoá bài chính sách','policy',id);return json({ok:true});}}
   if(url.pathname==='/api/admin/leads'&&req.method==='GET'){const params=[];let sql='SELECT l.*,u.full_name assigned_name FROM leads l LEFT JOIN users u ON u.id=l.assigned_to WHERE 1=1';if(q(url,'status')){sql+=' AND l.status=?';params.push(q(url,'status'));}if(q(url,'from')){sql+=" AND date(l.created_at, '+7 hours')>=date(?)";params.push(q(url,'from'));}if(q(url,'to')){sql+=" AND date(l.created_at, '+7 hours')<=date(?)";params.push(q(url,'to'));}if(q(url,'assigned_to')){sql+=' AND l.assigned_to=?';params.push(Number(q(url,'assigned_to')));}sql+=' ORDER BY l.updated_at DESC,l.id DESC';return json({ok:true,leads:(await env.DB.prepare(sql).bind(...params).all()).results||[]});}
   const leadMatch=url.pathname.match(/^\/api\/admin\/leads\/(\d+)$/);
-  if(leadMatch){const id=Number(leadMatch[1]);if(req.method==='PUT'){if(!can(user,'lead:update'))return json({ok:false,error:'Bạn không có quyền.'},403);const b=await req.json();const existing=await env.DB.prepare('SELECT assigned_to FROM leads WHERE id=?').bind(id).first();const assigned=Object.prototype.hasOwnProperty.call(b,'assigned_to')?asNumber(b.assigned_to):existing?.assigned_to??null;const status=['new','in_progress','done'].includes(b.status)?b.status:'new';await env.DB.prepare('UPDATE leads SET status=?,assigned_to=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(status,assigned,id).run();await log(env,user,'Cập nhật form khách','lead',id,status);return json({ok:true});}if(req.method==='DELETE'){if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được xoá form.'},403);await env.DB.prepare('DELETE FROM leads WHERE id=?').bind(id).run();await log(env,user,'Xoá form khách','lead',id);return json({ok:true});}}
+  if(leadMatch){const id=Number(leadMatch[1]);if(req.method==='PUT'){if(!can(user,'lead:update'))return json({ok:false,error:'Bạn không có quyền.'},403);const b=await req.json();const existing=await env.DB.prepare('SELECT assigned_to,status FROM leads WHERE id=?').bind(id).first();if(!existing)return json({ok:false,error:'Không tìm thấy form.'},404);if(existing.status==='done')return json({ok:false,error:'Form đã hoàn tất và chỉ có thể xem lại.'},409);const assigned=Object.prototype.hasOwnProperty.call(b,'assigned_to')?asNumber(b.assigned_to):existing.assigned_to??null;const status=['new','in_progress','done'].includes(b.status)?b.status:'new';await env.DB.prepare('UPDATE leads SET status=?,assigned_to=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(status,assigned,id).run();await log(env,user,'Cập nhật form khách','lead',id,status);return json({ok:true});}if(req.method==='DELETE'){if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được xoá form.'},403);await env.DB.prepare('DELETE FROM leads WHERE id=?').bind(id).run();await log(env,user,'Xoá form khách','lead',id);return json({ok:true});}}
   if(url.pathname==='/api/admin/conversations'&&req.method==='GET'){const params=[];let sql='SELECT c.*,u.full_name assigned_name,(SELECT body FROM chat_messages m WHERE m.conversation_id=c.id ORDER BY id DESC LIMIT 1) last_message FROM conversations c LEFT JOIN users u ON u.id=c.assigned_to WHERE 1=1';if(q(url,'status')){sql+=' AND c.status=?';params.push(q(url,'status'));}if(q(url,'from')){sql+=" AND date(c.updated_at, '+7 hours')>=date(?)";params.push(q(url,'from'));}if(q(url,'to')){sql+=" AND date(c.updated_at, '+7 hours')<=date(?)";params.push(q(url,'to'));}if(q(url,'assigned_to')){sql+=' AND c.assigned_to=?';params.push(Number(q(url,'assigned_to')));}sql+=' ORDER BY c.updated_at DESC';return json({ok:true,conversations:(await env.DB.prepare(sql).bind(...params).all()).results||[]});}
   const convMatch=url.pathname.match(/^\/api\/admin\/conversations\/(\d+)$/);
-  if(convMatch){const id=Number(convMatch[1]); if(req.method==='GET'){const conv=await env.DB.prepare('SELECT c.*,u.full_name assigned_name FROM conversations c LEFT JOIN users u ON u.id=c.assigned_to WHERE c.id=?').bind(id).first();const messages=(await env.DB.prepare('SELECT * FROM chat_messages WHERE conversation_id=? ORDER BY id').bind(id).all()).results||[];return json({ok:true,conversation:conv,messages});}if(req.method==='PUT'){const b=await req.json();const existing=await env.DB.prepare('SELECT assigned_to FROM conversations WHERE id=?').bind(id).first();const status=['open','done'].includes(b.status)?b.status:'open';const assigned=Object.prototype.hasOwnProperty.call(b,'assigned_to')?asNumber(b.assigned_to):existing?.assigned_to??null;await env.DB.prepare('UPDATE conversations SET status=?,assigned_to=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(status,assigned,id).run();await log(env,user,'Cập nhật hội thoại','chat',id,status);return json({ok:true});}if(req.method==='DELETE'){if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được xoá hội thoại.'},403);await env.DB.prepare('DELETE FROM chat_messages WHERE conversation_id=?').bind(id).run();await env.DB.prepare('DELETE FROM conversations WHERE id=?').bind(id).run();await log(env,user,'Xoá hội thoại','chat',id);return json({ok:true});}}
-  if(url.pathname.match(/^\/api\/admin\/conversations\/\d+\/messages$/)&&req.method==='POST'){if(!can(user,'chat:reply'))return json({ok:false,error:'Bạn không có quyền.'},403);const id=Number(url.pathname.split('/')[4]);const b=await req.json();const body=safeStr(b.body,2000);if(!body)return json({ok:false,error:'Tin nhắn trống'},400);await env.DB.prepare('INSERT INTO chat_messages(conversation_id,sender_type,sender_name,body) VALUES (?,?,?,?)').bind(id,'staff',user.name,body).run();await env.DB.prepare("UPDATE conversations SET status='open',assigned_to=COALESCE(assigned_to,?),updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(user.id,id).run();await log(env,user,'Trả lời khách','chat',id);return json({ok:true});}
+  if(convMatch){const id=Number(convMatch[1]); if(req.method==='GET'){const conv=await env.DB.prepare('SELECT c.*,u.full_name assigned_name FROM conversations c LEFT JOIN users u ON u.id=c.assigned_to WHERE c.id=?').bind(id).first();const messages=(await env.DB.prepare('SELECT * FROM chat_messages WHERE conversation_id=? ORDER BY id').bind(id).all()).results||[];return json({ok:true,conversation:conv,messages});}if(req.method==='PUT'){const b=await req.json();const existing=await env.DB.prepare('SELECT assigned_to,status FROM conversations WHERE id=?').bind(id).first();if(!existing)return json({ok:false,error:'Không tìm thấy hội thoại.'},404);if(existing.status==='done')return json({ok:false,error:'Hội thoại đã hoàn tất và chỉ có thể xem lại.'},409);const status=['open','done'].includes(b.status)?b.status:'open';const assigned=Object.prototype.hasOwnProperty.call(b,'assigned_to')?asNumber(b.assigned_to):existing.assigned_to??null;await env.DB.prepare('UPDATE conversations SET status=?,assigned_to=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(status,assigned,id).run();await log(env,user,'Cập nhật hội thoại','chat',id,status);return json({ok:true});}if(req.method==='DELETE'){if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được xoá hội thoại.'},403);await env.DB.prepare('DELETE FROM chat_messages WHERE conversation_id=?').bind(id).run();await env.DB.prepare('DELETE FROM conversations WHERE id=?').bind(id).run();await log(env,user,'Xoá hội thoại','chat',id);return json({ok:true});}}
+  if(url.pathname.match(/^\/api\/admin\/conversations\/\d+\/messages$/)&&req.method==='POST'){if(!can(user,'chat:reply'))return json({ok:false,error:'Bạn không có quyền.'},403);const id=Number(url.pathname.split('/')[4]);const b=await req.json();const body=safeStr(b.body,2000);if(!body)return json({ok:false,error:'Tin nhắn trống'},400);const conv=await env.DB.prepare('SELECT status FROM conversations WHERE id=?').bind(id).first();if(!conv)return json({ok:false,error:'Không tìm thấy hội thoại.'},404);if(conv.status==='done')return json({ok:false,error:'Hội thoại đã hoàn tất và chỉ có thể xem lại.'},409);await env.DB.prepare('INSERT INTO chat_messages(conversation_id,sender_type,sender_name,body) VALUES (?,?,?,?)').bind(id,'staff',user.name,body).run();await env.DB.prepare("UPDATE conversations SET status='open',assigned_to=COALESCE(assigned_to,?),updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(user.id,id).run();await log(env,user,'Trả lời khách','chat',id);return json({ok:true});}
   if(url.pathname==='/api/admin/users'){
     if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được quản lý nhân viên.'},403);
     if(req.method==='GET')return json({ok:true,users:(await env.DB.prepare('SELECT id,username,full_name,role,active,created_at FROM users ORDER BY role,id').all()).results||[]});
@@ -615,6 +620,24 @@ async function adminApi(req, env, url, user) {
   }
   const userMatch=url.pathname.match(/^\/api\/admin\/users\/(\d+)$/);
   if(userMatch){if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được quản lý nhân viên.'},403);const id=Number(userMatch[1]);if(req.method==='PUT'){const b=await req.json();await env.DB.prepare('UPDATE users SET full_name=?,active=? WHERE id=? AND role<>\'admin\'').bind(safeStr(b.full_name,120),b.active?1:0,id).run();await log(env,user,'Cập nhật nhân viên','user',id);return json({ok:true});}}
+  if(url.pathname==='/api/admin/password'&&req.method==='POST'){
+    const b=await req.json(); const current=safeStr(b.current_password,300), next=safeStr(b.new_password,300);
+    if(next.length<8)return json({ok:false,error:'Mật khẩu mới cần ít nhất 8 ký tự.'},400);
+    const row=await env.DB.prepare('SELECT password_hash FROM users WHERE id=?').bind(user.id).first();
+    if(!row || await hash(current)!==row.password_hash)return json({ok:false,error:'Mật khẩu hiện tại không đúng.'},400);
+    await env.DB.prepare('UPDATE users SET password_hash=? WHERE id=?').bind(await hash(next),user.id).run();
+    await log(env,user,'Đổi mật khẩu','user',user.id); return json({ok:true});
+  }
+  const userPasswordMatch=url.pathname.match(/^\/api\/admin\/users\/(\d+)\/password$/);
+  if(userPasswordMatch&&req.method==='PUT'){
+    if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được đổi mật khẩu nhân viên.'},403);
+    const id=Number(userPasswordMatch[1]); const b=await req.json(); const next=safeStr(b.new_password,300);
+    if(next.length<8)return json({ok:false,error:'Mật khẩu mới cần ít nhất 8 ký tự.'},400);
+    const target=await env.DB.prepare('SELECT role,full_name FROM users WHERE id=?').bind(id).first();
+    if(!target || target.role==='admin')return json({ok:false,error:'Không thể đổi mật khẩu tài khoản này.'},400);
+    await env.DB.prepare('UPDATE users SET password_hash=? WHERE id=?').bind(await hash(next),id).run();
+    await log(env,user,'Đặt lại mật khẩu nhân viên','user',id,target.full_name);return json({ok:true});
+  }
   if(url.pathname==='/api/admin/analytics'&&req.method==='GET'){if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được xem đo lường.'},403); const total=await env.DB.prepare("SELECT COUNT(*) c FROM page_views WHERE date(created_at, '+7 hours')>=date('now', '+7 hours', '-30 day')").first(); const days=(await env.DB.prepare("SELECT date(created_at, '+7 hours') day,COUNT(*) visits,COUNT(DISTINCT visitor_key) visitors FROM page_views WHERE date(created_at, '+7 hours')>=date('now', '+7 hours', '-30 day') GROUP BY date(created_at, '+7 hours') ORDER BY day DESC").all()).results||[]; return json({ok:true,total:total.c,days});}
   if(url.pathname==='/api/admin/logs'&&req.method==='GET'){if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được xem nhật ký.'},403);return json({ok:true,logs:(await env.DB.prepare('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 300').all()).results||[]});}
   return json({ok:false,error:'Không tìm thấy API.'},404);
