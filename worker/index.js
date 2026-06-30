@@ -8,10 +8,16 @@ const CATEGORIES = [
 const DEFAULT_SITE = {
   brand_name: 'XE MÁY TÂM AN NOMURA',
   page_title: 'Xe Máy Tâm An Nomura | Xe mới, xe cũ, trả góp',
+  // Ảnh/nội dung hiển thị khi dán link vào Facebook, Zalo, Messenger…
+  share_title: 'Xe Máy Tâm An Nomura | Xe mới, xe cũ, trả góp',
+  share_description: 'Xe máy mới • xe máy cũ • xe điện • hỗ trợ trả góp minh bạch tại Hải Phòng.',
+  share_image: '',
   tagline: 'Chọn xe ưng ý. Lên đường an tâm.',
   hero_title: 'Chọn xe ưng ý.\nLên đường an tâm.',
   hero_subtitle: 'Xe máy mới, xe máy cũ và xe điện tuyển chọn. Hỗ trợ trả góp minh bạch, tư vấn nhanh tại Hải Phòng.',
   hero_image: '/assets/tam-an-promo.jpg',
+  // Danh sách ảnh slider Hero (JSON). Nếu trống sẽ dùng hero_image cũ.
+  hero_images_json: '',
   showroom_image: '/assets/showroom.jpg',
   logo_url: '/assets/logo.jpg',
   favicon_url: '/assets/logo.jpg',
@@ -602,6 +608,91 @@ async function adminApi(req, env, url, user) {
 async function uniqueSlug(env, base, currentId=null){let s=base||`xe-${Date.now()}`;for(let i=0;i<20;i++){const cand=i?s+'-'+(i+1):s;const row=await env.DB.prepare('SELECT id FROM products WHERE slug=?').bind(cand).first();if(!row||row.id===currentId)return cand;}return s+'-'+Date.now();}
 async function uniquePolicySlug(env,base,currentId=null){let s=base||`bai-viet-${Date.now()}`;for(let i=0;i<20;i++){const cand=i?s+'-'+(i+1):s;const row=await env.DB.prepare('SELECT id FROM policies WHERE slug=?').bind(cand).first();if(!row||row.id===currentId)return cand;}return s+'-'+Date.now();}
 
+
+function textForShare(value = '', max = 240) {
+  return String(value || '')
+    .replace(/<\/?(?:p|div|br|h[1-6]|li|ul|ol|strong|em|u|span)[^>]*>/gi, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, max);
+}
+function absoluteShareUrl(origin, value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try { return new URL(raw, origin).toString(); } catch { return ''; }
+}
+function shareProductImage(product) {
+  const versionColors = (product?.versions || []).flatMap(v => Array.isArray(v?.colors) ? v.colors : []);
+  const color = [...versionColors, ...(product?.colors || [])].find(c => Array.isArray(c?.images) && c.images.length);
+  return color?.images?.[0] || product?.images?.[0] || '';
+}
+function moneyForShare(value) {
+  const n = Number(value || 0);
+  return Number.isFinite(n) && n > 0 ? `${n.toLocaleString('vi-VN')}đ` : '';
+}
+function escMeta(value = '') { return escapeHtml(String(value || '')); }
+function socialMeta(req, site, product = null) {
+  const url = new URL(req.url);
+  const canonical = new URL(url.origin);
+  let title = site.share_title || site.page_title || site.brand_name || 'Xe Máy Tâm An';
+  let description = site.share_description || site.hero_subtitle || site.tagline || '';
+  let image = site.share_image || site.hero_image || site.showroom_image || site.logo_url || '';
+  let type = 'website';
+  if (product) {
+    canonical.pathname = `/xe/${encodeURIComponent(product.slug)}`;
+    title = `${product.name} | ${site.brand_name || 'Xe Máy Tâm An'}`;
+    const price = moneyForShare(product.price);
+    const prefix = [product.brand, product.year ? `Đời ${product.year}` : '', price ? `Giá ${price}` : 'Liên hệ nhận giá'].filter(Boolean).join(' • ');
+    description = `${prefix}${product.description ? ` — ${textForShare(product.description, 150)}` : ''}`.slice(0, 280);
+    image = shareProductImage(product) || image;
+    type = 'product';
+  }
+  image = absoluteShareUrl(url.origin, image);
+  const tags = [
+    `<title>${escMeta(title)}</title>`,
+    `<meta name="description" content="${escMeta(description)}">`,
+    `<link rel="canonical" href="${escMeta(canonical.toString())}">`,
+    `<meta property="og:type" content="${type}">`,
+    `<meta property="og:site_name" content="${escMeta(site.brand_name || 'Xe Máy Tâm An')}">`,
+    `<meta property="og:title" content="${escMeta(title)}">`,
+    `<meta property="og:description" content="${escMeta(description)}">`,
+    `<meta property="og:url" content="${escMeta(canonical.toString())}">`,
+    image ? `<meta property="og:image" content="${escMeta(image)}">` : '',
+    image ? `<meta property="og:image:secure_url" content="${escMeta(image)}">` : '',
+    image ? `<meta property="og:image:width" content="1200">` : '',
+    image ? `<meta property="og:image:height" content="630">` : '',
+    `<meta name="twitter:card" content="summary_large_image">`,
+    `<meta name="twitter:title" content="${escMeta(title)}">`,
+    `<meta name="twitter:description" content="${escMeta(description)}">`,
+    image ? `<meta name="twitter:image" content="${escMeta(image)}">` : ''
+  ].filter(Boolean).join('');
+  return tags;
+}
+async function serveWithShareMeta(req, env, url) {
+  const asset = await env.ASSETS.fetch(req);
+  const type = asset.headers.get('content-type') || '';
+  if (req.method !== 'GET' || !type.includes('text/html')) return asset;
+  const site = await getSite(env);
+  const pathMatch = url.pathname.match(/^\/xe\/([^/]+)$/);
+  const slug = safeStr(url.searchParams.get('xe') || pathMatch?.[1] || '', 180);
+  let product = null;
+  if (slug) {
+    const row = await env.DB.prepare('SELECT * FROM products WHERE slug=? AND published=1').bind(decodeURIComponent(slug)).first();
+    product = productOut(row);
+  }
+  const meta = socialMeta(req, site, product);
+  const html = await asset.text();
+  const clean = html
+    .replace(/<meta\s+(?:property|name)=["'](?:og:[^"']+|twitter:[^"']+|description)["'][^>]*>\s*/gi, '')
+    .replace(/<link\s+rel=["']canonical["'][^>]*>\s*/gi, '');
+  const out = clean.replace(/<head([^>]*)>/i, `<head$1>${meta}`);
+  const headers = new Headers(asset.headers);
+  headers.set('content-type', 'text/html; charset=UTF-8');
+  headers.set('cache-control', 'no-cache, no-store, max-age=0');
+  return new Response(out, { status: asset.status, statusText: asset.statusText, headers });
+}
+
 export default {
   async fetch(req, env) {
     const url=new URL(req.url);
@@ -614,7 +705,7 @@ export default {
         let out=await publicApi(req,env,url);if(out)return out;
         const user=await currentUser(req,env);out=await adminApi(req,env,url,user);if(out)return out;
       }
-      return env.ASSETS.fetch(req);
+      return serveWithShareMeta(req, env, url);
     } catch(err) {
       console.error(err);return json({ok:false,error:err?.message||'Máy chủ đang bận, vui lòng thử lại.'},500);
     }
