@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username
 CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL, name TEXT NOT NULL, brand TEXT, category TEXT NOT NULL, collection_slug TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'in_stock', price INTEGER, old_price INTEGER, year INTEGER, mileage INTEGER, engine TEXT, documents TEXT, description TEXT, installment_from INTEGER, bad_debt_from INTEGER, images_json TEXT NOT NULL DEFAULT '[]', colors_json TEXT NOT NULL DEFAULT '[]', versions_json TEXT NOT NULL DEFAULT '[]', featured INTEGER NOT NULL DEFAULT 0, published INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_by INTEGER, updated_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS promotions (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, content TEXT, image_url TEXT, active INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS accessories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, price INTEGER, image_url TEXT, description TEXT, published INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS landing_collections (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL, title TEXT NOT NULL, category TEXT NOT NULL DEFAULT 'motor_new', description TEXT, image_url TEXT, visible INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS landing_collections (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL, title TEXT NOT NULL, category TEXT NOT NULL DEFAULT 'motor_new', description TEXT, image_url TEXT, meta_pixel_id TEXT NOT NULL DEFAULT '', tiktok_pixel_id TEXT NOT NULL DEFAULT '', pixel_mode TEXT NOT NULL DEFAULT 'inherit', visible INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS policies (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL, published INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS leads (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL DEFAULT 'consultation', name TEXT NOT NULL, phone TEXT NOT NULL, note TEXT, payment_plan TEXT, down_payment TEXT, location_text TEXT, product_id INTEGER, status TEXT NOT NULL DEFAULT 'new', assigned_to INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS conversations (id INTEGER PRIMARY KEY AUTOINCREMENT, visitor_key TEXT UNIQUE NOT NULL, visitor_name TEXT, status TEXT NOT NULL DEFAULT 'open', assigned_to INTEGER, ai_count INTEGER NOT NULL DEFAULT 0, ai_day TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -156,6 +156,13 @@ async function ensureProductColumns(env) {
   const cols = new Set((info.results || []).map(row => row.name));
   if (!cols.has('collection_slug')) await env.DB.exec("ALTER TABLE products ADD COLUMN collection_slug TEXT NOT NULL DEFAULT ''");
 }
+async function ensureCollectionColumns(env) {
+  const info = await env.DB.prepare('PRAGMA table_info(landing_collections)').all();
+  const cols = new Set((info.results || []).map(row => row.name));
+  if (!cols.has('meta_pixel_id')) await env.DB.exec("ALTER TABLE landing_collections ADD COLUMN meta_pixel_id TEXT NOT NULL DEFAULT ''");
+  if (!cols.has('tiktok_pixel_id')) await env.DB.exec("ALTER TABLE landing_collections ADD COLUMN tiktok_pixel_id TEXT NOT NULL DEFAULT ''");
+  if (!cols.has('pixel_mode')) await env.DB.exec("ALTER TABLE landing_collections ADD COLUMN pixel_mode TEXT NOT NULL DEFAULT 'inherit'");
+}
 function slugify(s) { return safeStr(s, 160).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/đ/g, 'd').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `xe-${Date.now()}`; }
 
 async function ensureSchema(env) {
@@ -163,6 +170,7 @@ async function ensureSchema(env) {
     await env.DB.exec(SCHEMA);
     await ensureLeadColumns(env);
     await ensureProductColumns(env);
+    await ensureCollectionColumns(env);
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_products_collection ON products(collection_slug, published, status)');
     const existing = await env.DB.prepare('SELECT id FROM site_settings WHERE id=1').first();
     if (!existing) await env.DB.prepare('INSERT INTO site_settings (id,data) VALUES (1,?)').bind(JSON.stringify(DEFAULT_SITE)).run();
@@ -290,6 +298,9 @@ function collectionPayload(raw = {}) {
     category,
     description: safeStr(raw.description,800),
     image_url: safeStr(raw.image_url,1000),
+    meta_pixel_id: safeStr(raw.meta_pixel_id,100).replace(/[^a-zA-Z0-9_-]/g,''),
+    tiktok_pixel_id: safeStr(raw.tiktok_pixel_id,100).replace(/[^a-zA-Z0-9_-]/g,''),
+    pixel_mode: raw.pixel_mode === 'landing_only' ? 'landing_only' : 'inherit',
     visible: raw.visible === false ? 0 : 1,
     sort_order: asNumber(raw.sort_order) || 0,
   };
@@ -701,7 +712,7 @@ async function adminApi(req, env, url, user) {
     if(user.role!=='admin') return json({ok:false,error:'Chỉ admin được quản lý thư mục dòng xe.'},403);
     if(req.method==='POST') {
       const b=await req.json(); const c=collectionPayload(b); c.slug=await uniqueCollectionSlug(env,c.slug);
-      const r=await env.DB.prepare('INSERT INTO landing_collections(slug,title,category,description,image_url,visible,sort_order) VALUES (?,?,?,?,?,?,?)').bind(c.slug,c.title,c.category,c.description,c.image_url,c.visible,c.sort_order).run();
+      const r=await env.DB.prepare('INSERT INTO landing_collections(slug,title,category,description,image_url,meta_pixel_id,tiktok_pixel_id,pixel_mode,visible,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)').bind(c.slug,c.title,c.category,c.description,c.image_url,c.meta_pixel_id,c.tiktok_pixel_id,c.pixel_mode,c.visible,c.sort_order).run();
       await log(env,user,'Tạo thư mục dòng xe','collection',r.meta.last_row_id,`${c.title} • /${categoryPath(c.category)}/${c.slug}`);
       return json({ok:true,id:r.meta.last_row_id,collection:{...c,id:r.meta.last_row_id}});
     }
@@ -719,7 +730,7 @@ async function adminApi(req, env, url, user) {
         if (Number(linked?.c || 0) > 0) return json({ok:false,error:'Không thể đổi nhóm xe khi thư mục đang có xe. Hãy bỏ/gán lại xe trước.'},400);
       }
       if (existing.slug !== c.slug) await env.DB.prepare('UPDATE products SET collection_slug=? WHERE collection_slug=?').bind(c.slug,existing.slug).run();
-      await env.DB.prepare('UPDATE landing_collections SET slug=?,title=?,category=?,description=?,image_url=?,visible=?,sort_order=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(c.slug,c.title,c.category,c.description,c.image_url,c.visible,c.sort_order,id).run();
+      await env.DB.prepare('UPDATE landing_collections SET slug=?,title=?,category=?,description=?,image_url=?,meta_pixel_id=?,tiktok_pixel_id=?,pixel_mode=?,visible=?,sort_order=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(c.slug,c.title,c.category,c.description,c.image_url,c.meta_pixel_id,c.tiktok_pixel_id,c.pixel_mode,c.visible,c.sort_order,id).run();
       await log(env,user,'Cập nhật thư mục dòng xe','collection',id,`${c.title} • /${categoryPath(c.category)}/${c.slug}`);
       return json({ok:true,collection:{...c,id}});
     }
