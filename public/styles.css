@@ -975,3 +975,140 @@ body.modal-open { overflow: hidden !important; }
   .inventory-summary { min-width:150px; }
   .selected-color-stock { margin-top:10px; }
 }
+
+
+/* ==================================================================
+   V1.16 — tinh chỉnh trải nghiệm chat, bảng điều khiển và phối màu
+   ================================================================== */
+/* A real custom consent checkbox; the generic .field input rule must not resize it. */
+.location-consent .consent-control {
+  position:relative;
+  align-items:flex-start!important;
+  gap:14px;
+  padding:18px 19px;
+  border-color:#edd3d6;
+  border-radius:18px;
+  background:linear-gradient(135deg,#fffafa,#fff);
+}
+.field .consent-input {
+  position:absolute!important;
+  width:1px!important;
+  min-width:1px!important;
+  height:1px!important;
+  min-height:1px!important;
+  margin:-1px!important;
+  padding:0!important;
+  border:0!important;
+  opacity:0!important;
+  pointer-events:none!important;
+  clip:rect(0 0 0 0)!important;
+  clip-path:inset(50%)!important;
+}
+.location-consent .consent-box {
+  width:29px;
+  height:29px;
+  flex:0 0 29px;
+  margin-top:2px;
+  border:2px solid #d9cbcd;
+  border-radius:10px;
+  background:#fff;
+  box-shadow:0 2px 5px rgba(53,17,21,.06);
+  font-size:16px;
+}
+.location-consent .consent-input:focus-visible + .consent-box {
+  outline:3px solid rgba(200,25,36,.17);
+  outline-offset:3px;
+}
+.location-consent .consent-input:checked + .consent-box {
+  background:linear-gradient(135deg,#d91b28,#ba101d);
+  border-color:#c81924;
+  box-shadow:0 6px 15px rgba(200,25,36,.24);
+}
+
+/* Product-card colour chips: compact, legible, and status is visible without oversized blocks. */
+.paint-preview-row { gap:7px; margin-top:13px; align-items:center; }
+.paint-preview {
+  display:flex!important;
+  align-items:center!important;
+  gap:6px!important;
+  min-height:39px;
+  padding:5px 7px!important;
+  border:1px solid #eee5e5!important;
+  border-radius:12px!important;
+  background:#fff!important;
+  color:#4d3e40!important;
+  box-shadow:0 1px 0 rgba(55,17,22,.02);
+  transition:border-color .16s ease, transform .16s ease, box-shadow .16s ease;
+}
+.paint-preview:hover { border-color:#d8b3b6!important; box-shadow:0 6px 14px rgba(65,18,23,.07); transform:translateY(-1px); }
+.paint-preview .paint-strip { width:27px; min-width:27px; height:18px; border-radius:5px; flex:0 0 auto; }
+.paint-preview .paint-strip i { min-width:9px; }
+.paint-preview-copy { display:grid!important; gap:1px!important; max-width:78px; line-height:1.05; }
+.paint-preview-copy b { font-size:11px!important; font-weight:900; color:#453638!important; }
+.paint-preview-copy small { display:flex!important; align-items:center; gap:4px; font-size:9px!important; font-weight:850!important; color:#66706a!important; }
+.paint-preview .availability-dot { display:block; width:6px; height:6px; flex:0 0 6px; border-radius:50%; background:#31a460; box-shadow:0 0 0 2px #e2f5e8; }
+.paint-preview.stock-incoming { background:#fffdfa!important; border-color:#f0dfbd!important; }
+.paint-preview.stock-incoming .availability-dot { background:#c98a10; box-shadow:0 0 0 2px #fff0cc; }
+.paint-preview.stock-incoming .paint-preview-copy small { color:#9a6800!important; }
+.paint-preview.stock-out_of_stock { background:#fffafa!important; border-color:#f0d6d8!important; opacity:.9; }
+.paint-preview.stock-out_of_stock .availability-dot { background:#cc5b65; box-shadow:0 0 0 2px #ffe6e8; }
+.paint-preview.stock-out_of_stock .paint-preview-copy small { color:#ae4550!important; }
+
+/* Chat bodies become independent scroll areas; the new control is always available when the visitor has scrolled up. */
+.chat-message-area, .admin-message-area { position:relative; min-height:0; display:flex; flex:1 1 auto; }
+.chat-message-area .chat-body, .admin-message-area .chat-body { width:100%; height:100%; min-height:0; }
+.chat-scroll-bottom {
+  position:absolute;
+  right:13px;
+  bottom:13px;
+  z-index:5;
+  display:flex;
+  align-items:center;
+  gap:5px;
+  border:1px solid #e2c7ca;
+  border-radius:999px;
+  padding:7px 10px;
+  background:rgba(255,255,255,.96);
+  color:#8e2831;
+  box-shadow:0 8px 20px rgba(64,14,20,.16);
+  font-size:11px;
+  font-weight:900;
+  opacity:0;
+  pointer-events:none;
+  transform:translateY(7px);
+  transition:opacity .16s ease, transform .16s ease;
+}
+.chat-scroll-bottom.show { opacity:1; pointer-events:auto; transform:translateY(0); }
+.chat-scroll-bottom:hover { border-color:#c81924; color:#c81924; }
+.chat-panel { grid-template-rows:auto minmax(0,1fr) auto!important; }
+.chat-panel .chat-message-area { overflow:hidden; }
+
+/* Keep the actual admin controls in reach on desktop. The page stays still; the chat list/thread scroll independently. */
+@media (min-width:901px) {
+  .admin-shell { display:block; min-height:calc(100vh - 76px); }
+  .admin-side {
+    position:fixed;
+    top:76px;
+    bottom:0;
+    left:0;
+    width:260px;
+    min-height:0;
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    z-index:25;
+  }
+  .admin-main { width:calc(100% - 260px); max-width:none; margin-left:260px; }
+  .admin-filter-pro { position:sticky; top:88px; z-index:12; }
+  .admin-main:has(.admin-chat) { padding-bottom:14px; }
+  .admin-main:has(.admin-chat) .admin-chat { height:calc(100dvh - 258px); min-height:480px; max-height:none; }
+}
+.admin-chat { overflow:hidden; }
+.chat-admin-thread { min-height:0!important; }
+.admin-message-area { overflow:hidden; }
+.admin-message-scroll { overscroll-behavior:contain; }
+
+@media (max-width:720px) {
+  .chat-scroll-bottom span { display:none; }
+  .chat-scroll-bottom { width:34px; height:34px; padding:0; justify-content:center; border-radius:50%; font-size:16px; }
+  .paint-preview-copy { max-width:76px; }
+}
