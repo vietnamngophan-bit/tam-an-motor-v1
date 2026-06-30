@@ -1993,3 +1993,86 @@ body.modal-open { overflow: hidden !important; }
   .inventory-active-folder { width: 100%; margin-top: 11px; }
   .inventory-active-folder b { max-width: none; flex: 1; }
 }
+
+
+/* ==================================================================
+   V9 — MENU KHO XE: GỌN, KHÔNG VỠ HEADER, KHÔNG HIỆN LÊN TRANG CHỦ
+   Các class V9 tách riêng hoàn toàn với menu V8 để tránh xung đột CSS.
+   ================================================================== */
+.site-header { overflow: visible !important; }
+.site-header .nav { position: relative; }
+.inventory-nav-menu { position: relative; display: inline-flex; align-items: center; flex: 0 0 auto; min-width: 0; }
+.inventory-nav-home { display: inline-flex; align-items: center; gap: 5px; min-height: 42px; padding: 10px 8px 10px 10px; border-radius: 12px; color: #4c4142; font-size: 15px; font-weight: 800; line-height: 1; white-space: nowrap; transition: color .16s ease, background .16s ease; }
+.inventory-nav-home i { width: 14px; color: currentColor; font-size: 15px; font-style: normal; line-height: 1; transition: transform .16s ease; }
+.inventory-nav-menu:hover .inventory-nav-home,
+.inventory-nav-menu:focus-within .inventory-nav-home,
+.inventory-nav-menu.is-open .inventory-nav-home,
+.inventory-nav-menu.active .inventory-nav-home { color: var(--red); background: var(--soft); }
+.inventory-nav-menu:hover .inventory-nav-home i,
+.inventory-nav-menu:focus-within .inventory-nav-home i,
+.inventory-nav-menu.is-open .inventory-nav-home i { transform: rotate(180deg); }
+.inventory-nav-toggle { display: none; }
+.inventory-nav-panel { position: absolute; top: calc(100% + 13px); left: 0; z-index: 1200; width: 500px; max-width: calc(100vw - 32px); padding: 14px; border: 1px solid #ebdbdd; border-radius: 18px; background: #fff; box-shadow: 0 22px 50px rgba(48, 13, 18, .18); opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(-5px); transition: opacity .16s ease, transform .16s ease, visibility .16s ease; }
+.inventory-nav-panel::before { content: ""; position: absolute; top: -7px; left: 27px; width: 13px; height: 13px; border-top: 1px solid #ebdbdd; border-left: 1px solid #ebdbdd; background: #fff; transform: rotate(45deg); }
+.inventory-nav-menu:hover .inventory-nav-panel,
+.inventory-nav-menu:focus-within .inventory-nav-panel,
+.inventory-nav-menu.is-open .inventory-nav-panel { opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(0); }
+.inventory-menu-panel-head { position: relative; display: grid; gap: 2px; padding: 3px 5px 12px; border-bottom: 1px solid #f2e7e8; }
+.inventory-menu-panel-head span { color: var(--red); font-size: 10px; font-weight: 900; letter-spacing: .13em; }
+.inventory-menu-panel-head b { color: #2e1e20; font-size: 15px; line-height: 1.25; }
+.inventory-menu-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 13px 2px 10px; }
+.inventory-menu-group { min-width: 0; }
+.inventory-menu-group-head { display: flex; align-items: center; justify-content: space-between; gap: 7px; margin: 0 2px 7px; }
+.inventory-menu-group-head span { overflow: hidden; color: #786365; font-size: 10px; font-weight: 900; letter-spacing: .09em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.inventory-menu-group-head small { flex: 0 0 auto; color: #a48d8f; font-size: 10px; font-weight: 700; }
+.inventory-menu-list { display: grid; gap: 5px; }
+.inventory-menu-item { display: grid; grid-template-columns: 30px minmax(0, 1fr) 13px; align-items: center; gap: 8px; min-height: 49px; padding: 7px 8px; border: 1px solid transparent; border-radius: 12px; color: #3d292b; background: #fff; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
+.inventory-menu-item:hover { border-color: #efcfd2; background: #fff6f6; transform: translateX(2px); }
+.inventory-menu-item-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: #fff0f1; color: var(--red); font-size: 18px; font-weight: 900; line-height: 1; }
+.inventory-menu-item-copy { display: grid; min-width: 0; gap: 1px; }
+.inventory-menu-item-copy b { overflow: hidden; color: #3b2729; font-size: 12px; font-weight: 900; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.inventory-menu-item-copy small { overflow: hidden; color: #907a7c; font-size: 10px; font-weight: 650; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
+.inventory-menu-item-arrow { color: #ba1f29; font-size: 18px; line-height: 1; }
+.inventory-menu-all { display: flex; align-items: center; gap: 8px; min-height: 42px; margin-top: 1px; padding: 9px 9px 1px; border-top: 1px solid #f2e7e8; color: #9e1d26; font-size: 12px; font-weight: 900; }
+.inventory-menu-all span { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 7px; background: #fff0f1; font-size: 13px; }
+.inventory-menu-all i { margin-left: auto; font-style: normal; font-size: 16px; }
+.inventory-menu-all:hover { color: var(--red); }
+.inventory-menu-empty { display: grid; gap: 3px; padding: 18px 5px 6px; color: #846f71; font-size: 12px; }
+.inventory-menu-empty b { color: #382426; font-size: 14px; }
+
+/* Header desktop: phân cột để menu không bao giờ tự xuống hàng. */
+@media (min-width: 1181px) {
+  .site-header .nav { display: grid; grid-template-columns: minmax(220px, 310px) minmax(0, 1fr) auto; gap: 14px; }
+  .site-header .brand { min-width: 0; }
+  .site-header .brand-copy b { font-size: 17px; }
+  .site-header .brand-copy span { font-size: 10px; letter-spacing: .1em; }
+  .site-header .main-nav { display: flex !important; min-width: 0; justify-content: flex-end; gap: 1px; overflow: visible; }
+  .site-header .main-nav > a { padding: 10px 9px; font-size: 14px; }
+  .site-header .header-actions { min-width: 0; }
+  .site-header .phone-pill { padding: 11px 14px; font-size: 14px; }
+}
+
+/* Khi chiều rộng/zoom không đủ, chuyển hẳn sang hamburger; tuyệt đối không để menu vỡ hàng. */
+@media (max-width: 1180px) {
+  .site-header .main-nav { display: none !important; }
+  .site-header .menu-btn { display: grid !important; place-items: center; }
+  .site-header .main-nav.mobile-open { display: block !important; position: absolute !important; top: calc(100% + 8px) !important; left: 16px !important; right: 16px !important; z-index: 1250; padding: 10px !important; border: 1px solid #eadbdd; border-radius: 18px; background: #fff; box-shadow: 0 18px 44px rgba(44, 12, 16, .16); }
+  .site-header .main-nav.mobile-open > a { display: block; width: 100%; padding: 12px 13px; border-radius: 12px; font-size: 15px; }
+  .site-header .main-nav.mobile-open .inventory-nav-menu { display: grid; grid-template-columns: minmax(0, 1fr) 43px; width: 100%; margin-bottom: 4px; border: 1px solid #efdddd; border-radius: 14px; background: #fffafa; }
+  .site-header .main-nav.mobile-open .inventory-nav-home { min-width: 0; padding: 13px; border-radius: 13px 0 0 13px; font-size: 15px; }
+  .site-header .main-nav.mobile-open .inventory-nav-home i { display: none; }
+  .site-header .main-nav.mobile-open .inventory-nav-toggle { display: grid; place-items: center; width: 43px; height: 43px; align-self: center; margin-right: 4px; border: 0; border-radius: 10px; background: #fff0f1; color: var(--red); font-size: 19px; line-height: 1; }
+  .site-header .main-nav.mobile-open .inventory-nav-toggle span { transition: transform .16s ease; }
+  .site-header .main-nav.mobile-open .inventory-nav-menu.is-open .inventory-nav-toggle span { transform: rotate(180deg); }
+  .site-header .main-nav.mobile-open .inventory-nav-panel { position: static; grid-column: 1 / -1; width: auto; max-width: none; display: none; margin: 0 7px 7px; padding: 12px; border-radius: 12px; box-shadow: none; transform: none; opacity: 1; visibility: visible; pointer-events: auto; }
+  .site-header .main-nav.mobile-open .inventory-nav-panel::before { display: none; }
+  .site-header .main-nav.mobile-open .inventory-nav-menu:hover .inventory-nav-panel,
+  .site-header .main-nav.mobile-open .inventory-nav-menu:focus-within .inventory-nav-panel { display: none; }
+  .site-header .main-nav.mobile-open .inventory-nav-menu.is-open .inventory-nav-panel { display: block; }
+  .site-header .main-nav.mobile-open .inventory-menu-groups { grid-template-columns: 1fr; gap: 12px; padding: 10px 0 7px; }
+}
+
+@media (max-width: 640px) {
+  .inventory-nav-panel { max-width: calc(100vw - 24px); }
+  .site-header .main-nav.mobile-open { left: 10px !important; right: 10px !important; }
+}
