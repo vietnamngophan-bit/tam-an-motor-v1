@@ -1194,7 +1194,7 @@
   function openProductEditor(product, collections = []) {
     const p = product || { category:'motor_new', collection_slug:'', status:'in_stock', published:true, images:[], colors:[], versions:[] };
     const folderOptions = category => [`<option value="">Không gắn thư mục riêng</option>`, ...collections.filter(item => item.category === category).map(item => `<option value="${escapeHTML(item.slug)}" ${p.collection_slug === item.slug ? 'selected' : ''}>${escapeHTML(item.title)} · ${escapeHTML(collectionUrl(item))}</option>`)].join('');
-    const modal = adminModal(product ? 'Sửa sản phẩm' : 'Thêm sản phẩm', `<form id="productForm" class="admin-product-form"><fieldset class="fieldset"><legend>Thông tin xe</legend><div class="form-three"><div class="field"><label>Tên xe *</label><input name="name" required value="${escapeHTML(p.name || '')}"></div><div class="field"><label>Hãng</label><input name="brand" value="${escapeHTML(p.brand || 'Honda')}"></div><div class="field"><label>Nhóm xe</label><select name="category">${categoryDefinitions().map(({id:key, label}) => `<option value="${key}" ${p.category === key ? 'selected' : ''}>${escapeHTML(label)}</option>`).join('')}</select></div><div class="field collection-folder-field"><label>Thư mục chạy quảng cáo</label><select name="collection_slug" id="productCollectionFolder">${folderOptions(p.category)}</select><small class="field-help">Tạo/sửa thư mục ở menu “Link quảng cáo theo dòng xe”.</small></div><div class="field"><label>Trạng thái</label><select name="status">${['in_stock','incoming','reserved','sold'].map(key => `<option value="${key}" ${p.status === key ? 'selected' : ''}>${statusName(key)}</option>`).join('')}</select></div><div class="field"><label>Giá chung (không bắt buộc)</label><input name="price" class="vnd-input" inputmode="numeric" value="${formatVndInput(p.price)}" placeholder="Ví dụ: 35.900.000"></div><div class="field"><label>Giá cũ chung</label><input name="old_price" class="vnd-input" inputmode="numeric" value="${formatVndInput(p.old_price)}" placeholder="Ví dụ: 38.900.000"></div><div class="field"><label>Năm sản xuất</label><input name="year" type="number" value="${p.year ?? ''}"></div><div class="field"><label>Số km</label><input name="mileage" type="number" value="${p.mileage ?? ''}"></div><div class="field"><label>Động cơ</label><input name="engine" value="${escapeHTML(p.engine || '')}"></div><div class="field"><label>Trả trước từ</label><input name="installment_from" class="vnd-input" inputmode="numeric" value="${formatVndInput(p.installment_from)}" placeholder="Ví dụ: 5.000.000"></div><div class="field"><label>Hỗ trợ hồ sơ từ</label><input name="bad_debt_from" class="vnd-input" inputmode="numeric" value="${formatVndInput(p.bad_debt_from)}" placeholder="Ví dụ: 8.000.000"></div><div class="field"><label>Giấy tờ</label><input name="documents" value="${escapeHTML(p.documents || '')}"></div></div><div class="field"><label>Mô tả chi tiết</label><div class="rich-editor"><div class="rich-toolbar" role="toolbar" aria-label="Định dạng mô tả"><button type="button" data-command="bold" title="In đậm"><b>B</b></button><button type="button" data-command="italic" title="In nghiêng"><i>I</i></button><button type="button" data-command="underline" title="Gạch chân"><u>U</u></button><span class="toolbar-sep"></span><button type="button" data-command="formatBlock" data-value="H3" title="Tiêu đề">Tt</button><button type="button" data-command="insertUnorderedList" title="Danh sách chấm">•≡</button><button type="button" data-command="insertOrderedList" title="Danh sách số">1≡</button><span class="toolbar-sep"></span><button type="button" data-command="justifyLeft" title="Căn trái">≡</button><button type="button" data-command="justifyCenter" title="Căn giữa">≡</button><select class="rich-font-picker" title="Font chữ"><option value="Be Vietnam Pro">Be Vietnam Pro</option><option value="Arial">Arial</option><option value="Tahoma">Tahoma</option><option value="Times New Roman">Times New Roman</option><option value="Georgia">Georgia</option><option value="Montserrat">Montserrat</option><option value="Manrope">Manrope</option></select><select class="rich-size-picker" title="Cỡ chữ"><option value="2">Nhỏ</option><option value="3" selected>Vừa</option><option value="4">Lớn</option><option value="5">Rất lớn</option></select><input class="rich-color-picker" type="color" value="#1b1214" title="Màu chữ"></div><div id="descriptionEditor" class="rich-editor-area" contenteditable="true" role="textbox" aria-multiline="true">${editorInitialHTML(p.description || '')}</div><textarea id="descriptionValue" name="description" hidden></textarea></div><small class="field-help">Dùng thanh công cụ như Word. Xuống dòng, tiêu đề, danh sách, in đậm/nghiêng sẽ được giữ nguyên ngoài website.</small></div><div class="check-row"><label><input type="checkbox" name="featured" ${p.featured ? 'checked' : ''}> Xe nổi bật</label><label><input type="checkbox" name="published" ${p.published !== 0 ? 'checked' : ''}> Hiển thị ngoài website</label></div></fieldset><fieldset class="fieldset"><legend>Ảnh chung của mẫu xe</legend><p class="muted">Ảnh này dùng khi mẫu xe chưa có phiên bản/màu riêng.</p><input id="productImagesInput" type="file" accept="image/*" multiple><div id="productImages" class="thumb-row"></div></fieldset><fieldset class="fieldset"><legend>Phiên bản → phối màu → album ảnh</legend><p class="muted"><b>Ví dụ đúng:</b> Air Blade → <b>Sport</b> → <b>Trắng Đỏ Đen</b> (3 ô màu), <b>Xám Đỏ Đen</b>; <b>Tiêu chuẩn</b> → Trắng, Đen. Mỗi phối màu là một lựa chọn hoàn chỉnh có album ảnh riêng.</p><div id="versionRows"></div><button id="addVersion" type="button" class="small-btn">+ Thêm phiên bản</button></fieldset><fieldset class="fieldset"><legend>Phối màu chung (chỉ dùng khi xe không phân phiên bản)</legend><p class="muted">Nếu xe đã có phiên bản, hãy khai báo phối màu trong từng phiên bản phía trên. Phần này dành cho xe chỉ có một bản.</p><div id="generalColorRows"></div><button id="addGeneralColor" type="button" class="small-btn">+ Thêm phối màu chung</button></fieldset><button class="btn btn-primary">${product ? 'Lưu thay đổi' : 'Tạo sản phẩm'}</button></form>`);
+    const modal = adminModal(product ? 'Sửa sản phẩm' : 'Thêm sản phẩm', `<form id="productForm" class="admin-product-form"><fieldset class="fieldset"><legend>Thông tin xe</legend><div class="form-three"><div class="field"><label>Tên xe *</label><input name="name" required value="${escapeHTML(p.name || '')}"></div><div class="field"><label>Hãng</label><input name="brand" value="${escapeHTML(p.brand || 'Honda')}"></div><div class="field"><label>Nhóm xe</label><select name="category">${categoryDefinitions().map(({id:key, label}) => `<option value="${key}" ${p.category === key ? 'selected' : ''}>${escapeHTML(label)}</option>`).join('')}</select></div><div class="field collection-folder-field"><label>Thư mục con / trang quảng cáo</label><select name="collection_slug" id="productCollectionFolder">${folderOptions(p.category)}</select><small class="field-help">Chọn theo cấu trúc: Kho xe → nhóm xe → thư mục dòng xe. Mỗi thư mục có landing page và link quảng cáo riêng.</small></div><div class="field"><label>Trạng thái</label><select name="status">${['in_stock','incoming','reserved','sold'].map(key => `<option value="${key}" ${p.status === key ? 'selected' : ''}>${statusName(key)}</option>`).join('')}</select></div><div class="field"><label>Giá chung (không bắt buộc)</label><input name="price" class="vnd-input" inputmode="numeric" value="${formatVndInput(p.price)}" placeholder="Ví dụ: 35.900.000"></div><div class="field"><label>Giá cũ chung</label><input name="old_price" class="vnd-input" inputmode="numeric" value="${formatVndInput(p.old_price)}" placeholder="Ví dụ: 38.900.000"></div><div class="field"><label>Năm sản xuất</label><input name="year" type="number" value="${p.year ?? ''}"></div><div class="field"><label>Số km</label><input name="mileage" type="number" value="${p.mileage ?? ''}"></div><div class="field"><label>Động cơ</label><input name="engine" value="${escapeHTML(p.engine || '')}"></div><div class="field"><label>Trả trước từ</label><input name="installment_from" class="vnd-input" inputmode="numeric" value="${formatVndInput(p.installment_from)}" placeholder="Ví dụ: 5.000.000"></div><div class="field"><label>Hỗ trợ hồ sơ từ</label><input name="bad_debt_from" class="vnd-input" inputmode="numeric" value="${formatVndInput(p.bad_debt_from)}" placeholder="Ví dụ: 8.000.000"></div><div class="field"><label>Giấy tờ</label><input name="documents" value="${escapeHTML(p.documents || '')}"></div></div><div class="field"><label>Mô tả chi tiết</label><div class="rich-editor"><div class="rich-toolbar" role="toolbar" aria-label="Định dạng mô tả"><button type="button" data-command="bold" title="In đậm"><b>B</b></button><button type="button" data-command="italic" title="In nghiêng"><i>I</i></button><button type="button" data-command="underline" title="Gạch chân"><u>U</u></button><span class="toolbar-sep"></span><button type="button" data-command="formatBlock" data-value="H3" title="Tiêu đề">Tt</button><button type="button" data-command="insertUnorderedList" title="Danh sách chấm">•≡</button><button type="button" data-command="insertOrderedList" title="Danh sách số">1≡</button><span class="toolbar-sep"></span><button type="button" data-command="justifyLeft" title="Căn trái">≡</button><button type="button" data-command="justifyCenter" title="Căn giữa">≡</button><select class="rich-font-picker" title="Font chữ"><option value="Be Vietnam Pro">Be Vietnam Pro</option><option value="Arial">Arial</option><option value="Tahoma">Tahoma</option><option value="Times New Roman">Times New Roman</option><option value="Georgia">Georgia</option><option value="Montserrat">Montserrat</option><option value="Manrope">Manrope</option></select><select class="rich-size-picker" title="Cỡ chữ"><option value="2">Nhỏ</option><option value="3" selected>Vừa</option><option value="4">Lớn</option><option value="5">Rất lớn</option></select><input class="rich-color-picker" type="color" value="#1b1214" title="Màu chữ"></div><div id="descriptionEditor" class="rich-editor-area" contenteditable="true" role="textbox" aria-multiline="true">${editorInitialHTML(p.description || '')}</div><textarea id="descriptionValue" name="description" hidden></textarea></div><small class="field-help">Dùng thanh công cụ như Word. Xuống dòng, tiêu đề, danh sách, in đậm/nghiêng sẽ được giữ nguyên ngoài website.</small></div><div class="check-row"><label><input type="checkbox" name="featured" ${p.featured ? 'checked' : ''}> Xe nổi bật</label><label><input type="checkbox" name="published" ${p.published !== 0 ? 'checked' : ''}> Hiển thị ngoài website</label></div></fieldset><fieldset class="fieldset"><legend>Ảnh chung của mẫu xe</legend><p class="muted">Ảnh này dùng khi mẫu xe chưa có phiên bản/màu riêng.</p><input id="productImagesInput" type="file" accept="image/*" multiple><div id="productImages" class="thumb-row"></div></fieldset><fieldset class="fieldset"><legend>Phiên bản → phối màu → album ảnh</legend><p class="muted"><b>Ví dụ đúng:</b> Air Blade → <b>Sport</b> → <b>Trắng Đỏ Đen</b> (3 ô màu), <b>Xám Đỏ Đen</b>; <b>Tiêu chuẩn</b> → Trắng, Đen. Mỗi phối màu là một lựa chọn hoàn chỉnh có album ảnh riêng.</p><div id="versionRows"></div><button id="addVersion" type="button" class="small-btn">+ Thêm phiên bản</button></fieldset><fieldset class="fieldset"><legend>Phối màu chung (chỉ dùng khi xe không phân phiên bản)</legend><p class="muted">Nếu xe đã có phiên bản, hãy khai báo phối màu trong từng phiên bản phía trên. Phần này dành cho xe chỉ có một bản.</p><div id="generalColorRows"></div><button id="addGeneralColor" type="button" class="small-btn">+ Thêm phối màu chung</button></fieldset><button class="btn btn-primary">${product ? 'Lưu thay đổi' : 'Tạo sản phẩm'}</button></form>`);
     const form = $('#productForm', modal);
     const categorySelect = $('[name="category"]', form);
     const collectionSelect = $('[name="collection_slug"]', form);
@@ -1745,12 +1745,12 @@
 
   async function adminHomeLayout(main) {
     const data=await request('/api/admin/site'); const site=data.site; let blocks=parseConfigArray(site.trust_blocks_json,V14_DEFAULT_TRUST).map(x=>({...x}));
-    main.innerHTML=`<div class="admin-page-head"><div><span>Trang chủ</span><h1 class="admin-title">Khối nội dung & Hero</h1><p class="admin-sub">Chỉnh tốc độ Hero, các khối lợi ích dưới Hero và quyền xin vị trí khách.</p></div><div class="admin-page-badge">Nội dung linh hoạt</div></div><form id="homeLayoutForm" class="admin-product-form admin-pro-form"><fieldset class="fieldset"><legend>Hero nhiều ảnh</legend><div class="form-two"><div class="field"><label>Tự chuyển ảnh (giây)</label><input name="hero_autoplay_seconds" type="number" min="3" max="20" value="${Number(site.hero_autoplay_seconds || 5)}"><small class="field-help">Ảnh Hero được upload trong Theme Studio → Trang chủ & ảnh.</small></div><div class="field"><label>Hiệu ứng kéo / vuốt</label><input value="Máy tính: kéo chuột • Điện thoại: vuốt ngang" disabled></div></div></fieldset><fieldset class="fieldset"><legend>Khối lợi ích dưới Hero</legend><div id="trustRows" class="stack-editor"></div><button type="button" id="addTrust" class="small-btn">+ Thêm khối</button></fieldset><fieldset class="fieldset"><legend>Vị trí khách hàng (tùy chọn)</legend><div class="form-two"><div class="field location-setting-toggle"><input id="locationCaptureEnabled" name="location_capture_enabled" type="checkbox" ${site.location_capture_enabled===true||site.location_capture_enabled==='true'?'checked':''}><button id="locationCaptureToggle" type="button" class="admin-switch" role="switch" aria-checked="${site.location_capture_enabled===true||site.location_capture_enabled==='true'?'true':'false'}"><span class="admin-switch-track" aria-hidden="true"><i></i></span><span><b>Cho phép khách tự chọn chia sẻ vị trí gần đúng</b><small>Website chỉ hỏi quyền khi khách tự bật trong form.</small></span></button><small class="field-help">Tắt/bật tại đây không làm tải lại trang và không tự lấy vị trí của khách.</small></div><div class="field"><label>Nội dung xin phép</label><textarea name="location_consent_text">${escapeHTML(site.location_consent_text || '')}</textarea></div></div></fieldset><button class="btn btn-primary">Lưu trang chủ</button></form>`;
+    main.innerHTML=`<div class="admin-page-head"><div><span>Trang chủ</span><h1 class="admin-title">Khối nội dung & Hero</h1><p class="admin-sub">Chỉnh tốc độ Hero, các khối lợi ích dưới Hero và quyền xin vị trí khách.</p></div><div class="admin-page-badge">Nội dung linh hoạt</div></div><form id="homeLayoutForm" class="admin-product-form admin-pro-form"><fieldset class="fieldset"><legend>Hero nhiều ảnh</legend><div class="form-two"><div class="field"><label>Tự chuyển ảnh (giây)</label><input name="hero_autoplay_seconds" type="number" min="3" max="20" value="${Number(site.hero_autoplay_seconds || 5)}"><small class="field-help">Ảnh Hero được upload trong Theme Studio → Trang chủ & ảnh.</small></div><div class="field"><label>Hiệu ứng kéo / vuốt</label><input value="Máy tính: kéo chuột • Điện thoại: vuốt ngang" disabled></div></div></fieldset><fieldset class="fieldset"><legend>Khối lợi ích dưới Hero</legend><div id="trustRows" class="stack-editor"></div><button type="button" id="addTrust" class="small-btn">+ Thêm khối</button></fieldset><fieldset class="fieldset"><legend>Vị trí khách hàng (tùy chọn)</legend><div class="form-two"><div class="field location-setting-toggle"><label class="admin-switch admin-switch-native"><input id="locationCaptureEnabled" name="location_capture_enabled" type="checkbox" ${site.location_capture_enabled===true||site.location_capture_enabled==='true'?'checked':''}><span class="admin-switch-track" aria-hidden="true"><i></i></span><span><b>Cho phép khách tự chọn chia sẻ vị trí gần đúng</b><small>Website chỉ hỏi quyền khi khách tự bật trong form.</small></span></label><small class="field-help">Tắt/bật tại đây không làm tải lại trang và không tự lấy vị trí của khách.</small></div><div class="field"><label>Nội dung xin phép</label><textarea name="location_consent_text">${escapeHTML(site.location_consent_text || '')}</textarea></div></div></fieldset><button class="btn btn-primary">Lưu trang chủ</button></form>`;
     const renderBlocks=()=>{ $('#trustRows').innerHTML=blocks.map((block,index)=>`<div class="editor-row trust-editor-row"><div class="form-three"><div class="field"><label>Icon</label><input data-field="icon" data-index="${index}" value="${escapeHTML(block.icon||'✓')}"></div><div class="field"><label>Tiêu đề</label><input data-field="title" data-index="${index}" value="${escapeHTML(block.title||'')}"></div><div class="field"><label>Nội dung</label><input data-field="text" data-index="${index}" value="${escapeHTML(block.text||'')}"></div><div class="field"><label>Thứ tự</label><input data-field="sort" data-index="${index}" type="number" value="${Number(block.sort||index+1)}"></div><div class="field"><label class="admin-check"><input data-field="visible" data-index="${index}" type="checkbox" ${block.visible!==false?'checked':''}><span>✓</span> Hiển thị</label></div><div class="field editor-row-action"><button type="button" class="small-btn danger remove-trust" data-index="${index}">Xoá</button></div></div></div>`).join(''); $$('#trustRows input').forEach(input=>input.addEventListener('input',()=>{const item=blocks[Number(input.dataset.index)];const key=input.dataset.field;item[key]=key==='visible'?input.checked:input.value;}));$$('.remove-trust').forEach(button=>button.onclick=()=>{blocks.splice(Number(button.dataset.index),1);renderBlocks();});};
     renderBlocks(); $('#addTrust').onclick=()=>{blocks.push({icon:'✦',title:'Khối nội dung mới',text:'Nội dung có thể sửa trong Admin.',visible:true,sort:blocks.length+1});renderBlocks();};
-    const locationCapture = $('#locationCaptureEnabled'); const locationToggle = $('#locationCaptureToggle');
-    locationToggle?.addEventListener('click', event => { event.preventDefault(); if (!locationCapture) return; locationCapture.checked = !locationCapture.checked; locationToggle.setAttribute('aria-checked', locationCapture.checked ? 'true' : 'false'); locationToggle.classList.toggle('is-on', locationCapture.checked); });
-    locationToggle?.classList.toggle('is-on', !!locationCapture?.checked);
+    // Native label toggle: no button click handler or page navigation is involved.
+    const locationCapture = $('#locationCaptureEnabled');
+    locationCapture?.addEventListener('change', () => { /* FormData reads this state when the admin saves. */ });
     $('#homeLayoutForm').onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.target);const normalized=blocks.map((block,index)=>({icon:String(block.icon||'✓').slice(0,12),title:String(block.title||'').trim().slice(0,100),text:String(block.text||'').trim().slice(0,220),visible:block.visible!==false,sort:Number(block.sort||index+1)})).filter(x=>x.title);try{const out=await request('/api/admin/site',{method:'PUT',body:{hero_autoplay_seconds:Number(fd.get('hero_autoplay_seconds')||5),location_capture_enabled:fd.get('location_capture_enabled')==='on',location_consent_text:fd.get('location_consent_text')||'',trust_blocks_json:JSON.stringify(normalized)}});state.site=out.site;notify('Đã lưu nội dung trang chủ.');}catch(error){notify(error.message);}};
   }
 
@@ -1962,5 +1962,196 @@
       app.innerHTML = `<main class="admin-login"><div class="login-card"><img src="/assets/logo.jpg" alt=""><h1>Không tải được website</h1><p>${escapeHTML(error.message)}</p><button class="btn btn-primary" onclick="location.reload()">Thử lại</button></div></main>`;
     }
   }
+
+
+  /* ===== V5: Kho xe theo cây thư mục + landing quảng cáo riêng ===== */
+  function inventoryFolderUrl(collection) {
+    return `${location.origin}${collectionUrl(collection)}`;
+  }
+
+  function openInventoryFolderEditor(collection = null, defaults = {}, afterSave = null) {
+    const item = collection || {
+      title:'', slug:'', category:defaults.category || 'motor_new', description:'', image_url:'', visible:true, sort_order:0
+    };
+    const modal = adminModal(collection ? 'Sửa thư mục dòng xe' : 'Tạo thư mục dòng xe', `
+      <form id="inventoryFolderForm" class="admin-product-form collection-editor-form">
+        <fieldset class="fieldset">
+          <legend>Kho xe → nhóm xe → thư mục con</legend>
+          <p class="field-help" style="margin:0 0 16px">Mỗi thư mục là một trang landing độc lập. Link quảng cáo chỉ hiển thị những sản phẩm được gán vào đúng thư mục này.</p>
+          <div class="form-two">
+            <div class="field"><label>Tên thư mục / dòng xe *</label><input name="title" required value="${escapeHTML(item.title || '')}" placeholder="Ví dụ: Air Blade"></div>
+            <div class="field"><label>Nhóm xe *</label><select name="category">${categoryDefinitions().map(({id,label}) => `<option value="${escapeHTML(id)}" ${item.category === id ? 'selected' : ''}>${escapeHTML(label)}</option>`).join('')}</select></div>
+            <div class="field"><label>Đường link (slug)</label><input name="slug" value="${escapeHTML(item.slug || '')}" placeholder="air-blade"><small class="field-help">Bỏ trống để tự tạo từ tên. Chỉ dùng chữ không dấu, số và dấu gạch ngang.</small></div>
+            <div class="field"><label>Thứ tự hiển thị</label><input name="sort_order" type="number" value="${Number(item.sort_order || 0)}"></div>
+            <div class="field full"><label>Mô tả trên landing page</label><textarea name="description" placeholder="Ví dụ: Tổng hợp Air Blade mới, màu xe và ưu đãi đang áp dụng.">${escapeHTML(item.description || '')}</textarea></div>
+            <div class="field full"><label>Ảnh bìa landing page <span class="muted">(không bắt buộc)</span></label><input id="inventoryFolderImage" type="file" accept="image/*"><input name="image_url" value="${escapeHTML(item.image_url || '')}" placeholder="Link ảnh; để trống sẽ dùng ảnh xe đầu tiên trong thư mục."></div>
+          </div>
+          <label class="admin-check"><input name="visible" type="checkbox" ${item.visible !== 0 && item.visible !== false ? 'checked' : ''}><span>✓</span> Bật landing page và cho phép dùng link quảng cáo</label>
+        </fieldset>
+        <button class="btn btn-primary">${collection ? 'Lưu thư mục' : 'Tạo thư mục & landing page'}</button>
+      </form>`);
+    const form = $('#inventoryFolderForm', modal);
+    $('#inventoryFolderImage', modal).onchange = async event => {
+      try { form.image_url.value = await uploadFile(event.target.files[0]); }
+      catch (error) { notify(error.message); }
+    };
+    form.onsubmit = async event => {
+      event.preventDefault();
+      const fd = new FormData(form);
+      const body = Object.fromEntries(fd.entries());
+      body.visible = fd.get('visible') === 'on';
+      try {
+        await request(collection ? `/api/admin/collections/${item.id}` : '/api/admin/collections', { method:collection ? 'PUT' : 'POST', body });
+        notify(collection ? 'Đã cập nhật thư mục và landing page.' : 'Đã tạo thư mục và landing page.');
+        modal.remove(); document.body.classList.remove('modal-open');
+        if (typeof afterSave === 'function') afterSave();
+      } catch (error) { notify(error.message); }
+    };
+  }
+
+  adminProducts = async function(main) {
+    const [data, collectionData] = await Promise.all([request('/api/admin/products'), request('/api/admin/collections')]);
+    const products = data.products || [];
+    const collections = collectionData.collections || [];
+    const categories = categoryDefinitions();
+    const categoryWithProducts = categories.find(c => products.some(p => p.category === c.id)) || categories[0] || { id:'motor_new', label:'Xe máy mới' };
+    let activeCategory = categoryWithProducts.id;
+    let activeFolder = '';
+    const collectionBySlug = new Map(collections.map(item => [item.slug, item]));
+    const productsIn = slug => products.filter(product => product.category === activeCategory && (slug ? product.collection_slug === slug : !product.collection_slug));
+    const folderCount = slug => products.filter(product => product.category === activeCategory && product.collection_slug === slug).length;
+    const categoryCount = category => products.filter(product => product.category === category).length;
+    const isAdmin = state.admin?.role === 'admin';
+
+    const folderCard = collection => {
+      const count = folderCount(collection.slug);
+      return `<article class="inventory-folder-card" data-folder-card="${escapeHTML(collection.slug)}" data-category-card="${escapeHTML(collection.category)}">
+        <div class="inventory-folder-card-top"><span class="inventory-folder-icon">▣</span><span class="inventory-folder-state ${collection.visible ? 'is-live' : ''}">${collection.visible ? 'Landing đang bật' : 'Đang ẩn'}</span></div>
+        <h3>${escapeHTML(collection.title)}</h3>
+        <p>${count} xe trong thư mục · <span>${escapeHTML(collectionUrl(collection))}</span></p>
+        <div class="inventory-folder-actions">
+          <button type="button" class="small-btn open-folder-products" data-folder="${escapeHTML(collection.slug)}">Xem xe</button>
+          <button type="button" class="small-btn open-folder-landing" data-folder="${escapeHTML(collection.slug)}">Mở landing</button>
+          ${isAdmin ? `<button type="button" class="inventory-folder-more edit-folder" data-id="${collection.id}" aria-label="Sửa thư mục">⋯</button>` : ''}
+        </div>
+      </article>`;
+    };
+
+    main.innerHTML = `
+      <div class="admin-toolbar inventory-admin-toolbar">
+        <div><div class="admin-eyebrow">CẤU TRÚC KHO XE</div><h1 class="admin-title">Kho xe & landing quảng cáo</h1><p class="admin-sub">Quản lý đúng thứ tự: <b>Kho xe → nhóm xe → thư mục dòng xe → sản phẩm</b>. Mỗi thư mục có link quảng cáo và landing page riêng.</p></div>
+        <div class="inventory-toolbar-actions">${isAdmin ? '<button id="addInventoryFolder" class="btn btn-ghost">+ Thêm thư mục dòng xe</button>' : ''}<button id="addProduct" class="btn btn-primary">+ Thêm xe</button></div>
+      </div>
+      <section class="inventory-hierarchy admin-card">
+        <div class="inventory-breadcrumb"><span>Kho xe</span><b>›</b><strong id="inventoryCategoryLabel"></strong><b>›</b><em id="inventoryFolderLabel">Tất cả thư mục</em></div>
+        <div id="inventoryCategoryTabs" class="inventory-category-tabs">${categories.map(category => `<button type="button" class="inventory-category-tab" data-category="${escapeHTML(category.id)}"><span>${escapeHTML(category.label)}</span><small>${categoryCount(category.id)} xe</small></button>`).join('')}</div>
+        <div id="inventoryFolderGrid" class="inventory-folder-grid"></div>
+      </section>
+      <div class="inventory-list-head"><div><h2 id="inventoryListTitle">Xe trong kho</h2><p id="inventoryListSub" class="muted">Chọn thư mục để xem riêng từng dòng xe và lấy đúng link quảng cáo.</p></div><div class="inventory-list-filter"><label for="inventoryFolderFilter">Đang xem</label><select id="inventoryFolderFilter"></select></div></div>
+      <div class="admin-card"><div class="admin-table-wrap"><table class="admin-table inventory-product-table"><thead><tr><th>Ảnh</th><th>Sản phẩm</th><th>Thư mục con</th><th>Tồn theo màu</th><th>Trạng thái</th><th>Giá</th><th></th></tr></thead><tbody id="inventoryProductRows">${products.map(product => { const folder = collectionBySlug.get(product.collection_slug); return `<tr data-product-category="${escapeHTML(product.category)}" data-product-folder="${escapeHTML(product.collection_slug || '')}"><td><img src="${escapeHTML(productImage(product))}"></td><td><b>${escapeHTML(product.name)}</b><br><span class="muted">${escapeHTML(product.brand || '')} · ${escapeHTML(categoryLabel(product.category))}</span></td><td>${folder ? `<button class="inventory-folder-link open-folder-products" data-folder="${escapeHTML(folder.slug)}">${escapeHTML(folder.title)}</button>` : '<span class="muted">Chưa xếp thư mục</span>'}</td><td>${inventorySummary(product)}</td><td>${statusName(product.status)}</td><td>${product.price ? money(product.price) : 'Liên hệ'}</td><td><button class="small-btn edit-product" data-id="${product.id}">Sửa</button>${isAdmin ? `<button class="small-btn danger delete-product" data-id="${product.id}">Xoá</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="7" class="admin-empty">Chưa có sản phẩm. Hãy tạo thư mục dòng xe trước, sau đó thêm xe vào đúng thư mục.</td></tr>'}</tbody></table></div></div>`;
+
+    const categoryLabelEl = $('#inventoryCategoryLabel', main);
+    const folderLabelEl = $('#inventoryFolderLabel', main);
+    const folderGrid = $('#inventoryFolderGrid', main);
+    const folderFilter = $('#inventoryFolderFilter', main);
+    const listTitle = $('#inventoryListTitle', main);
+    const listSub = $('#inventoryListSub', main);
+    const productRows = $$('#inventoryProductRows tr[data-product-category]', main);
+
+    const updateView = () => {
+      const matchingFolders = collections.filter(item => item.category === activeCategory);
+      const categoryInfo = categories.find(item => item.id === activeCategory) || { label:categoryLabel(activeCategory) };
+      categoryLabelEl.textContent = categoryInfo.label;
+      const currentFolder = matchingFolders.find(item => item.slug === activeFolder) || null;
+      folderLabelEl.textContent = currentFolder ? currentFolder.title : (activeFolder === '__unfiled__' ? 'Chưa xếp thư mục' : 'Tất cả thư mục');
+      $$('.inventory-category-tab', main).forEach(button => button.classList.toggle('active', button.dataset.category === activeCategory));
+      folderGrid.innerHTML = `
+        <article class="inventory-folder-card inventory-folder-card-all ${!activeFolder ? 'active' : ''}"><div class="inventory-folder-card-top"><span class="inventory-folder-icon">☷</span><span class="inventory-folder-state">${categoryCount(activeCategory)} xe</span></div><h3>Tất cả xe</h3><p>Toàn bộ sản phẩm trong ${escapeHTML(categoryInfo.label)}.</p><div class="inventory-folder-actions"><button type="button" class="small-btn open-folder-products" data-folder="">Xem toàn bộ</button></div></article>
+        ${matchingFolders.map(folderCard).join('')}
+        <article class="inventory-folder-card inventory-folder-card-unfiled ${activeFolder === '__unfiled__' ? 'active' : ''}"><div class="inventory-folder-card-top"><span class="inventory-folder-icon">□</span><span class="inventory-folder-state">${productsIn('').length} xe</span></div><h3>Chưa xếp thư mục</h3><p>Xe chưa có landing page riêng hoặc chưa gán dòng xe.</p><div class="inventory-folder-actions"><button type="button" class="small-btn open-folder-products" data-folder="__unfiled__">Xem xe</button></div></article>
+        ${isAdmin ? `<button type="button" id="addInventoryFolderInline" class="inventory-add-folder"><span>+</span><b>Tạo thư mục dòng xe</b><small>Ví dụ: Air Blade, Vision, Winner</small></button>` : ''}`;
+      folderFilter.innerHTML = `<option value="">Tất cả xe trong nhóm</option>${matchingFolders.map(item => `<option value="${escapeHTML(item.slug)}">${escapeHTML(item.title)} (${folderCount(item.slug)} xe)</option>`).join('')}<option value="__unfiled__">Chưa xếp thư mục (${productsIn('').length} xe)</option>`;
+      folderFilter.value = activeFolder;
+      let visible = 0;
+      productRows.forEach(row => {
+        const inCategory = row.dataset.productCategory === activeCategory;
+        const folder = row.dataset.productFolder || '';
+        const inFolder = !activeFolder || (activeFolder === '__unfiled__' ? !folder : folder === activeFolder);
+        const show = inCategory && inFolder;
+        row.hidden = !show;
+        if (show) visible += 1;
+      });
+      listTitle.textContent = currentFolder ? `Sản phẩm trong thư mục ${currentFolder.title}` : (activeFolder === '__unfiled__' ? 'Xe chưa xếp thư mục' : `Toàn bộ ${categoryInfo.label}`);
+      listSub.textContent = currentFolder ? `Landing dùng để chạy quảng cáo: ${collectionUrl(currentFolder)} · ${visible} xe đang nằm trong thư mục này.` : `Hiển thị ${visible} xe. Chọn một thư mục để tách riêng dòng xe và lấy link landing quảng cáo.`;
+      $$('.open-folder-products', main).forEach(button => button.onclick = () => { activeFolder = button.dataset.folder || ''; updateView(); $('#inventoryProductRows', main)?.scrollIntoView({ behavior:'smooth', block:'start' }); });
+      $$('.open-folder-landing', main).forEach(button => button.onclick = () => { const folder = collections.find(item => item.slug === button.dataset.folder); if (folder) window.open(collectionUrl(folder), '_blank', 'noopener'); });
+      $$('.edit-folder', main).forEach(button => button.onclick = () => { const folder = collections.find(item => Number(item.id) === Number(button.dataset.id)); if (folder) openInventoryFolderEditor(folder, {}, () => adminProducts(main)); });
+      $('#addInventoryFolderInline', main)?.addEventListener('click', () => openInventoryFolderEditor(null, {category:activeCategory}, () => adminProducts(main)));
+    };
+    $$('.inventory-category-tab', main).forEach(button => button.onclick = () => { activeCategory = button.dataset.category; activeFolder = ''; updateView(); });
+    folderFilter.addEventListener('change', () => { activeFolder = folderFilter.value; updateView(); });
+    $('#addInventoryFolder', main)?.addEventListener('click', () => openInventoryFolderEditor(null, {category:activeCategory}, () => adminProducts(main)));
+    $('#addProduct', main).onclick = () => openProductEditor(null, collections);
+    $$('.edit-product', main).forEach(button => button.onclick = () => openProductEditor(products.find(product => product.id === Number(button.dataset.id)), collections));
+    $$('.delete-product', main).forEach(button => button.onclick = async () => { if (!confirm('Xoá sản phẩm này?')) return; try { await request(`/api/admin/products/${button.dataset.id}`, { method:'DELETE' }); notify('Đã xoá sản phẩm'); adminProducts(main); } catch (error) { notify(error.message); } });
+    updateView();
+  };
+
+  adminTabs = function() {
+    const groups = [{ title:'Vận hành', items:[['overview','Tổng quan'],['products','Kho xe & landing'],['leads','Form khách'],['chats','Chat trực tuyến'],['accessories','Phụ kiện'],['security','Đổi mật khẩu']] }];
+    if (state.admin.role === 'admin') groups.push(
+      { title:'Nội dung & giao diện', items:[['categories','Danh mục sản phẩm'],['home_layout','Trang chủ & khối nội dung'],['promotions','Khuyến mại'],['site','Theme Studio'],['contacts','Liên hệ & nút nổi'],['notices','Thông báo nổi bật'],['policies','Chính sách']] },
+      { title:'Quảng cáo & AI', items:[['marketing_ai','Pixel & Chatbot AI'],['analytics','Lượt truy cập']] },
+      { title:'Hệ thống', items:[['users','Nhân viên'],['logs','Nhật ký hệ thống']] }
+    );
+    return groups;
+  };
+
+  renderCollectionPage = function(collection) {
+    const products = state.products.filter(product => product.published !== 0 && product.collection_slug === collection.slug && product.category === collection.category);
+    const cover = collection.image_url || productImage(products[0] || {});
+    const productOptions = products.map(product => `<option value="${product.id}">${escapeHTML(product.name)}${product.price ? ` · ${money(productLowestPrice(product) || product.price)}` : ''}</option>`).join('');
+    app.className = '';
+    app.innerHTML = `${nav('inventory')}<main class="collection-page landing-page">
+      <section class="collection-hero landing-hero" style="--collection-cover:url('${escapeHTML(cover)}')">
+        <div class="container collection-hero-inner">
+          <div class="landing-topline"><a class="collection-crumb" href="/#inventory">Kho xe</a><span>›</span><span>${escapeHTML(categoryLabel(collection.category))}</span><span>›</span><b>${escapeHTML(collection.title)}</b></div>
+          <div class="collection-hero-copy">
+            <span class="collection-overline">TRANG XE DÀNH RIÊNG CHO KHÁCH QUAN TÂM</span><h1>${escapeHTML(collection.title)}</h1>
+            <p>${escapeHTML(collection.description || `Khám phá những mẫu ${collection.title} đang có tại Tâm An. Chọn xe, chọn màu và gửi yêu cầu để được tư vấn nhanh.`)}</p>
+            <div class="collection-hero-meta"><span>${products.length} mẫu xe đang hiển thị</span><button type="button" class="btn btn-primary collection-scroll-lead">Nhận tư vấn & giá mới</button></div>
+          </div>
+        </div>
+      </section>
+      <section class="section landing-main-section"><div class="container landing-main-grid">
+        <div class="landing-products-column"><div class="landing-section-head"><div><div class="section-kicker">Xe trong thư mục ${escapeHTML(collection.title)}</div><h2>${products.length ? `Chọn mẫu ${escapeHTML(collection.title)} phù hợp` : `Đang cập nhật ${escapeHTML(collection.title)}`}</h2><p>${products.length ? 'Chỉ những sản phẩm nằm trong thư mục này mới hiển thị ở landing quảng cáo.' : 'Điền form bên cạnh để nhận thông tin xe về, giá và ưu đãi mới nhất.'}</p></div></div>
+        ${products.length ? `<div class="line-product-grid landing-product-grid">${products.map(card).join('')}</div>` : `<div class="collection-empty"><b>Xe đang được cập nhật.</b><p>Để lại thông tin, Tâm An sẽ báo ngay khi có xe hoặc màu phù hợp.</p></div>`}</div>
+        <aside id="collectionLeadAnchor" class="collection-landing-form"><div class="collection-form-top"><span>ĐĂNG KÝ TƯ VẤN</span><h2>Nhận giá, ưu đãi và tình trạng xe.</h2><p>Điền thông tin, nhân viên Tâm An sẽ liên hệ để báo đúng xe và màu đang có.</p></div>
+          <form id="collectionLandingLead" class="form-grid landing-lead-form"><input type="hidden" name="collection_name" value="${escapeHTML(collection.title)}"><div class="field full"><label>Họ và tên *</label><input name="name" autocomplete="name" required placeholder="Nhập họ và tên"></div><div class="field full"><label>Số điện thoại *</label><input name="phone" required inputmode="tel" autocomplete="tel" placeholder="Nhập số điện thoại"></div>${products.length ? `<div class="field full"><label>Mẫu xe đang quan tâm</label><select name="product_id"><option value="">Chưa chọn mẫu cụ thể</option>${productOptions}</select></div>` : ''}${paymentIntentFields()}<div class="field full"><label>Nhu cầu cần tư vấn</label><textarea name="note" placeholder="Ví dụ: muốn xem Air Blade màu đen, hỏi giá lăn bánh hoặc trả góp…"></textarea></div>${locationConsentField()}${consultationConsentField()}<div class="field full"><button class="btn btn-primary landing-submit">Gửi yêu cầu tư vấn</button><small class="landing-form-note">Tâm An chỉ dùng thông tin để phản hồi yêu cầu của bạn.</small></div></form>
+        </aside>
+      </div></section>
+      <section class="landing-reassurance"><div class="container"><div><b>Thông tin theo kho thực tế</b><span>Màu và tình trạng xe được cập nhật theo từng mẫu.</span></div><div><b>Không bỏ lỡ ưu đãi</b><span>Nhân viên báo giá, quà tặng và hồ sơ trả góp hiện hành.</span></div><div><b>Hỗ trợ khu vực</b><span>Có thể nhập khu vực hoặc chủ động chia sẻ vị trí gần đúng.</span></div></div></section>
+    </main>${footer()}${floatingButtons()}`;
+    $('#menuBtn')?.addEventListener('click', () => $('#mainNav')?.classList.toggle('mobile-open'));
+    $$('#mainNav a').forEach(link => link.addEventListener('click', () => $('#mainNav')?.classList.remove('mobile-open')));
+    $$('.footer-links [data-policy]').forEach(link => link.addEventListener('click', event => { event.preventDefault(); openPolicy(link.dataset.policy); }));
+    $$('.collection-scroll-lead').forEach(button => button.addEventListener('click', () => $('#collectionLeadAnchor')?.scrollIntoView({ behavior:'smooth', block:'start' })));
+    const form = $('#collectionLandingLead');
+    bindPaymentIntent(form);
+    form.onsubmit = async event => {
+      event.preventDefault();
+      const data = new FormData(form);
+      const product = products.find(item => Number(item.id) === Number(data.get('product_id')));
+      const note = [`Landing quảng cáo: ${collection.title}`, product ? `Mẫu xe chọn: ${product.name}` : '', data.get('note') || ''].filter(Boolean).join('\n');
+      try {
+        await request('/api/leads', { method:'POST', body:{ type:`landing_${collection.slug}`, product_id:Number(data.get('product_id')) || null, name:data.get('name'), phone:data.get('phone'), note, ...paymentLeadPayload(data), location_text:await captureOptInLocation(form) } });
+        trackEvent('Lead', { content_name: collection.title, content_category: collection.category });
+        notify('Tâm An đã nhận yêu cầu. Nhân viên sẽ liên hệ sớm.');
+        form.reset(); $('[name="payment_plan"]', form)?.dispatchEvent(new Event('change'));
+      } catch (error) { notify(error.message); }
+    };
+    bindProductEvents(); initChat();
+  };
+
   boot();
 })();
