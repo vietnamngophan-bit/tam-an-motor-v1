@@ -27,6 +27,30 @@
     return (state.collections || []).find(item => item.category === category && item.slug === slug) || null;
   }
 
+  function cleanPixelId(value = '') {
+    return String(value || '').trim().replace(/[^A-Za-z0-9_-]/g, '').slice(0, 100);
+  }
+  function collectionPixelMode(value = '') {
+    return value === 'landing_only' ? 'landing_only' : 'inherit';
+  }
+  function collectionTrackingFields(item = {}) {
+    const mode = collectionPixelMode(item.pixel_mode);
+    return `<fieldset class="fieldset collection-tracking-fieldset"><legend>Pixel riêng cho landing này</legend>
+      <p class="field-help collection-tracking-help">Điền ID Pixel, không cần dán đoạn mã. Mỗi landing có thể đo riêng lượt xem và form gửi thành công.</p>
+      <div class="form-two">
+        <div class="field"><label>Meta / Facebook Pixel ID</label><input name="meta_pixel_id" value="${escapeHTML(cleanPixelId(item.meta_pixel_id))}" inputmode="numeric" placeholder="Ví dụ: 123456789012345"></div>
+        <div class="field"><label>TikTok Pixel ID</label><input name="tiktok_pixel_id" value="${escapeHTML(cleanPixelId(item.tiktok_pixel_id))}" placeholder="Ví dụ: D123ABC456DEF"></div>
+        <div class="field full"><label>Cách dùng Pixel</label><select name="pixel_mode"><option value="inherit" ${mode === 'inherit' ? 'selected' : ''}>Pixel chung website + Pixel riêng của landing</option><option value="landing_only" ${mode === 'landing_only' ? 'selected' : ''}>Chỉ chạy Pixel riêng của landing này</option></select><small class="field-help">Chọn “Chỉ chạy Pixel riêng” khi mỗi chiến dịch cần tách dữ liệu hoàn toàn. Nếu chưa nhập Pixel riêng, trang vẫn dùng Pixel chung website để không mất dữ liệu.</small></div>
+      </div>
+    </fieldset>`;
+  }
+  function collectionPixelSummary(item = {}) {
+    const parts = [];
+    if (cleanPixelId(item.meta_pixel_id)) parts.push('Meta');
+    if (cleanPixelId(item.tiktok_pixel_id)) parts.push('TikTok');
+    return parts.length ? parts.join(' + ') : 'Dùng Pixel chung';
+  }
+
 
   // 65 Google Fonts that render Vietnamese. Fonts are loaded on demand when selected.
   const FONT_GROUPS = [
@@ -471,20 +495,65 @@
     ensure('twitter:title', title, 'name'); ensure('twitter:description', description, 'name'); ensure('twitter:image', image, 'name');
   }
 
-  function injectTracking(site) {
-    if (site.meta_pixel_id && !window.__taMetaPixel) {
-      window.__taMetaPixel = true;
-      const script = document.createElement('script'); script.async = true; script.src = 'https://connect.facebook.net/en_US/fbevents.js';
-      script.onload = () => { try { window.fbq?.('init', site.meta_pixel_id); window.fbq?.('track', 'PageView'); } catch {} };
+  function ensureMetaBase() {
+    if (window.__taMetaBaseReady) return;
+    window.__taMetaBaseReady = true;
+    const existing = window.fbq;
+    if (!existing) {
+      const fbq = function() { fbq.callMethod ? fbq.callMethod.apply(fbq, arguments) : fbq.queue.push(arguments); };
+      fbq.push = fbq; fbq.loaded = true; fbq.version = '2.0'; fbq.queue = [];
+      window.fbq = fbq; if (!window._fbq) window._fbq = fbq;
+    }
+    if (!document.querySelector('script[data-ta-meta-base="1"]')) {
+      const script = document.createElement('script');
+      script.async = true; script.src = 'https://connect.facebook.net/en_US/fbevents.js';
+      script.dataset.taMetaBase = '1';
       document.head.appendChild(script);
     }
-    if (site.tiktok_pixel_id && !window.__taTiktokPixel) {
-      window.__taTiktokPixel = true;
-      const script = document.createElement('script'); script.async = true; script.src = 'https://analytics.tiktok.com/i18n/pixel/events.js?sdkid=' + encodeURIComponent(site.tiktok_pixel_id); document.head.appendChild(script);
-    }
+  }
+  function injectMetaPixel(id) {
+    id = cleanPixelId(id); if (!id) return;
+    window.__taMetaPixelIds = window.__taMetaPixelIds || new Set();
+    if (window.__taMetaPixelIds.has(id)) return;
+    window.__taMetaPixelIds.add(id);
+    ensureMetaBase();
+    try { window.fbq?.('init', id); window.fbq?.('trackSingle', id, 'PageView'); } catch {}
+  }
+  function injectTikTokPixel(id) {
+    id = cleanPixelId(id); if (!id) return;
+    window.__taTikTokPixelIds = window.__taTikTokPixelIds || new Set();
+    if (window.__taTikTokPixelIds.has(id)) return;
+    window.__taTikTokPixelIds.add(id);
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = 'https://analytics.tiktok.com/i18n/pixel/events.js?sdkid=' + encodeURIComponent(id);
+    script.dataset.taTiktokPixel = id;
+    document.head.appendChild(script);
+  }
+  function trackingIds(site = {}, collection = null) {
+    const ownMeta = cleanPixelId(collection?.meta_pixel_id);
+    const ownTikTok = cleanPixelId(collection?.tiktok_pixel_id);
+    const wantsLandingOnly = collectionPixelMode(collection?.pixel_mode) === 'landing_only' && Boolean(ownMeta || ownTikTok);
+    const meta = wantsLandingOnly ? [ownMeta] : [cleanPixelId(site.meta_pixel_id), ownMeta];
+    const tiktok = wantsLandingOnly ? [ownTikTok] : [cleanPixelId(site.tiktok_pixel_id), ownTikTok];
+    return { meta:[...new Set(meta.filter(Boolean))], tiktok:[...new Set(tiktok.filter(Boolean))] };
+  }
+  function injectTracking(site, collection = null) {
+    const active = trackingIds(site, collection);
+    window.__taActiveTracking = active;
+    active.meta.forEach(injectMetaPixel);
+    active.tiktok.forEach(injectTikTokPixel);
   }
   function trackEvent(name, params = {}) {
-    try { window.fbq?.('trackCustom', name, params); } catch {}
+    const metaIds = window.__taActiveTracking?.meta || [];
+    const standard = new Set(['PageView','ViewContent','Lead','Contact','CompleteRegistration']);
+    try {
+      if (metaIds.length && window.fbq) {
+        metaIds.forEach(id => window.fbq(standard.has(name) ? 'trackSingle' : 'trackSingleCustom', id, name, params));
+      } else if (window.fbq) {
+        window.fbq('trackCustom', name, params);
+      }
+    } catch {}
     try { window.ttq?.track?.(name, params); } catch {}
   }
   function trackVisit() {
@@ -502,7 +571,6 @@
     state.collections = siteResponse.collections || [];
     state.products = productResponse.products || [];
     setSiteTheme(state.site);
-    injectTracking(state.site);
   }
 
   function nav(active = '') {
@@ -1906,7 +1974,7 @@
     const data = await request('/api/admin/collections');
     const rows = data.collections || [];
     const byCategory = Object.fromEntries(categoryDefinitions().map(item => [item.id, item.label]));
-    main.innerHTML = `<div class="admin-page-head"><div><span>Link chạy quảng cáo</span><h1 class="admin-title">Thư mục theo dòng xe</h1><p class="admin-sub">Tạo link riêng theo từng dòng xe để gắn quảng cáo. Ví dụ: <b>/xe-moi/air-blade</b>, <b>/xe-moi/vision</b>, <b>/xe-moi/winner</b>. Mỗi link chỉ hiển thị xe đã gắn vào dòng đó.</p></div><button id="addCollection" class="btn btn-primary">+ Thêm thư mục dòng xe</button></div><div class="admin-card"><div class="admin-table-wrap"><table class="admin-table collection-table"><thead><tr><th>Dòng xe</th><th>Nhóm</th><th>Link quảng cáo</th><th>Sản phẩm</th><th>Hiển thị</th><th></th></tr></thead><tbody>${rows.map(item => `<tr><td><b>${escapeHTML(item.title)}</b>${item.description ? `<br><span class="muted">${escapeHTML(item.description)}</span>` : ''}</td><td>${escapeHTML(byCategory[item.category] || item.category)}</td><td><a class="collection-table-link" target="_blank" rel="noopener" href="${escapeHTML(collectionUrl(item))}">${escapeHTML(collectionUrl(item))}</a></td><td>${Number(item.product_count || 0)} xe</td><td>${item.visible ? '<span class="collection-live">● Đang bật</span>' : '<span class="muted">Đang ẩn</span>'}</td><td><div class="collection-actions"><button type="button" class="small-btn copy-collection" data-id="${item.id}">Sao chép link</button><button type="button" class="small-btn edit-collection" data-id="${item.id}">Sửa</button><button type="button" class="small-btn danger delete-collection" data-id="${item.id}">Xoá</button></div></td></tr>`).join('') || '<tr><td colspan="6" class="admin-empty">Chưa có thư mục dòng xe. Tạo Air Blade, Vision hoặc Winner để bắt đầu chạy quảng cáo bằng link riêng.</td></tr>'}</tbody></table></div></div>`;
+    main.innerHTML = `<div class="admin-page-head"><div><span>Link chạy quảng cáo</span><h1 class="admin-title">Thư mục theo dòng xe</h1><p class="admin-sub">Tạo link riêng theo từng dòng xe để gắn quảng cáo. Ví dụ: <b>/xe-moi/air-blade</b>, <b>/xe-moi/vision</b>, <b>/xe-moi/winner</b>. Mỗi link chỉ hiển thị xe đã gắn vào dòng đó.</p></div><button id="addCollection" class="btn btn-primary">+ Thêm thư mục dòng xe</button></div><div class="admin-card"><div class="admin-table-wrap"><table class="admin-table collection-table"><thead><tr><th>Dòng xe</th><th>Nhóm</th><th>Link quảng cáo</th><th>Pixel</th><th>Sản phẩm</th><th>Hiển thị</th><th></th></tr></thead><tbody>${rows.map(item => `<tr><td><b>${escapeHTML(item.title)}</b>${item.description ? `<br><span class="muted">${escapeHTML(item.description)}</span>` : ''}</td><td>${escapeHTML(byCategory[item.category] || item.category)}</td><td><a class="collection-table-link" target="_blank" rel="noopener" href="${escapeHTML(collectionUrl(item))}">${escapeHTML(collectionUrl(item))}</a></td><td><span class="collection-pixel-state ${cleanPixelId(item.meta_pixel_id) || cleanPixelId(item.tiktok_pixel_id) ? 'is-custom' : ''}">${escapeHTML(collectionPixelSummary(item))}</span></td><td>${Number(item.product_count || 0)} xe</td><td>${item.visible ? '<span class="collection-live">● Đang bật</span>' : '<span class="muted">Đang ẩn</span>'}</td><td><div class="collection-actions"><button type="button" class="small-btn copy-collection" data-id="${item.id}">Sao chép link</button><button type="button" class="small-btn edit-collection" data-id="${item.id}">Sửa</button><button type="button" class="small-btn danger delete-collection" data-id="${item.id}">Xoá</button></div></td></tr>`).join('') || '<tr><td colspan="7" class="admin-empty">Chưa có thư mục dòng xe. Tạo Air Blade, Vision hoặc Winner để bắt đầu chạy quảng cáo bằng link riêng.</td></tr>'}</tbody></table></div></div>`;
     const copyLink = async item => {
       const value = `${location.origin}${collectionUrl(item)}`;
       try { await navigator.clipboard.writeText(value); notify('Đã sao chép link quảng cáo.'); }
@@ -1925,7 +1993,7 @@
 
   function openCollectionEditor(collection = null) {
     const item = collection || { title:'', slug:'', category:'motor_new', description:'', image_url:'', visible:true, sort_order:0 };
-    const modal = adminModal(collection ? 'Sửa thư mục dòng xe' : 'Thêm thư mục dòng xe', `<form id="collectionForm" class="admin-product-form collection-editor-form"><fieldset class="fieldset"><legend>Link dành cho quảng cáo</legend><div class="form-two"><div class="field"><label>Tên dòng xe *</label><input name="title" required value="${escapeHTML(item.title || '')}" placeholder="Ví dụ: Air Blade"></div><div class="field"><label>Nhóm xe *</label><select name="category">${categoryDefinitions().map(({id,label}) => `<option value="${escapeHTML(id)}" ${item.category === id ? 'selected' : ''}>${escapeHTML(label)}</option>`).join('')}</select></div><div class="field"><label>Tên thư mục / slug</label><input name="slug" value="${escapeHTML(item.slug || '')}" placeholder="air-blade"><small class="field-help">Bỏ trống để hệ thống tự tạo từ tên xe. Chỉ dùng chữ không dấu, số và dấu gạch ngang.</small></div><div class="field"><label>Thứ tự</label><input name="sort_order" type="number" value="${Number(item.sort_order || 0)}"></div><div class="field full"><label>Mô tả ngắn trên trang đích</label><textarea name="description" placeholder="Ví dụ: Tổng hợp các phiên bản Air Blade mới, màu xe và ưu đãi đang áp dụng.">${escapeHTML(item.description || '')}</textarea></div><div class="field full"><label>Ảnh bìa trang đích (không bắt buộc)</label><input id="collectionImageFile" type="file" accept="image/*"><input name="image_url" value="${escapeHTML(item.image_url || '')}" placeholder="Link ảnh. Nếu bỏ trống sẽ tự dùng ảnh xe đầu tiên."></div></div><label class="admin-check"><input name="visible" type="checkbox" ${item.visible !== 0 && item.visible !== false ? 'checked' : ''}><span>✓</span> Hiển thị link này ngoài website</label></fieldset><button class="btn btn-primary">${collection ? 'Lưu thay đổi' : 'Tạo thư mục'}</button></form>`);
+    const modal = adminModal(collection ? 'Sửa thư mục dòng xe' : 'Thêm thư mục dòng xe', `<form id="collectionForm" class="admin-product-form collection-editor-form"><fieldset class="fieldset"><legend>Link dành cho quảng cáo</legend><div class="form-two"><div class="field"><label>Tên dòng xe *</label><input name="title" required value="${escapeHTML(item.title || '')}" placeholder="Ví dụ: Air Blade"></div><div class="field"><label>Nhóm xe *</label><select name="category">${categoryDefinitions().map(({id,label}) => `<option value="${escapeHTML(id)}" ${item.category === id ? 'selected' : ''}>${escapeHTML(label)}</option>`).join('')}</select></div><div class="field"><label>Tên thư mục / slug</label><input name="slug" value="${escapeHTML(item.slug || '')}" placeholder="air-blade"><small class="field-help">Bỏ trống để hệ thống tự tạo từ tên xe. Chỉ dùng chữ không dấu, số và dấu gạch ngang.</small></div><div class="field"><label>Thứ tự</label><input name="sort_order" type="number" value="${Number(item.sort_order || 0)}"></div><div class="field full"><label>Mô tả ngắn trên trang đích</label><textarea name="description" placeholder="Ví dụ: Tổng hợp các phiên bản Air Blade mới, màu xe và ưu đãi đang áp dụng.">${escapeHTML(item.description || '')}</textarea></div><div class="field full"><label>Ảnh bìa trang đích (không bắt buộc)</label><input id="collectionImageFile" type="file" accept="image/*"><input name="image_url" value="${escapeHTML(item.image_url || '')}" placeholder="Link ảnh. Nếu bỏ trống sẽ tự dùng ảnh xe đầu tiên."></div></div><label class="admin-check"><input name="visible" type="checkbox" ${item.visible !== 0 && item.visible !== false ? 'checked' : ''}><span>✓</span> Hiển thị link này ngoài website</label></fieldset>${collectionTrackingFields(item)}<button class="btn btn-primary">${collection ? 'Lưu thay đổi' : 'Tạo thư mục'}</button></form>`);
     const form = $('#collectionForm', modal);
     $('#collectionImageFile', modal).onchange = async event => { try { form.image_url.value = await uploadFile(event.target.files[0]); } catch (error) { notify(error.message); } };
     form.onsubmit = async event => {
@@ -1951,12 +2019,12 @@
     try {
       await loadPublicData();
       trackVisit();
-      if (location.pathname === '/admin') renderAdmin();
-      else if (location.pathname === '/tra-gop') renderFinance();
+      if (location.pathname === '/admin') { injectTracking(state.site); renderAdmin(); }
+      else if (location.pathname === '/tra-gop') { injectTracking(state.site); renderFinance(); }
       else {
         const collection = collectionFromPath(location.pathname);
-        if (collection) renderCollectionPage(collection);
-        else { renderHome(); const direct = location.pathname.match(/^\/xe\/([^/]+)$/)?.[1] || new URLSearchParams(location.search).get('xe'); if (direct) setTimeout(() => openProduct(decodeURIComponent(direct)).catch(() => {}), 0); }
+        if (collection) { injectTracking(state.site, collection); renderCollectionPage(collection); }
+        else { injectTracking(state.site); renderHome(); const direct = location.pathname.match(/^\/xe\/([^/]+)$/)?.[1] || new URLSearchParams(location.search).get('xe'); if (direct) setTimeout(() => openProduct(decodeURIComponent(direct)).catch(() => {}), 0); }
       }
     } catch (error) {
       app.innerHTML = `<main class="admin-login"><div class="login-card"><img src="/assets/logo.jpg" alt=""><h1>Không tải được website</h1><p>${escapeHTML(error.message)}</p><button class="btn btn-primary" onclick="location.reload()">Thử lại</button></div></main>`;
@@ -1988,6 +2056,7 @@
           </div>
           <label class="admin-check"><input name="visible" type="checkbox" ${item.visible !== 0 && item.visible !== false ? 'checked' : ''}><span>✓</span> Bật landing page và cho phép dùng link quảng cáo</label>
         </fieldset>
+        ${collectionTrackingFields(item)}
         <button class="btn btn-primary">${collection ? 'Lưu thư mục' : 'Tạo thư mục & landing page'}</button>
       </form>`);
     const form = $('#inventoryFolderForm', modal);
@@ -2127,7 +2196,7 @@
         <div class="landing-products-column"><div class="landing-section-head"><div><div class="section-kicker">Xe trong thư mục ${escapeHTML(collection.title)}</div><h2>${products.length ? `Chọn mẫu ${escapeHTML(collection.title)} phù hợp` : `Đang cập nhật ${escapeHTML(collection.title)}`}</h2><p>${products.length ? 'Chỉ những sản phẩm nằm trong thư mục này mới hiển thị ở landing quảng cáo.' : 'Điền form bên cạnh để nhận thông tin xe về, giá và ưu đãi mới nhất.'}</p></div></div>
         ${products.length ? `<div class="line-product-grid landing-product-grid">${products.map(card).join('')}</div>` : `<div class="collection-empty"><b>Xe đang được cập nhật.</b><p>Để lại thông tin, Tâm An sẽ báo ngay khi có xe hoặc màu phù hợp.</p></div>`}</div>
         <aside id="collectionLeadAnchor" class="collection-landing-form"><div class="collection-form-top"><span>ĐĂNG KÝ TƯ VẤN</span><h2>Nhận giá, ưu đãi và tình trạng xe.</h2><p>Điền thông tin, nhân viên Tâm An sẽ liên hệ để báo đúng xe và màu đang có.</p></div>
-          <form id="collectionLandingLead" class="form-grid landing-lead-form"><input type="hidden" name="collection_name" value="${escapeHTML(collection.title)}"><div class="field full"><label>Họ và tên *</label><input name="name" autocomplete="name" required placeholder="Nhập họ và tên"></div><div class="field full"><label>Số điện thoại *</label><input name="phone" required inputmode="tel" autocomplete="tel" placeholder="Nhập số điện thoại"></div>${products.length ? `<div class="field full"><label>Mẫu xe đang quan tâm</label><select name="product_id"><option value="">Chưa chọn mẫu cụ thể</option>${productOptions}</select></div>` : ''}${paymentIntentFields()}<div class="field full"><label>Nhu cầu cần tư vấn</label><textarea name="note" placeholder="Ví dụ: muốn xem Air Blade màu đen, hỏi giá lăn bánh hoặc trả góp…"></textarea></div>${locationConsentField()}${consultationConsentField()}<div class="field full"><button class="btn btn-primary landing-submit">Gửi yêu cầu tư vấn</button><small class="landing-form-note">Tâm An chỉ dùng thông tin để phản hồi yêu cầu của bạn.</small></div></form>
+          <form id="collectionLandingLead" class="form-grid landing-lead-form"><input type="hidden" name="collection_name" value="${escapeHTML(collection.title)}"><div class="landing-contact-row"><div class="field"><label>Họ và tên *</label><input name="name" autocomplete="name" required placeholder="Họ và tên"></div><div class="field"><label>Số điện thoại *</label><input name="phone" required inputmode="tel" autocomplete="tel" placeholder="Số điện thoại"></div></div>${products.length ? `<div class="field full"><label>Mẫu xe đang quan tâm</label><select name="product_id"><option value="">Chưa chọn mẫu cụ thể</option>${productOptions}</select></div>` : ''}${paymentIntentFields()}<div class="field full landing-note-field"><label>Nhu cầu cần tư vấn <span class="muted">(không bắt buộc)</span></label><textarea name="note" placeholder="Màu xe, giá lăn bánh, trả góp…"></textarea></div>${locationConsentField()}${consultationConsentField()}<div class="field full landing-submit-wrap"><button class="btn btn-primary landing-submit">Gửi yêu cầu tư vấn</button><small class="landing-form-note">Tâm An chỉ dùng thông tin để phản hồi yêu cầu của bạn.</small></div></form>
         </aside>
       </div></section>
       <section class="landing-reassurance"><div class="container"><div><b>Thông tin theo kho thực tế</b><span>Màu và tình trạng xe được cập nhật theo từng mẫu.</span></div><div><b>Không bỏ lỡ ưu đãi</b><span>Nhân viên báo giá, quà tặng và hồ sơ trả góp hiện hành.</span></div><div><b>Hỗ trợ khu vực</b><span>Có thể nhập khu vực hoặc chủ động chia sẻ vị trí gần đúng.</span></div></div></section>
@@ -2138,6 +2207,7 @@
     $$('.collection-scroll-lead').forEach(button => button.addEventListener('click', () => $('#collectionLeadAnchor')?.scrollIntoView({ behavior:'smooth', block:'start' })));
     const form = $('#collectionLandingLead');
     bindPaymentIntent(form);
+    trackEvent('ViewContent', { content_type: 'vehicle_folder', content_name: collection.title, content_category: collection.category });
     form.onsubmit = async event => {
       event.preventDefault();
       const data = new FormData(form);
