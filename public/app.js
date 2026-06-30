@@ -2541,5 +2541,104 @@
     bindFolderDropdown();
   };
 
+
+
+  /* ==================================================================
+     V9 — Menu “Kho xe” gọn, đúng dạng thư mục con
+     Không hiển thị thư mục/landing trong kho xe trang chủ.
+     Desktop: rê chuột vào “Kho xe” để mở menu.
+     Tablet/mobile: bấm mũi tên cạnh “Kho xe” để mở danh sách.
+     ================================================================== */
+  function inventoryMenuPanelV9() {
+    const visibleCollections = publicCollections();
+    const groups = categoryDefinitions()
+      .map(category => ({ ...category, items: visibleCollections.filter(item => item.category === category.id) }))
+      .filter(group => group.items.length);
+    if (!groups.length) {
+      return `<div class="inventory-menu-empty"><b>Kho xe đang được cập nhật</b><span>Chọn “Kho xe” để xem toàn bộ xe hiện có.</span></div>`;
+    }
+    return groups.map(group => `<section class="inventory-menu-group">
+      <div class="inventory-menu-group-head"><span>${escapeHTML(group.label)}</span><small>${group.items.length} dòng xe</small></div>
+      <div class="inventory-menu-list">${group.items.map(item => {
+        const count = productsInCollection(item).length;
+        return `<a class="inventory-menu-item" data-inventory-folder="${escapeHTML(item.slug)}" href="${escapeHTML(inventoryFolderHref(item))}">
+          <span class="inventory-menu-item-icon" aria-hidden="true">⌁</span>
+          <span class="inventory-menu-item-copy"><b>${escapeHTML(item.title)}</b><small>${count ? `${count} xe đang có` : 'Đang cập nhật'}</small></span>
+          <span class="inventory-menu-item-arrow" aria-hidden="true">›</span>
+        </a>`;
+      }).join('')}</div>
+    </section>`).join('');
+  }
+
+  nav = function(active = '') {
+    const s = state.site;
+    const standardLinks = [
+      ['/#promo', 'Khuyến mại', 'promo'],
+      ...(state.accessories?.length ? [['/#accessories', 'Phụ kiện', 'accessories']] : []),
+      ['/tra-gop', 'Trả góp', 'finance'],
+      ['/#showroom', 'Showroom', 'showroom']
+    ];
+    const inventoryMenu = `<div id="inventoryNavMenu" class="inventory-nav-menu ${active === 'inventory' ? 'active' : ''}">
+      <a id="inventoryNavHome" class="inventory-nav-home" href="/#inventory"><span>Kho xe</span><i aria-hidden="true">⌄</i></a>
+      <button id="inventoryNavToggle" class="inventory-nav-toggle" type="button" aria-label="Mở danh sách dòng xe" aria-expanded="false"><span>⌄</span></button>
+      <div class="inventory-nav-panel" role="navigation" aria-label="Thư mục con trong kho xe">
+        <div class="inventory-menu-panel-head"><span>KHO XE</span><b>Chọn dòng xe đang quan tâm</b></div>
+        <div class="inventory-menu-groups">${inventoryMenuPanelV9()}</div>
+        <a class="inventory-menu-all" href="/#inventory"><span>☷</span><b>Xem toàn bộ kho xe</b><i>→</i></a>
+      </div>
+    </div>`;
+    return `<header class="site-header">
+      <div class="topbar"><div class="container topbar-inner"><span>${escapeHTML(s.address || '')}</span><a href="tel:${String(s.hotline || '').replace(/\s/g, '')}">☎ ${escapeHTML(s.hotline || '')}</a></div></div>
+      <div class="container nav">
+        <a class="brand" href="/"><img class="brand-logo" src="${escapeHTML(s.logo_url || '/assets/logo.jpg')}" alt=""><span class="brand-copy"><b>${escapeHTML(s.brand_name || 'TÂM AN')}</b><span>XE MỚI • XE CŨ • XE ĐIỆN</span></span></a>
+        <nav id="mainNav" class="main-nav">${inventoryMenu}${standardLinks.map(([url, label, key]) => `<a href="${url}" class="${key === active ? 'active' : ''}">${label}</a>`).join('')}</nav>
+        <div class="header-actions"><a class="phone-pill" href="tel:${String(s.hotline || '').replace(/\s/g, '')}">☎ ${escapeHTML(s.hotline || '')}</a><button id="menuBtn" class="menu-btn" aria-label="Mở menu">☰</button></div>
+      </div>
+    </header>`;
+  };
+
+  bindFolderDropdown = function(onFolderSelect = null) {
+    const menu = $('#inventoryNavMenu');
+    if (!menu || menu.dataset.v9Bound === 'true') return;
+    menu.dataset.v9Bound = 'true';
+    const toggle = $('#inventoryNavToggle', menu);
+    const close = () => {
+      menu.classList.remove('is-open');
+      toggle?.setAttribute('aria-expanded', 'false');
+    };
+    const open = () => {
+      menu.classList.add('is-open');
+      toggle?.setAttribute('aria-expanded', 'true');
+    };
+    toggle?.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      menu.classList.contains('is-open') ? close() : open();
+    });
+    document.addEventListener('click', event => {
+      if (!menu.isConnected || menu.contains(event.target)) return;
+      close();
+    });
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') close(); });
+
+    if (typeof onFolderSelect === 'function') {
+      $$('.inventory-menu-item', menu).forEach(link => link.addEventListener('click', event => {
+        event.preventDefault();
+        onFolderSelect(link.dataset.inventoryFolder || '');
+        close();
+      }));
+      $('#inventoryNavHome', menu)?.addEventListener('click', event => {
+        event.preventDefault();
+        onFolderSelect('');
+        close();
+      });
+      $('.inventory-menu-all', menu)?.addEventListener('click', event => {
+        event.preventDefault();
+        onFolderSelect('');
+        close();
+      });
+    }
+  };
+
   boot();
 })();
