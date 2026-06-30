@@ -1112,3 +1112,205 @@ body.modal-open { overflow: hidden !important; }
   .chat-scroll-bottom { width:34px; height:34px; padding:0; justify-content:center; border-radius:50%; font-size:16px; }
   .paint-preview-copy { max-width:76px; }
 }
+
+
+/* ==================================================================
+   V1.17 — sửa checkbox vị trí, chip màu cân đối và khung Admin cố định
+   ================================================================== */
+/* Checkbox vị trí: chỉ còn một ô tick thật, nội dung bám sát bên phải. */
+.location-consent .consent-control {
+  display:grid!important;
+  grid-template-columns:30px minmax(0,1fr);
+  align-items:start!important;
+  gap:12px!important;
+  padding:15px 16px!important;
+  cursor:pointer;
+}
+.location-consent .consent-input {
+  position:absolute!important;
+  inline-size:1px!important;
+  block-size:1px!important;
+  min-inline-size:1px!important;
+  min-block-size:1px!important;
+  margin:-1px!important;
+  padding:0!important;
+  border:0!important;
+  opacity:0!important;
+  overflow:hidden!important;
+  clip:rect(0 0 0 0)!important;
+  clip-path:inset(50%)!important;
+  pointer-events:none!important;
+}
+.location-consent .consent-box {
+  display:grid!important;
+  place-items:center;
+  inline-size:28px!important;
+  block-size:28px!important;
+  min-inline-size:28px!important;
+  min-block-size:28px!important;
+  margin:1px 0 0!important;
+  padding:0!important;
+  border:2px solid #d9cbcd!important;
+  border-radius:9px!important;
+  background:#fff!important;
+  color:transparent!important;
+  font-size:15px!important;
+  line-height:1!important;
+  box-shadow:none!important;
+}
+.location-consent .consent-input:checked + .consent-box {
+  background:var(--red)!important;
+  border-color:var(--red)!important;
+  color:#fff!important;
+  box-shadow:0 5px 13px rgba(200,25,36,.20)!important;
+}
+.location-consent .consent-copy { min-width:0; display:block; }
+.location-consent .consent-copy b { display:block; line-height:1.42; }
+.location-consent .consent-copy small { margin-top:3px; }
+
+/* Màu xe: chia 2 ô cân nhau, chỉ còn swatch + tên + trạng thái tinh gọn. */
+.product-card .paint-preview-row {
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  align-items:stretch!important;
+  gap:7px!important;
+  margin-top:14px!important;
+}
+.product-card .paint-preview-row .paint-preview {
+  display:grid!important;
+  grid-template-columns:30px minmax(0,1fr);
+  align-items:center!important;
+  gap:8px!important;
+  inline-size:100%;
+  min-inline-size:0!important;
+  min-block-size:48px!important;
+  padding:7px 8px!important;
+  margin:0!important;
+  border:1px solid #eee3e4!important;
+  border-radius:12px!important;
+  background:#fff!important;
+  text-align:left!important;
+  box-shadow:none!important;
+}
+.product-card .paint-preview-row .paint-preview:only-child { grid-column:1/-1; }
+.product-card .paint-preview-row .paint-preview:hover {
+  transform:none!important;
+  border-color:#d9b0b4!important;
+  box-shadow:0 5px 12px rgba(65,18,23,.06)!important;
+}
+.product-card .paint-preview-row .paint-strip {
+  inline-size:30px!important;
+  min-inline-size:30px!important;
+  block-size:22px!important;
+  min-block-size:22px!important;
+  overflow:hidden;
+  border:1px solid rgba(38,23,25,.18)!important;
+  border-radius:6px!important;
+  box-shadow:none!important;
+}
+.product-card .paint-preview-row .paint-strip i { min-inline-size:9px!important; }
+.product-card .paint-preview-copy {
+  display:grid!important;
+  min-inline-size:0!important;
+  max-inline-size:none!important;
+  gap:2px!important;
+  line-height:1.05!important;
+}
+.product-card .paint-preview-copy b {
+  overflow:hidden;
+  color:#3a2a2c!important;
+  font-size:12px!important;
+  font-weight:900!important;
+  line-height:1.15!important;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.product-card .paint-preview-copy small {
+  display:flex!important;
+  align-items:center;
+  min-inline-size:0;
+  color:#637167!important;
+  font-size:10px!important;
+  font-weight:800!important;
+  line-height:1.1!important;
+  white-space:nowrap;
+}
+.product-card .paint-preview-copy small::before {
+  content:"";
+  inline-size:5px;
+  block-size:5px;
+  flex:0 0 5px;
+  margin-right:5px;
+  border-radius:999px;
+  background:#2e9d5c;
+  box-shadow:0 0 0 2px #e1f4e7;
+}
+.product-card .paint-preview.stock-incoming { background:#fffdf8!important; border-color:#efe2c7!important; }
+.product-card .paint-preview.stock-incoming .paint-preview-copy small { color:#946200!important; }
+.product-card .paint-preview.stock-incoming .paint-preview-copy small::before { background:#d39211; box-shadow:0 0 0 2px #fff0ce; }
+.product-card .paint-preview.stock-out_of_stock { background:#fffafa!important; border-color:#efd7d9!important; opacity:1!important; }
+.product-card .paint-preview.stock-out_of_stock .paint-preview-copy small { color:#ad4a53!important; }
+.product-card .paint-preview.stock-out_of_stock .paint-preview-copy small::before { background:#c35a63; box-shadow:0 0 0 2px #ffe8e9; }
+
+/* Nút đi xuống chat luôn hiện để người dùng biết có thể quay về tin mới nhất. */
+.chat-scroll-bottom {
+  opacity:1!important;
+  pointer-events:auto!important;
+  transform:translateY(0)!important;
+}
+.chat-scroll-bottom:not(.show) { opacity:.78!important; }
+
+/* Desktop Admin: header + bảng điều khiển đứng yên; chỉ vùng nội dung bên phải cuộn. */
+@media (min-width:901px) {
+  html:has(.admin-shell),
+  body:has(.admin-shell),
+  #app:has(.admin-shell) { block-size:100%; overflow:hidden; }
+
+  .admin-header {
+    position:fixed!important;
+    inset:0 0 auto 0;
+    z-index:80!important;
+  }
+  .admin-shell {
+    position:fixed!important;
+    inset:76px 0 0 0;
+    display:grid!important;
+    grid-template-columns:260px minmax(0,1fr)!important;
+    inline-size:100%!important;
+    block-size:calc(100dvh - 76px)!important;
+    min-block-size:0!important;
+    max-inline-size:none!important;
+    margin:0!important;
+    overflow:hidden!important;
+  }
+  .admin-side {
+    position:relative!important;
+    inset:auto!important;
+    inline-size:auto!important;
+    min-block-size:0!important;
+    block-size:100%!important;
+    overflow-y:auto!important;
+    overscroll-behavior:contain;
+  }
+  .admin-main {
+    inline-size:auto!important;
+    block-size:100%!important;
+    max-inline-size:none!important;
+    min-block-size:0!important;
+    margin:0!important;
+    padding-block-end:38px!important;
+    overflow-y:auto!important;
+    overscroll-behavior:contain;
+  }
+  .admin-filter-pro { top:0!important; }
+  .admin-main:has(.admin-chat) .admin-chat {
+    block-size:min(680px,calc(100dvh - 270px))!important;
+    min-block-size:480px!important;
+    max-block-size:none!important;
+  }
+}
+
+@media (max-width:640px) {
+  .product-card .paint-preview-row { grid-template-columns:1fr!important; }
+  .product-card .paint-preview-row .paint-preview { min-block-size:46px!important; }
+}
