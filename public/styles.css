@@ -921,3 +921,57 @@ body.modal-open { overflow: hidden !important; }
   .chat-admin-thread { min-height:370px; }
   .editor-row-action { align-items:stretch; }
 }
+
+/* ==================================================================
+   V1.15 — tồn kho theo từng phối màu + vận hành form/chat thời gian thực
+   ================================================================== */
+.inventory-summary { display:grid; gap:5px; min-width:165px; }
+.inventory-summary > span, .stock-pill { display:inline-flex; align-items:center; width:max-content; max-width:100%; border-radius:999px; padding:4px 8px; font-size:11px; font-weight:850; line-height:1.25; white-space:nowrap; }
+.stock-in_stock { color:#16643b; background:#eaf8ee; }
+.stock-out_of_stock { color:#a02833; background:#fff0f1; }
+.stock-incoming { color:#925c00; background:#fff6df; }
+.selected-color-stock { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:11px 0 -2px; }
+.selected-color-label { font-size:13px; font-weight:850; color:#59494b; }
+.color-choice { align-items:center!important; gap:9px!important; min-width:142px; }
+.color-choice-copy, .paint-preview-copy { display:grid; gap:1px; text-align:left; min-width:0; }
+.color-choice-copy b, .paint-preview-copy b { display:block; color:inherit; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.color-choice-copy small, .paint-preview-copy small { display:block; font-size:10px; font-weight:800; color:#766d6f; white-space:nowrap; }
+.color-choice.stock-out_of_stock, .paint-preview.stock-out_of_stock { border-color:#efc7cb; background:#fff8f8; opacity:.8; }
+.color-choice.stock-out_of_stock .color-choice-copy small, .paint-preview.stock-out_of_stock .paint-preview-copy small { color:#a02833; }
+.color-choice.stock-incoming .color-choice-copy small, .paint-preview.stock-incoming .paint-preview-copy small { color:#925c00; }
+.paint-preview { align-items:center!important; gap:7px!important; }
+.paint-preview-copy { max-width:104px; }
+.nested-color-box .field select, .nested-color-box .field input[type="number"] { min-height:44px; }
+.lead-location-text { display:block; margin-top:6px; max-width:360px; color:#6d5558; font-size:12px; font-weight:750; line-height:1.5; white-space:normal; }
+
+/* Neater responsive filter card: all fields line up on desktop, then stack cleanly. */
+.admin-filter-pro { display:grid!important; grid-template-columns: minmax(185px,1.25fr) minmax(170px,1fr) minmax(145px,.83fr) minmax(145px,.83fr) auto; align-items:end; gap:10px; padding:15px!important; border:1px solid #ecdadd!important; border-radius:19px!important; background:linear-gradient(135deg,#fff,#fff9f9)!important; box-shadow:0 9px 26px rgba(74,23,28,.045); }
+.admin-filter-title { display:flex; align-items:center; gap:9px; padding:4px 6px; min-width:0; }
+.admin-filter-title > span { width:33px; height:33px; display:grid; place-items:center; border-radius:11px; background:#fff0f1; color:var(--red); font-size:19px; font-weight:900; }
+.admin-filter-title b { display:block; font-size:13px; color:#381719; }
+.admin-filter-title small { display:block; margin-top:1px; color:#927d80; font-size:10px; font-weight:700; white-space:nowrap; }
+.filter-control { display:grid; gap:5px; min-width:0; }
+.filter-control > span { color:#7a6567; font-size:10px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
+.filter-control select, .filter-control input { width:100%; min-width:0; height:46px; padding:0 12px; border:1px solid #e7d9da; border-radius:12px; background:#fff; color:#241416; font-weight:750; outline:0; transition:border-color .16s ease, box-shadow .16s ease; }
+.filter-control select:focus, .filter-control input:focus { border-color:#db737b; box-shadow:0 0 0 3px rgba(200,25,36,.10); }
+.filter-reset { height:46px; border:1px solid #ebd8da; border-radius:12px; padding:0 13px; background:#fff; color:#8a3e45; font-size:12px; font-weight:900; white-space:nowrap; }
+.filter-reset:hover { border-color:var(--red); color:var(--red); background:#fff6f7; }
+.admin-live-badge { display:inline-grid; place-items:center; min-width:18px; height:18px; margin-left:7px; padding:0 5px; border-radius:999px; background:#fff; color:#c81924; font-style:normal; font-size:10px; font-weight:950; line-height:1; vertical-align:middle; box-shadow:0 2px 7px rgba(0,0,0,.16); }
+.admin-side button:not(.active) .admin-live-badge { background:#ef4450; color:#fff; }
+
+@media (max-width:1180px) {
+  .admin-filter-pro { grid-template-columns: minmax(180px,1fr) minmax(170px,1fr) minmax(145px,.75fr) minmax(145px,.75fr); }
+  .admin-filter-pro .filter-reset { grid-column:4; }
+}
+@media (max-width:800px) {
+  .admin-filter-pro { grid-template-columns:1fr 1fr; }
+  .admin-filter-title { grid-column:1/-1; padding:0 1px 4px; }
+  .admin-filter-pro .filter-reset { grid-column:auto; }
+}
+@media (max-width:520px) {
+  .admin-filter-pro { grid-template-columns:1fr; padding:13px!important; }
+  .admin-filter-title { grid-column:auto; }
+  .admin-filter-pro .filter-reset { width:100%; }
+  .inventory-summary { min-width:150px; }
+  .selected-color-stock { margin-top:10px; }
+}
