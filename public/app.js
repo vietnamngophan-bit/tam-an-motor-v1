@@ -806,6 +806,29 @@
     start();
   }
 
+  // Kho xe ngoài website cũng hiển thị theo cấu trúc: Nhóm xe → Dòng xe → Sản phẩm.
+  // Một "dòng xe" chính là thư mục landing đã tạo trong Admin (Air Blade, Vision, Winner...).
+  function publicCollections() {
+    return (state.collections || [])
+      .filter(item => item && item.visible !== 0 && item.visible !== false)
+      .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0) || Number(a.id || 0) - Number(b.id || 0));
+  }
+  function productsInCollection(collection) {
+    if (!collection) return [];
+    return (state.products || []).filter(product => product.published !== 0 && product.category === collection.category && product.collection_slug === collection.slug);
+  }
+  function publicFolderCard(collection, active = false) {
+    const folderProducts = productsInCollection(collection);
+    const image = collection.image_url || productImage(folderProducts[0] || {});
+    const count = folderProducts.length;
+    const category = categoryLabel(collection.category);
+    return `<button type="button" class="public-folder-card ${active ? 'active' : ''}" data-folder="${escapeHTML(collection.slug)}" aria-pressed="${active ? 'true' : 'false'}">
+      <span class="public-folder-thumb"><img src="${escapeHTML(image)}" alt="" loading="lazy"></span>
+      <span class="public-folder-copy"><b>${escapeHTML(collection.title)}</b><small>${escapeHTML(category)} · ${count ? `${count} xe` : 'Đang cập nhật'}</small></span>
+      <span class="public-folder-arrow" aria-hidden="true">›</span>
+    </button>`;
+  }
+
   function renderHome() {
     const s = state.site;
     const counts = Object.fromEntries(state.categories.map(x => [x.category, Number(x.count)]));
@@ -836,7 +859,7 @@
       <section class="hero hero-slider"><div class="hero-slides" aria-hidden="true">${heroImages(s).map((url, index) => `<div class="hero-slide ${index === 0 ? 'is-active' : ''}" style="background-image:url('${escapeHTML(url)}')"></div>`).join('')}</div><div class="container hero-inner"><div class="hero-copy"><div class="eyebrow">${escapeHTML(s.brand_name)}</div><h1>${multiline(s.hero_title || 'Chọn xe ưng ý.\nLên đường an tâm.')}</h1><p>${escapeHTML(s.hero_subtitle || '')}</p><div class="hero-actions"><a class="btn btn-primary" href="/#inventory">Xem xe đang có</a><a class="btn btn-light" href="/tra-gop">Tư vấn trả góp</a></div></div></div>${heroImages(s).length > 1 ? `<div class="hero-slider-ui"><div class="hero-slider-arrows"><button id="heroPrev" class="hero-arrow" type="button" aria-label="Ảnh Hero trước">←</button><button id="heroNext" class="hero-arrow" type="button" aria-label="Ảnh Hero tiếp theo">→</button></div><div class="hero-dots">${heroImages(s).map((_, index) => `<button type="button" class="hero-dot ${index === 0 ? 'is-active' : ''}" data-hero-dot="${index}" aria-label="Xem ảnh Hero ${index + 1}"></button>`).join('')}</div></div>` : ''}</section>
       <div class="trust-strip"><div class="container"><div class="trust-grid"><div class="trust-item"><i class="trust-icon">✓</i><div><b>Thông tin rõ ràng</b><span>Giá hiển thị theo cài đặt cửa hàng.</span></div></div><div class="trust-item"><i class="trust-icon">✦</i><div><b>Hỗ trợ trả góp</b><span>Kiểm tra hồ sơ trước khi xác nhận.</span></div></div><div class="trust-item"><i class="trust-icon">⌁</i><div><b>Tình trạng cập nhật</b><span>Còn hàng, sắp về, đang giữ xe.</span></div></div><div class="trust-item"><i class="trust-icon">☎</i><div><b>Tư vấn nhanh</b><span>Gọi điện hoặc chat trực tiếp.</span></div></div></div></div></div>
       ${categoryCards ? `<section class="section"><div class="container"><div class="section-head"><div><div class="section-kicker">Khám phá kho xe</div><h2>Chọn đúng dòng xe bạn cần.</h2><p class="section-lead">Danh mục chỉ xuất hiện khi đang có sản phẩm.</p></div></div><div class="category-grid">${categoryCards}</div></div></section>` : ''}
-      <section id="inventory" class="section section-soft"><div class="container"><div class="section-head"><div><div class="section-kicker">Kho xe Tâm An</div><h2>Xe đang có & xe sắp về.</h2><p class="section-lead">Gõ gần đúng tên xe, hãng hoặc màu xe để tìm nhanh.</p></div><div class="search-box">⌕<input id="searchInput" placeholder="Tìm tên xe, hãng, màu xe…"></div></div><div class="chips" id="categoryChips"><button class="chip active" data-category="">Tất cả xe</button>${Object.keys(CATEGORY).filter(key => counts[key] > 0).map(key => `<button class="chip" data-category="${key}">${CATEGORY[key]}</button>`).join('')}</div><div class="section-head" style="margin-top:18px"><p class="section-lead" id="productCount">${state.products.length} xe phù hợp</p><div class="slider-controls"><button class="icon-btn" id="slideLeft">←</button><button class="icon-btn" id="slideRight">→</button></div></div><div id="productRow" class="product-row">${state.products.map(card).join('') || '<div class="admin-empty">Kho xe đang được cập nhật.</div>'}</div></div></section>
+      <section id="inventory" class="section section-soft"><div class="container"><div class="section-head"><div><div class="section-kicker">Kho xe Tâm An</div><h2>Xe đang có & xe sắp về.</h2><p class="section-lead">Chọn nhóm xe, sau đó chọn dòng xe để xem kho nhanh hơn. Có thể gõ tên xe, hãng hoặc màu để tìm.</p></div><div class="search-box">⌕<input id="searchInput" placeholder="Tìm tên xe, hãng, màu xe…"></div></div><div class="chips" id="categoryChips"><button class="chip" data-category="">Tất cả nhóm</button>${Object.keys(CATEGORY).filter(key => counts[key] > 0).map(key => `<button class="chip" data-category="${key}">${CATEGORY[key]}</button>`).join('')}</div><div class="public-inventory-explorer"><div class="public-inventory-breadcrumb"><span>Kho xe</span><i>›</i><b id="inventoryCategoryName">Xe máy mới</b><i>›</i><strong id="inventoryFolderName">Tất cả dòng xe</strong></div><div class="public-folder-head"><div><span class="public-folder-overline">THƯ MỤC DÒNG XE</span><p id="inventoryFolderHint">Chọn Air Blade, Vision, Winner… để lọc đúng dòng xe.</p></div><a id="inventoryFolderLanding" class="public-folder-landing" href="/" hidden>Trang riêng <span>↗</span></a></div><div id="inventoryFolderRail" class="public-folder-rail" aria-label="Chọn thư mục dòng xe"></div></div><div class="section-head inventory-products-head"><p class="section-lead" id="productCount">${state.products.length} xe phù hợp</p><div class="slider-controls"><button class="icon-btn" id="slideLeft" aria-label="Xe trước">←</button><button class="icon-btn" id="slideRight" aria-label="Xe tiếp theo">→</button></div></div><div id="productRow" class="product-row">${state.products.map(card).join('') || '<div class="admin-empty">Kho xe đang được cập nhật.</div>'}</div></div></section>
       ${promoSlides ? `<section id="promo" class="section promo-section"><div class="container"><div class="section-head promo-section-head"><div><div class="section-kicker">Chương trình ưu đãi</div><h2>Nhiều ưu đãi. Chọn đúng thời điểm.</h2><p class="section-lead">Vuốt để xem từng chương trình đang áp dụng tại Tâm An.</p></div>${promotions.length > 1 ? `<div class="promo-controls"><button id="promoPrev" class="icon-btn" type="button" aria-label="Khuyến mại trước">←</button><button id="promoNext" class="icon-btn" type="button" aria-label="Khuyến mại tiếp theo">→</button></div>` : ''}</div><div class="promo-carousel" aria-label="Các chương trình khuyến mại"><div id="promoTrack" class="promo-track">${promoSlides}</div></div>${promotions.length > 1 ? `<div id="promoDots" class="promo-dots" aria-label="Chọn chương trình">${promotions.map((_, index) => `<button type="button" class="promo-dot ${index === 0 ? 'is-active' : ''}" data-promo-dot="${index}" aria-label="Xem chương trình ${index + 1}"></button>`).join('')}</div>` : ''}</div></section>` : ''}
       ${state.accessories.length ? `<section id="accessories" class="section section-soft"><div class="container"><div class="section-head"><div><div class="section-kicker">Phụ tùng & phụ kiện</div><h2>Chọn thêm cho xe. Đi đường yên tâm hơn.</h2></div></div><div class="accessory-grid">${state.accessories.map(a => `<article class="accessory"><img src="${escapeHTML(a.image_url || '/assets/logo.jpg')}" alt="${escapeHTML(a.name)}"><div class="accessory-body"><h3>${escapeHTML(a.name)}</h3>${a.price ? `<b class="price">${money(a.price)}</b>` : '<b class="price-hidden">Liên hệ</b>'}${a.description ? `<p class="muted">${escapeHTML(a.description)}</p>` : ''}</div></article>`).join('')}</div></div></section>` : ''}
       <section class="section"><div class="container delivery"><div class="delivery-img" style="background-image:url('${escapeHTML(s.delivery_image || s.showroom_image || '/assets/showroom.jpg')}')"></div><div class="delivery-copy"><div class="section-kicker">Dịch vụ Tâm An</div><h2>${escapeHTML(s.delivery_title || 'Hỗ trợ giao xe tận nơi')}</h2><p>${escapeHTML(s.delivery_text || '')}</p><button class="btn btn-primary lead-button" data-name="Giao xe tận nơi">Đăng ký tư vấn giao xe</button></div></div></section>
@@ -929,23 +952,87 @@
   function bindHomeEvents() {
     $('#menuBtn')?.addEventListener('click', () => $('#mainNav')?.classList.toggle('mobile-open'));
     $$('#mainNav a').forEach(link => link.addEventListener('click', () => $('#mainNav')?.classList.remove('mobile-open')));
+
+    const categoryButtons = $$('#categoryChips .chip');
+    const availableCategories = Object.keys(CATEGORY).filter(key => (state.products || []).some(product => product.category === key));
+    let activeCategory = availableCategories[0] || '';
+    let activeFolder = '';
+
+    const folderRail = $('#inventoryFolderRail');
+    const categoryName = $('#inventoryCategoryName');
+    const folderName = $('#inventoryFolderName');
+    const folderHint = $('#inventoryFolderHint');
+    const folderLanding = $('#inventoryFolderLanding');
+
+    const filteredProducts = () => {
+      const query = $('#searchInput')?.value || '';
+      return (state.products || []).filter(product => {
+        const inCategory = !activeCategory || product.category === activeCategory;
+        const inFolder = !activeFolder || product.collection_slug === activeFolder;
+        return inCategory && inFolder && fuzzyMatch(product, query);
+      });
+    };
+
+    const collectionProductsCount = collection => productsInCollection(collection).length;
+    const foldersForCurrentCategory = () => publicCollections().filter(item => !activeCategory || item.category === activeCategory);
+
+    const renderFolders = () => {
+      if (!folderRail) return;
+      const categoryText = activeCategory ? categoryLabel(activeCategory) : 'Tất cả nhóm xe';
+      const folders = foldersForCurrentCategory();
+      const currentFolder = folders.find(item => item.slug === activeFolder) || null;
+      const allCount = (state.products || []).filter(product => !activeCategory || product.category === activeCategory).length;
+
+      categoryName.textContent = categoryText;
+      folderName.textContent = currentFolder ? currentFolder.title : 'Tất cả dòng xe';
+      folderHint.textContent = currentFolder
+        ? `Đang xem ${currentFolder.title}. Chỉ hiện các sản phẩm nằm trong thư mục này.`
+        : `Chọn một dòng xe để lọc nhanh trong ${categoryText.toLowerCase()}.`;
+
+      if (currentFolder) {
+        folderLanding.hidden = false;
+        folderLanding.href = collectionUrl(currentFolder);
+        folderLanding.innerHTML = `Xem trang ${escapeHTML(currentFolder.title)} <span>↗</span>`;
+      } else {
+        folderLanding.hidden = true;
+        folderLanding.href = '/#inventory';
+      }
+
+      const allLabel = activeCategory ? `Tất cả ${categoryText}` : 'Tất cả xe';
+      folderRail.innerHTML = `<button type="button" class="public-folder-card public-folder-all ${!activeFolder ? 'active' : ''}" data-folder="" aria-pressed="${!activeFolder ? 'true' : 'false'}"><span class="public-folder-thumb public-folder-all-thumb">☷</span><span class="public-folder-copy"><b>${escapeHTML(allLabel)}</b><small>${allCount} xe đang hiển thị</small></span><span class="public-folder-arrow" aria-hidden="true">›</span></button>${folders.map(folder => publicFolderCard(folder, folder.slug === activeFolder)).join('') || '<div class="public-folder-empty">Chưa có thư mục dòng xe cho nhóm này.</div>'}`;
+
+      $$('.public-folder-card', folderRail).forEach(button => button.addEventListener('click', () => {
+        activeFolder = button.dataset.folder || '';
+        renderFolders();
+        renderProducts();
+      }));
+    };
+
     const renderProducts = () => {
-      const query = $('#searchInput').value;
-      const selected = $('#categoryChips .chip.active')?.dataset.category || '';
-      const items = state.products.filter(p => (!selected || p.category === selected) && fuzzyMatch(p, query));
-      $('#productRow').innerHTML = items.map(card).join('') || '<div class="admin-empty">Không tìm thấy xe phù hợp.</div>';
+      const items = filteredProducts();
+      $('#productRow').innerHTML = items.map(card).join('') || '<div class="admin-empty">Không tìm thấy xe phù hợp trong mục đang chọn.</div>';
       $('#productCount').textContent = `${items.length} xe phù hợp`;
       bindProductEvents();
     };
+
+    const chooseCategory = category => {
+      activeCategory = category;
+      activeFolder = '';
+      categoryButtons.forEach(button => button.classList.toggle('active', button.dataset.category === activeCategory));
+      renderFolders();
+      renderProducts();
+    };
+
     $('#searchInput')?.addEventListener('input', renderProducts);
-    $$('#categoryChips .chip').forEach(button => button.addEventListener('click', () => { $$('#categoryChips .chip').forEach(x => x.classList.remove('active')); button.classList.add('active'); renderProducts(); }));
-    $$('.filter-category').forEach(link => link.addEventListener('click', () => setTimeout(() => { const chip = $(`#categoryChips .chip[data-category="${link.dataset.category}"]`); chip?.click(); }, 30)));
+    categoryButtons.forEach(button => button.addEventListener('click', () => chooseCategory(button.dataset.category || '')));
+    $$('.filter-category').forEach(link => link.addEventListener('click', () => setTimeout(() => chooseCategory(link.dataset.category || ''), 30)));
     $('#slideLeft')?.addEventListener('click', () => $('#productRow').scrollBy({ left:-340, behavior:'smooth' }));
     $('#slideRight')?.addEventListener('click', () => $('#productRow').scrollBy({ left:340, behavior:'smooth' }));
     $('#backTop')?.addEventListener('click', () => window.scrollTo({ top:0, behavior:'smooth' }));
     window.addEventListener('scroll', () => $('#backTop')?.classList.toggle('show', window.scrollY > 400), { passive:true });
     $$('.footer-links [data-policy]').forEach(link => link.addEventListener('click', event => { event.preventDefault(); openPolicy(link.dataset.policy); }));
-    bindProductEvents();
+
+    chooseCategory(activeCategory);
     initChat();
   }
 
