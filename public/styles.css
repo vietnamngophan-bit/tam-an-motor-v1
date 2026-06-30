@@ -811,3 +811,41 @@ body.modal-open { overflow: hidden !important; }
   .description-reader-content { font-size:16px; line-height:1.75; }
   .description-reader-content h2 { font-size:29px; }.description-reader-content h3 { font-size:24px; }.description-reader-content h4 { font-size:20px; }
 }
+
+
+/* V1.12 — preview link & chia sẻ sản phẩm */
+.share-settings .share-preview-card{display:grid;grid-template-columns:220px 1fr;gap:0;max-width:780px;margin-top:18px;border:1px solid #ead7d9;border-radius:18px;overflow:hidden;background:#fff;box-shadow:0 12px 28px rgba(72,15,24,.08)}
+.share-preview-image{min-height:150px;background:center/cover no-repeat #f5eeee}
+.share-preview-card>div:last-child{padding:18px 20px;display:flex;flex-direction:column;justify-content:center;gap:7px}
+.share-preview-card small{font-size:11px;font-weight:800;color:var(--red);letter-spacing:.12em}.share-preview-card b{font-size:20px;line-height:1.25;color:var(--ink)}.share-preview-card p{margin:0;color:#6f6265;line-height:1.45}
+.product-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.product-title-row h2{margin-right:auto}.share-product-btn{flex:0 0 auto;border:1px solid #e3c8cb;background:#fff;color:var(--red);font:700 13px var(--body);padding:9px 12px;border-radius:999px;cursor:pointer;white-space:nowrap}.share-product-btn:hover{background:#fff2f3}
+@media(max-width:650px){.share-settings .share-preview-card{grid-template-columns:1fr}.share-preview-image{min-height:150px}.product-title-row{gap:8px}.share-product-btn{font-size:12px;padding:8px 10px}}
+
+
+/* V1.13 — Slider ảnh Hero: chữ cố định, chỉ nền ảnh chuyển động */
+.hero-slider{min-height:550px}
+.hero-slider .hero-slides{position:absolute;inset:0;z-index:-2;overflow:hidden;background:#260d10}
+.hero-slider .hero-slide{position:absolute;inset:0;background-position:center;background-size:cover;opacity:0;transform:scale(1.035);transition:opacity .85s ease,transform 5.8s ease}
+.hero-slider .hero-slide.is-active{opacity:1;transform:scale(1)}
+.hero-slider-ui{position:absolute;left:50%;bottom:24px;z-index:3;transform:translateX(-50%);width:min(1180px,calc(100% - 32px));display:flex;align-items:center;justify-content:space-between;gap:18px;pointer-events:none}
+.hero-slider-arrows,.hero-dots{display:flex;align-items:center;gap:8px;pointer-events:auto}
+.hero-arrow{width:42px;height:42px;border-radius:999px;border:1px solid rgba(255,255,255,.5);background:rgba(22,5,7,.32);backdrop-filter:blur(10px);color:#fff;font-size:21px;transition:.2s transform,.2s background}
+.hero-arrow:hover{transform:translateY(-2px);background:rgba(255,255,255,.18)}
+.hero-dots{padding:8px 11px;border-radius:999px;background:rgba(20,5,7,.28);backdrop-filter:blur(10px)}
+.hero-dot{width:8px;height:8px;border:0;border-radius:99px;background:rgba(255,255,255,.48);padding:0;transition:.25s width,.25s background}
+.hero-dot.is-active{width:25px;background:#fff}
+.hero-slider-admin{padding:16px;border:1px dashed #d9b9bd;border-radius:16px;background:#fffafa}
+.hero-slider-admin .field-help{margin:0 0 12px}
+.hero-images-admin-list{display:grid;gap:10px;margin-top:12px}
+.hero-image-admin-item{display:grid;grid-template-columns:74px minmax(0,1fr) auto;align-items:center;gap:12px;padding:9px;border:1px solid var(--line);border-radius:14px;background:#fff}
+.hero-image-admin-item img{width:74px;height:54px;object-fit:cover;border-radius:10px;background:#f6f0f0}
+.hero-image-admin-item b,.hero-image-admin-item small{display:block}.hero-image-admin-item small{margin-top:2px;color:var(--muted);font-size:12px}
+.hero-image-admin-actions{display:flex;gap:6px}.hero-image-admin-actions .small-btn{min-width:32px;padding:7px 9px}
+@media (max-width:640px){
+  .hero-slider{min-height:390px}
+  .hero-slider-ui{bottom:14px;width:calc(100% - 24px)}
+  .hero-arrow{width:38px;height:38px;font-size:19px}
+  .hero-dots{padding:7px 9px}.hero-dot{width:7px;height:7px}.hero-dot.is-active{width:20px}
+  .hero-image-admin-item{grid-template-columns:60px minmax(0,1fr);gap:9px}.hero-image-admin-item img{width:60px;height:46px}.hero-image-admin-actions{grid-column:1/-1;justify-content:flex-end}
+}
+@media (prefers-reduced-motion:reduce){.hero-slider .hero-slide{transition:none}.hero-arrow,.hero-dot{transition:none}}
