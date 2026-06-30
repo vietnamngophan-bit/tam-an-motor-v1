@@ -412,6 +412,20 @@
     document.documentElement.style.setProperty('--radius', `${Math.max(8, Math.min(32, Number(site.corner_radius || 22)))}px`);
     document.title = site.page_title || site.brand_name || 'Xe Máy Tâm An';
     $('#site-favicon').href = site.favicon_url || site.logo_url || '/assets/logo.jpg';
+    setClientShareMeta(site);
+  }
+
+  function setClientShareMeta(site) {
+    const ensure = (property, content, kind = 'property') => {
+      let tag = document.head.querySelector(`meta[${kind}="${property}"]`);
+      if (!tag) { tag = document.createElement('meta'); tag.setAttribute(kind, property); document.head.appendChild(tag); }
+      tag.setAttribute('content', content || '');
+    };
+    const title = site.share_title || site.page_title || site.brand_name || 'Xe Máy Tâm An';
+    const description = site.share_description || site.hero_subtitle || site.tagline || '';
+    const image = site.share_image || heroImages(site)[0] || site.showroom_image || site.logo_url || '';
+    ensure('og:title', title); ensure('og:description', description); ensure('og:image', image);
+    ensure('twitter:title', title, 'name'); ensure('twitter:description', description, 'name'); ensure('twitter:image', image, 'name');
   }
 
   function injectTracking(site) {
@@ -568,6 +582,118 @@
     });
   }
 
+  function heroImages(site) {
+    const raw = site?.hero_images_json;
+    let images = [];
+    // Khi đã lưu slider dạng JSON thì dùng đúng danh sách đó, không tự chèn lại ảnh cũ.
+    if (Array.isArray(raw)) {
+      images = raw;
+    } else if (typeof raw === 'string' && raw.trim()) {
+      try {
+        const parsed = JSON.parse(raw);
+        images = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        images = raw.split(/\n|\|/);
+      }
+    }
+    images = [...new Set(images.map(value => String(value || '').trim()).filter(value => /^\/?(?:media\/|assets\/)|^https?:\/\//.test(value)))];
+    if (!images.length && site?.hero_image) images = [String(site.hero_image).trim()];
+    return images.length ? images : ['/assets/tam-an-promo.jpg'];
+  }
+
+  function heroSliderField(site) {
+    const images = heroImages(site);
+    return `<div class="hero-slider-admin field full">
+      <label>Slider ảnh Hero</label>
+      <p class="field-help">Có thể tải nhiều ảnh. Chữ Hero giữ nguyên, chỉ ảnh tự chạy ngang. Ảnh đầu sẽ dùng làm ảnh dự phòng khi chia sẻ link nếu chưa đặt ảnh preview riêng.</p>
+      <input id="heroImagesInput" type="file" accept="image/*" multiple>
+      <input type="hidden" name="hero_images_json" value="${escapeHTML(JSON.stringify(images))}">
+      <input type="hidden" name="hero_image" value="${escapeHTML(images[0] || site.hero_image || '')}">
+      <div id="heroImagesList" class="hero-images-admin-list"></div>
+    </div>`;
+  }
+
+  function bindHeroSliderAdmin(main, site) {
+    const input = $('#heroImagesInput', main);
+    const list = $('#heroImagesList', main);
+    const jsonField = $('[name="hero_images_json"]', main);
+    const firstField = $('[name="hero_image"]', main);
+    if (!input || !list || !jsonField || !firstField) return;
+    let images = heroImages(site);
+    const sync = () => {
+      jsonField.value = JSON.stringify(images);
+      firstField.value = images[0] || '';
+      list.innerHTML = images.map((url, index) => `<article class="hero-image-admin-item">
+        <img src="${escapeHTML(url)}" alt="Ảnh Hero ${index + 1}">
+        <div><b>Ảnh ${index + 1}</b><small>${index === 0 ? 'Ảnh đầu tiên' : 'Ảnh slider'}</small></div>
+        <div class="hero-image-admin-actions">
+          <button type="button" class="small-btn hero-move" data-hero-index="${index}" data-hero-dir="-1" ${index === 0 ? 'disabled' : ''}>←</button>
+          <button type="button" class="small-btn hero-move" data-hero-index="${index}" data-hero-dir="1" ${index === images.length - 1 ? 'disabled' : ''}>→</button>
+          <button type="button" class="small-btn danger hero-remove" data-hero-index="${index}" ${images.length === 1 ? 'disabled title="Cần giữ ít nhất 1 ảnh Hero"' : ''}>×</button>
+        </div>
+      </article>`).join('');
+      $$('.hero-move', list).forEach(button => button.onclick = () => {
+        const from = Number(button.dataset.heroIndex), to = from + Number(button.dataset.heroDir);
+        if (to < 0 || to >= images.length) return;
+        [images[from], images[to]] = [images[to], images[from]];
+        sync();
+      });
+      $$('.hero-remove', list).forEach(button => button.onclick = () => {
+        if (images.length <= 1) return;
+        images.splice(Number(button.dataset.heroIndex), 1);
+        sync();
+      });
+    };
+    input.onchange = async () => {
+      const files = Array.from(input.files || []);
+      if (!files.length) return;
+      input.disabled = true;
+      try {
+        for (const file of files) images.push(await uploadFile(file));
+        images = [...new Set(images)];
+        sync();
+        notify(`Đã thêm ${files.length} ảnh Hero.`);
+      } catch (error) { notify(error.message); }
+      finally { input.disabled = false; input.value = ''; }
+    };
+    sync();
+  }
+
+  function bindHeroSlider() {
+    const hero = $('.hero-slider');
+    if (!hero) return;
+    const slides = $$('.hero-slide', hero);
+    const dots = $$('.hero-dot', hero);
+    if (slides.length < 2) return;
+    let index = 0;
+    let timer = null;
+    let startX = null;
+    const apply = next => {
+      index = (next + slides.length) % slides.length;
+      slides.forEach((slide, i) => slide.classList.toggle('is-active', i === index));
+      dots.forEach((dot, i) => dot.classList.toggle('is-active', i === index));
+    };
+    const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
+    const start = () => {
+      stop();
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      timer = window.setInterval(() => apply(index + 1), 5200);
+    };
+    $('#heroPrev')?.addEventListener('click', () => { apply(index - 1); start(); });
+    $('#heroNext')?.addEventListener('click', () => { apply(index + 1); start(); });
+    dots.forEach(dot => dot.addEventListener('click', () => { apply(Number(dot.dataset.heroDot)); start(); }));
+    hero.addEventListener('mouseenter', stop);
+    hero.addEventListener('mouseleave', start);
+    hero.addEventListener('touchstart', event => { startX = event.changedTouches?.[0]?.clientX ?? null; stop(); }, { passive:true });
+    hero.addEventListener('touchend', event => {
+      const endX = event.changedTouches?.[0]?.clientX ?? startX;
+      if (startX !== null && Math.abs(endX - startX) > 34) apply(index + (endX < startX ? 1 : -1));
+      startX = null;
+      start();
+    }, { passive:true });
+    start();
+  }
+
   function renderHome() {
     const s = state.site;
     const counts = Object.fromEntries(state.categories.map(x => [x.category, Number(x.count)]));
@@ -595,9 +721,9 @@
       </article>`).join('');
     app.className = '';
     app.innerHTML = `${nav()}<main>
-      <section class="hero"><div class="hero-bg" style="background-image:url('${escapeHTML(s.hero_image || '/assets/tam-an-promo.jpg')}')"></div><div class="container hero-inner"><div class="hero-copy"><div class="eyebrow">${escapeHTML(s.brand_name)}</div><h1>${multiline(s.hero_title || 'Chọn xe ưng ý.\nLên đường an tâm.')}</h1><p>${escapeHTML(s.hero_subtitle || '')}</p><div class="hero-actions"><a class="btn btn-primary" href="/#inventory">Xem xe đang có</a><a class="btn btn-light" href="/tra-gop">Tư vấn trả góp</a></div></div></div></section>
+      <section class="hero hero-slider"><div class="hero-slides" aria-hidden="true">${heroImages(s).map((url, index) => `<div class="hero-slide ${index === 0 ? 'is-active' : ''}" style="background-image:url('${escapeHTML(url)}')"></div>`).join('')}</div><div class="container hero-inner"><div class="hero-copy"><div class="eyebrow">${escapeHTML(s.brand_name)}</div><h1>${multiline(s.hero_title || 'Chọn xe ưng ý.\nLên đường an tâm.')}</h1><p>${escapeHTML(s.hero_subtitle || '')}</p><div class="hero-actions"><a class="btn btn-primary" href="/#inventory">Xem xe đang có</a><a class="btn btn-light" href="/tra-gop">Tư vấn trả góp</a></div></div></div>${heroImages(s).length > 1 ? `<div class="hero-slider-ui"><div class="hero-slider-arrows"><button id="heroPrev" class="hero-arrow" type="button" aria-label="Ảnh Hero trước">←</button><button id="heroNext" class="hero-arrow" type="button" aria-label="Ảnh Hero tiếp theo">→</button></div><div class="hero-dots">${heroImages(s).map((_, index) => `<button type="button" class="hero-dot ${index === 0 ? 'is-active' : ''}" data-hero-dot="${index}" aria-label="Xem ảnh Hero ${index + 1}"></button>`).join('')}</div></div>` : ''}</section>
       <div class="trust-strip"><div class="container"><div class="trust-grid"><div class="trust-item"><i class="trust-icon">✓</i><div><b>Thông tin rõ ràng</b><span>Giá hiển thị theo cài đặt cửa hàng.</span></div></div><div class="trust-item"><i class="trust-icon">✦</i><div><b>Hỗ trợ trả góp</b><span>Kiểm tra hồ sơ trước khi xác nhận.</span></div></div><div class="trust-item"><i class="trust-icon">⌁</i><div><b>Tình trạng cập nhật</b><span>Còn hàng, sắp về, đang giữ xe.</span></div></div><div class="trust-item"><i class="trust-icon">☎</i><div><b>Tư vấn nhanh</b><span>Gọi điện hoặc chat trực tiếp.</span></div></div></div></div></div>
-      ${categoryCards ? `<section class="section"><div class="container"><div class="section-head"><div><div class="section-kicker">Khám phá kho xe</div><h2>Chọn đúng dòng xe bạn cần.</h2></div></div><div class="category-grid">${categoryCards}</div></div></section>` : ''}
+      ${categoryCards ? `<section class="section"><div class="container"><div class="section-head"><div><div class="section-kicker">Khám phá kho xe</div><h2>Chọn đúng dòng xe bạn cần.</h2><p class="section-lead">Danh mục chỉ xuất hiện khi đang có sản phẩm.</p></div></div><div class="category-grid">${categoryCards}</div></div></section>` : ''}
       <section id="inventory" class="section section-soft"><div class="container"><div class="section-head"><div><div class="section-kicker">Kho xe Tâm An</div><h2>Xe đang có & xe sắp về.</h2><p class="section-lead">Gõ gần đúng tên xe, hãng hoặc màu xe để tìm nhanh.</p></div><div class="search-box">⌕<input id="searchInput" placeholder="Tìm tên xe, hãng, màu xe…"></div></div><div class="chips" id="categoryChips"><button class="chip active" data-category="">Tất cả xe</button>${Object.keys(CATEGORY).filter(key => counts[key] > 0).map(key => `<button class="chip" data-category="${key}">${CATEGORY[key]}</button>`).join('')}</div><div class="section-head" style="margin-top:18px"><p class="section-lead" id="productCount">${state.products.length} xe phù hợp</p><div class="slider-controls"><button class="icon-btn" id="slideLeft">←</button><button class="icon-btn" id="slideRight">→</button></div></div><div id="productRow" class="product-row">${state.products.map(card).join('') || '<div class="admin-empty">Kho xe đang được cập nhật.</div>'}</div></div></section>
       ${promoSlides ? `<section id="promo" class="section promo-section"><div class="container"><div class="section-head promo-section-head"><div><div class="section-kicker">Chương trình ưu đãi</div><h2>Nhiều ưu đãi. Chọn đúng thời điểm.</h2><p class="section-lead">Vuốt để xem từng chương trình đang áp dụng tại Tâm An.</p></div>${promotions.length > 1 ? `<div class="promo-controls"><button id="promoPrev" class="icon-btn" type="button" aria-label="Khuyến mại trước">←</button><button id="promoNext" class="icon-btn" type="button" aria-label="Khuyến mại tiếp theo">→</button></div>` : ''}</div><div class="promo-carousel" aria-label="Các chương trình khuyến mại"><div id="promoTrack" class="promo-track">${promoSlides}</div></div>${promotions.length > 1 ? `<div id="promoDots" class="promo-dots" aria-label="Chọn chương trình">${promotions.map((_, index) => `<button type="button" class="promo-dot ${index === 0 ? 'is-active' : ''}" data-promo-dot="${index}" aria-label="Xem chương trình ${index + 1}"></button>`).join('')}</div>` : ''}</div></section>` : ''}
       ${state.accessories.length ? `<section id="accessories" class="section section-soft"><div class="container"><div class="section-head"><div><div class="section-kicker">Phụ tùng & phụ kiện</div><h2>Chọn thêm cho xe. Đi đường yên tâm hơn.</h2></div></div><div class="accessory-grid">${state.accessories.map(a => `<article class="accessory"><img src="${escapeHTML(a.image_url || '/assets/logo.jpg')}" alt="${escapeHTML(a.name)}"><div class="accessory-body"><h3>${escapeHTML(a.name)}</h3>${a.price ? `<b class="price">${money(a.price)}</b>` : '<b class="price-hidden">Liên hệ</b>'}${a.description ? `<p class="muted">${escapeHTML(a.description)}</p>` : ''}</div></article>`).join('')}</div></div></section>` : ''}
@@ -605,6 +731,7 @@
       <section id="showroom" class="section section-soft"><div class="container showroom-grid"><div class="showroom-photo"><img src="${escapeHTML(s.showroom_image || '/assets/showroom.jpg')}" alt="Showroom"></div><div class="showroom-info"><div class="section-kicker">Đến showroom</div><h2>Ghé Tâm An, xem xe thật.</h2><div class="info-list"><div class="info-item"><b>Địa chỉ</b><span>${escapeHTML(s.address || '')}</span></div><div class="info-item"><b>Hotline</b><span>${escapeHTML(s.hotline || '')}</span></div><div class="info-item"><b>Giờ làm việc</b><span>${escapeHTML(s.business_hours || '')}</span></div></div><iframe class="map-frame" src="${escapeHTML(s.map_embed_url || '')}" loading="lazy"></iframe></div></div></section>
     </main>${footer()}${noticeTicker()}${floatingButtons()}`;
     bindHomeEvents();
+    bindHeroSlider();
     bindPromotionCarousel();
     bindNoticeTicker();
     bindHomeAnchorLinks();
@@ -723,7 +850,7 @@
       trackEvent('ViewProduct', { content_name: product.name, content_category: product.category, value: product.price || 0, currency: 'VND' });
       const modal = document.createElement('div');
       modal.className = 'modal';
-      modal.innerHTML = `<div class="modal-card product-modal-card"><button class="modal-close">×</button><div class="product-modal"><div class="gallery"><div class="gallery-main"><img id="galleryImage" alt="${escapeHTML(product.name)}"></div><div id="thumbs" class="thumb-row"></div><div id="versionChoices" class="version-choices"></div><div id="colorChoices" class="gallery-colors"></div></div><div class="product-content"><span class="status-badge" style="position:static;display:inline-block">${statusName(product.status)}</span><div class="product-meta" style="margin-top:12px">${escapeHTML(product.brand || 'TÂM AN')} • ${escapeHTML(CATEGORY[product.category] || '')}</div><h2>${escapeHTML(product.name)}</h2><div id="selectedVersionInfo" class="selected-version-info"></div><div id="dynamicPrice" class="price-line"></div><section class="product-description"><div class="product-description-head"><span>THÔNG TIN XE</span><h3>Mô tả & thông số chi tiết</h3></div><div class="product-description-body">${descriptionHTML(product.description)}</div><button type="button" id="openDescriptionReader" class="description-reader-btn">Đọc toàn bộ mô tả & thông số <span>→</span></button></section><div class="detail-grid"><div class="detail-item"><small>Năm sản xuất</small><b>${product.year || '—'}</b></div><div class="detail-item"><small>Số km</small><b>${product.mileage === null || product.mileage === undefined ? '—' : `${Number(product.mileage).toLocaleString('vi-VN')} km`}</b></div><div class="detail-item"><small>Động cơ</small><b>${escapeHTML(product.engine || '—')}</b></div><div class="detail-item"><small>Giấy tờ</small><b>${escapeHTML(product.documents || '—')}</b></div></div>${product.installment_from || product.bad_debt_from ? `<div class="finance-box"><b>Hỗ trợ trả góp</b><div>${product.installment_from ? `Trả trước tham khảo từ ${money(product.installment_from)}. ` : ''}${product.bad_debt_from ? `Thông tin hỗ trợ hồ sơ từ ${money(product.bad_debt_from)}.` : ''}</div><small>Thông tin tham khảo, Tâm An kiểm tra hồ sơ trước khi xác nhận.</small></div>` : ''}<div class="consult-box"><h3>Để lại thông tin tư vấn</h3><p class="muted">Nhân viên Tâm An sẽ liên hệ theo số điện thoại của bạn.</p><form id="detailLead" class="form-grid"><input type="hidden" name="product_id" value="${product.id}"><div class="field"><label>Họ và tên *</label><input name="name" required></div><div class="field"><label>Số điện thoại *</label><input name="phone" required inputmode="tel"></div>${paymentIntentFields(product.installment_from)}<div class="field full"><label>Ghi chú</label><textarea name="note" placeholder="Muốn xem xe, giữ xe hoặc hỏi trả góp…"></textarea></div><div class="field full"><button class="btn btn-primary">Gửi yêu cầu tư vấn</button></div></form></div></div></div>${data.related?.length ? `<div class="related"><div class="section-kicker">Gợi ý thêm</div><h2 style="font-size:34px">Xe tương tự</h2><div class="product-row">${data.related.map(card).join('')}</div></div>` : ''}</div>`;
+      modal.innerHTML = `<div class="modal-card product-modal-card"><button class="modal-close">×</button><div class="product-modal"><div class="gallery"><div class="gallery-main"><img id="galleryImage" alt="${escapeHTML(product.name)}"></div><div id="thumbs" class="thumb-row"></div><div id="versionChoices" class="version-choices"></div><div id="colorChoices" class="gallery-colors"></div></div><div class="product-content"><span class="status-badge" style="position:static;display:inline-block">${statusName(product.status)}</span><div class="product-meta" style="margin-top:12px">${escapeHTML(product.brand || 'TÂM AN')} • ${escapeHTML(CATEGORY[product.category] || '')}</div><div class="product-title-row"><h2>${escapeHTML(product.name)}</h2><button type="button" id="copyProductShare" class="share-product-btn" title="Sao chép link có ảnh xem trước">↗ Chia sẻ</button></div><div id="selectedVersionInfo" class="selected-version-info"></div><div id="dynamicPrice" class="price-line"></div><section class="product-description"><div class="product-description-head"><span>THÔNG TIN XE</span><h3>Mô tả & thông số chi tiết</h3></div><div class="product-description-body">${descriptionHTML(product.description)}</div><button type="button" id="openDescriptionReader" class="description-reader-btn">Đọc toàn bộ mô tả & thông số <span>→</span></button></section><div class="detail-grid"><div class="detail-item"><small>Năm sản xuất</small><b>${product.year || '—'}</b></div><div class="detail-item"><small>Số km</small><b>${product.mileage === null || product.mileage === undefined ? '—' : `${Number(product.mileage).toLocaleString('vi-VN')} km`}</b></div><div class="detail-item"><small>Động cơ</small><b>${escapeHTML(product.engine || '—')}</b></div><div class="detail-item"><small>Giấy tờ</small><b>${escapeHTML(product.documents || '—')}</b></div></div>${product.installment_from || product.bad_debt_from ? `<div class="finance-box"><b>Hỗ trợ trả góp</b><div>${product.installment_from ? `Trả trước tham khảo từ ${money(product.installment_from)}. ` : ''}${product.bad_debt_from ? `Thông tin hỗ trợ hồ sơ từ ${money(product.bad_debt_from)}.` : ''}</div><small>Thông tin tham khảo, Tâm An kiểm tra hồ sơ trước khi xác nhận.</small></div>` : ''}<div class="consult-box"><h3>Để lại thông tin tư vấn</h3><p class="muted">Nhân viên Tâm An sẽ liên hệ theo số điện thoại của bạn.</p><form id="detailLead" class="form-grid"><input type="hidden" name="product_id" value="${product.id}"><div class="field"><label>Họ và tên *</label><input name="name" required></div><div class="field"><label>Số điện thoại *</label><input name="phone" required inputmode="tel"></div>${paymentIntentFields(product.installment_from)}<div class="field full"><label>Ghi chú</label><textarea name="note" placeholder="Muốn xem xe, giữ xe hoặc hỏi trả góp…"></textarea></div><div class="field full"><button class="btn btn-primary">Gửi yêu cầu tư vấn</button></div></form></div></div></div>${data.related?.length ? `<div class="related"><div class="section-kicker">Gợi ý thêm</div><h2 style="font-size:34px">Xe tương tự</h2><div class="product-row">${data.related.map(card).join('')}</div></div>` : ''}</div>`;
       document.body.appendChild(modal); document.body.classList.add('modal-open');
       const close = bindOverlayDismissal(modal);
       const hasVersions = Array.isArray(product.versions) && product.versions.length;
@@ -754,6 +881,7 @@
       };
       draw();
       $('#openDescriptionReader', modal)?.addEventListener('click', () => openDescriptionReader(product));
+      $('#copyProductShare', modal)?.addEventListener('click', async () => { const link = `${location.origin}/xe/${encodeURIComponent(product.slug)}`; try { await navigator.clipboard.writeText(link); notify('Đã sao chép link xe. Khi gửi link sẽ hiện ảnh và thông tin xe.'); } catch { window.prompt('Sao chép link xe:', link); } });
       $('.gallery-main', modal).onclick = () => openLightbox(gallery, $('#galleryImage', modal).src);
       const detailLeadForm = $('#detailLead', modal);
       bindPaymentIntent(detailLeadForm);
@@ -1141,14 +1269,18 @@
         <div class="field"><label>Font nội dung</label><select name="body_font">${fontOptions(s.body_font || 'Be Vietnam Pro')}</select></div><div class="field"><label>Font tiêu đề</label><select name="heading_font">${fontOptions(s.heading_font || 'Barlow Condensed')}</select></div>
         <div class="field"><label>Cỡ chữ nội dung <output id="bodySizeOut">${escapeHTML(s.body_font_size || 16)}px</output></label><input name="body_font_size" id="bodySize" type="range" min="14" max="20" step="1" value="${escapeHTML(s.body_font_size || 16)}"></div><div class="field"><label>Tỷ lệ tiêu đề <output id="headingScaleOut">${escapeHTML(s.heading_scale || 1)}x</output></label><input name="heading_scale" id="headingScale" type="range" min="0.85" max="1.35" step="0.05" value="${escapeHTML(s.heading_scale || 1)}"></div><div class="field"><label>Giãn dòng <output id="lineHeightOut">${escapeHTML(s.body_line_height || 1.55)}</output></label><input name="body_line_height" id="lineHeight" type="range" min="1.35" max="2" step="0.05" value="${escapeHTML(s.body_line_height || 1.55)}"></div><div class="field"><label>Bo góc <output id="radiusOut">${escapeHTML(s.corner_radius || 22)}px</output></label><input name="corner_radius" id="cornerRadius" type="range" min="8" max="32" step="1" value="${escapeHTML(s.corner_radius || 22)}"></div>
       </div><div class="theme-preview"><span class="theme-preview-kicker">XEM TRƯỚC THEME</span><h3 id="themePreviewTitle">Chọn xe ưng ý. Lên đường an tâm.</h3><p id="themePreviewText">Thay đổi màu, font và kích cỡ sẽ áp dụng khi bấm lưu.</p><button type="button" class="btn btn-primary">Nút hành động</button></div></fieldset>
-      <fieldset class="fieldset"><legend>Trang chủ & nội dung</legend><div class="field"><label>Tiêu đề Hero</label><textarea name="hero_title">${escapeHTML(s.hero_title || '')}</textarea></div><div class="field"><label>Mô tả Hero</label><textarea name="hero_subtitle">${escapeHTML(s.hero_subtitle || '')}</textarea></div>${imageField('Ảnh Hero (riêng)', 'hero_image', s.hero_image)}${imageField('Ảnh Showroom (riêng)', 'showroom_image', s.showroom_image)}${imageField('Ảnh Giao xe tận nơi (riêng)', 'delivery_image', s.delivery_image)}${imageField('Ảnh trang trả góp', 'installment_image', s.installment_image)}${imageField('Ảnh khuyến mại mặc định', 'promo_image', s.promo_image)}<div class="form-two"><div class="field"><label>Tiêu đề giao xe</label><input name="delivery_title" value="${escapeHTML(s.delivery_title || '')}"></div><div class="field"><label>Nội dung giao xe</label><textarea name="delivery_text">${escapeHTML(s.delivery_text || '')}</textarea></div></div></fieldset>
+      <fieldset class="fieldset share-settings"><legend>Ảnh xem trước khi gửi link</legend><p class="muted">Khi dán link website vào Facebook, Zalo, Messenger hoặc TikTok, nền tảng sẽ dùng ảnh, tiêu đề và mô tả ở đây. Nên dùng ảnh ngang <b>1200 × 630 px</b>.</p><div class="form-two"><div class="field"><label>Tiêu đề khi chia sẻ</label><input name="share_title" value="${escapeHTML(s.share_title || s.page_title || '')}" maxlength="120"></div><div class="field"><label>Mô tả khi chia sẻ</label><textarea name="share_description" maxlength="280">${escapeHTML(s.share_description || s.hero_subtitle || '')}</textarea></div></div>${imageField('Ảnh preview link (1200 × 630 px)', 'share_image', s.share_image)}<div class="share-preview-card"><div class="share-preview-image" id="sharePreviewImage" style="background-image:url('${escapeHTML(s.share_image || s.hero_image || s.showroom_image || s.logo_url || '')}')"></div><div><small>XEM TRƯỚC KHI CHIA SẺ</small><b id="sharePreviewTitle">${escapeHTML(s.share_title || s.page_title || s.brand_name || '')}</b><p id="sharePreviewDescription">${escapeHTML(s.share_description || s.hero_subtitle || '')}</p></div></div></fieldset>
+      <fieldset class="fieldset"><legend>Trang chủ & nội dung</legend><div class="field"><label>Tiêu đề Hero</label><textarea name="hero_title">${escapeHTML(s.hero_title || '')}</textarea></div><div class="field"><label>Mô tả Hero</label><textarea name="hero_subtitle">${escapeHTML(s.hero_subtitle || '')}</textarea></div>${heroSliderField(s)}${imageField('Ảnh Showroom (riêng)', 'showroom_image', s.showroom_image)}${imageField('Ảnh Giao xe tận nơi (riêng)', 'delivery_image', s.delivery_image)}${imageField('Ảnh trang trả góp', 'installment_image', s.installment_image)}${imageField('Ảnh khuyến mại mặc định', 'promo_image', s.promo_image)}<div class="form-two"><div class="field"><label>Tiêu đề giao xe</label><input name="delivery_title" value="${escapeHTML(s.delivery_title || '')}"></div><div class="field"><label>Nội dung giao xe</label><textarea name="delivery_text">${escapeHTML(s.delivery_text || '')}</textarea></div></div></fieldset>
       <fieldset class="fieldset"><legend>Trang trả góp</legend><div class="field"><label>Tiêu đề trả góp</label><textarea name="installment_title">${escapeHTML(s.installment_title || '')}</textarea></div><div class="field"><label>Nội dung trả góp</label><textarea name="installment_text">${escapeHTML(s.installment_text || '')}</textarea></div><div class="field"><label>Giấy tờ / thủ tục</label><textarea name="installment_docs">${escapeHTML(s.installment_docs || '')}</textarea></div><div class="field"><label>Mức trả trước gợi ý (mỗi dòng một lựa chọn)</label><textarea name="installment_down_payments">${escapeHTML(s.installment_down_payments || '')}</textarea></div><div class="field"><label>Các bước thủ tục (mỗi dòng: Tiêu đề | Mô tả)</label><textarea name="installment_steps">${escapeHTML(s.installment_steps || '')}</textarea></div><div class="field"><label>Câu hỏi thường gặp (mỗi dòng: Câu hỏi | Trả lời)</label><textarea name="installment_faqs">${escapeHTML(s.installment_faqs || '')}</textarea></div></fieldset>
       <button class="btn btn-primary">Lưu giao diện & nội dung</button></form>`;
-    $$('.site-image-file', main).forEach(input => input.onchange = async () => { try { const url = await uploadFile(input.files[0]); $(`[name="${input.dataset.field}"]`, main).value = url; notify('Đã tải ảnh'); } catch (error) { notify(error.message); } });
+    $$('.site-image-file', main).forEach(input => input.onchange = async () => { try { const url = await uploadFile(input.files[0]); $(`[name="${input.dataset.field}"]`, main).value = url; if (input.dataset.field === 'share_image') { const preview=$('#sharePreviewImage', main); if(preview) preview.style.backgroundImage=`url("${url.replace(/"/g,'%22')}")`; } notify('Đã tải ảnh'); } catch (error) { notify(error.message); } });
+    bindHeroSliderAdmin(main, s);
     $('#logoFile', main).onchange = async event => { try { const url = await uploadFile(event.target.files[0]); $('[name="logo_url"]', main).value = url; $('[name="favicon_url"]', main).value = url; notify('Đã tải logo'); } catch (error) { notify(error.message); } };
     $('#faviconFile', main).onchange = async event => { try { $('[name="favicon_url"]', main).value = await uploadFile(event.target.files[0]); notify('Đã tải favicon'); } catch (error) { notify(error.message); } };
     const preview = () => { const draft = Object.fromEntries(new FormData($('#siteForm', main)).entries()); setSiteTheme({ ...state.site, ...draft }); $('#bodySizeOut').value = `${draft.body_font_size}px`; $('#headingScaleOut').value = `${draft.heading_scale}x`; $('#lineHeightOut').value = draft.body_line_height; $('#radiusOut').value = `${draft.corner_radius}px`; };
     ['bodySize','headingScale','lineHeight','cornerRadius'].forEach(id => $(`#${id}`, main).addEventListener('input', preview)); ['body_font','heading_font','primary_color','accent_color','background_color','text_color'].forEach(name => $(`[name="${name}"]`, main).addEventListener('change', preview)); preview();
+    const updateSharePreview = () => { const title=$('[name="share_title"]',main)?.value || $('[name="page_title"]',main)?.value || ''; const desc=$('[name="share_description"]',main)?.value || ''; const image=$('[name="share_image"]',main)?.value || $('[name="hero_image"]',main)?.value || ''; const t=$('#sharePreviewTitle',main), d=$('#sharePreviewDescription',main), i=$('#sharePreviewImage',main); if(t)t.textContent=title; if(d)d.textContent=desc; if(i&&image)i.style.backgroundImage=`url("${image.replace(/"/g,'%22')}")`; };
+    ['share_title','share_description','share_image'].forEach(name => $(`[name="${name}"]`,main)?.addEventListener('input', updateSharePreview)); updateSharePreview();
     $('#siteForm', main).onsubmit = async event => { event.preventDefault(); try { await saveSiteForm(event.target, [], 'Đã lưu giao diện và nội dung website.'); } catch (error) { notify(error.message); } };
   }
   async function adminContacts(main) {
@@ -1298,7 +1430,7 @@
       trackVisit();
       if (location.pathname === '/admin') renderAdmin();
       else if (location.pathname === '/tra-gop') renderFinance();
-      else renderHome();
+      else { renderHome(); const direct = location.pathname.match(/^\/xe\/([^/]+)$/)?.[1] || new URLSearchParams(location.search).get('xe'); if (direct) setTimeout(() => openProduct(decodeURIComponent(direct)).catch(() => {}), 0); }
     } catch (error) {
       app.innerHTML = `<main class="admin-login"><div class="login-card"><img src="/assets/logo.jpg" alt=""><h1>Không tải được website</h1><p>${escapeHTML(error.message)}</p><button class="btn btn-primary" onclick="location.reload()">Thử lại</button></div></main>`;
     }
