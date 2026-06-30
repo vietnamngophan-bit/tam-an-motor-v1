@@ -1262,6 +1262,7 @@
     catch { renderLogin(); }
   }
   function renderLogin() {
+    document.body.classList.remove('ta-admin-active');
     app.className = 'admin-wrap';
     app.innerHTML = `<main class="admin-login"><form id="loginForm" class="login-card"><img src="${escapeHTML(state.site.logo_url || '/assets/logo.jpg')}" alt=""><div class="section-kicker">Khu vực nội bộ</div><h1>Đăng nhập quản trị.</h1><p class="muted">Nhân viên có quyền thêm/sửa xe, xử lý form và chat. Không có quyền xoá.</p><div class="field"><label>Tên đăng nhập</label><input name="username" value="admin" required></div><div class="field"><label>Mật khẩu</label><input type="password" name="password" required></div><button class="btn btn-primary" style="width:100%;margin-top:16px">Đăng nhập</button><a class="muted" href="/" style="display:block;text-align:center;margin-top:12px">← Về website</a></form></main>`;
     $('#loginForm').onsubmit = async event => { event.preventDefault(); const form = new FormData(event.target); try { const data = await request('/api/admin/login', { method:'POST', body:{ username:form.get('username'), password:form.get('password') } }); state.admin = data.user; renderAdminShell(); } catch (error) { notify(error.message); } };
@@ -1278,20 +1279,32 @@
     return groups;
   }
   function renderAdminShell() {
+    document.body.classList.add('ta-admin-active');
     app.className = 'admin-wrap';
     const nav = adminTabs().map((group, groupIndex) => `<div class="admin-nav-group"><span>${escapeHTML(group.title)}</span>${group.items.map(([id, label], index) => `<button data-tab="${id}" class="${groupIndex === 0 && index === 0 ? 'active' : ''}">${escapeHTML(label)}${id === 'leads' ? '<i class="admin-live-badge" data-activity="leads" hidden></i>' : ''}${id === 'chats' ? '<i class="admin-live-badge" data-activity="chats" hidden></i>' : ''}</button>`).join('')}</div>`).join('');
-    app.innerHTML = `<header class="admin-header"><div class="container admin-header-inner"><a href="/" class="admin-brand"><img src="${escapeHTML(state.site.logo_url || '/assets/logo.jpg')}" alt=""><span>TÂM AN<small>KHU VỰC NỘI BỘ</small></span></a><div class="admin-user"><span>${escapeHTML(state.admin.name)} <em>${state.admin.role === 'admin' ? 'Chủ cửa hàng' : 'Nhân viên'}</em></span><button id="logoutButton" class="small-btn">Đăng xuất</button></div></div></header><div class="admin-shell"><aside class="admin-side"><div class="admin-side-title">Bảng điều khiển</div>${nav}</aside><main id="adminMain" class="admin-main"></main></div>`;
-    $$('[data-tab]').forEach(button => button.onclick = () => { $$('[data-tab]').forEach(x => x.classList.remove('active')); button.classList.add('active'); loadAdminTab(button.dataset.tab); });
+    const mobileTabs = [['overview','⌂','Tổng quan'],['products','☷','Kho xe'],['leads','✦','Form'],['chats','◌','Chat']];
+    app.innerHTML = `<header class="admin-header"><div class="container admin-header-inner"><div class="admin-header-start"><button id="adminMobileMenu" type="button" class="admin-mobile-menu-button" aria-controls="adminSide" aria-expanded="false"><i aria-hidden="true">☰</i><span>Menu</span></button><a href="/" class="admin-brand"><img src="${escapeHTML(state.site.logo_url || '/assets/logo.jpg')}" alt=""><span>TÂM AN<small>KHU VỰC NỘI BỘ</small></span></a></div><div class="admin-user"><span>${escapeHTML(state.admin.name)} <em>${state.admin.role === 'admin' ? 'Chủ cửa hàng' : 'Nhân viên'}</em></span><button id="logoutButton" class="small-btn">Đăng xuất</button></div></div></header><button id="adminNavBackdrop" type="button" class="admin-mobile-backdrop" aria-label="Đóng menu quản trị" tabindex="-1"></button><div class="admin-shell"><aside id="adminSide" class="admin-side" aria-label="Điều hướng quản trị"><div class="admin-mobile-drawer-head"><span>QUẢN TRỊ TÂM AN</span><button id="adminMobileClose" type="button" aria-label="Đóng menu">×</button></div><div class="admin-side-title">Bảng điều khiển</div>${nav}</aside><main id="adminMain" class="admin-main"></main></div><nav class="admin-mobile-bottom-nav" aria-label="Điều hướng nhanh">${mobileTabs.map(([id, icon, label], index) => `<button type="button" data-tab="${id}" class="${index === 0 ? 'active' : ''}"><i aria-hidden="true">${icon}</i><span>${label}${id === 'leads' ? '<em class="admin-mobile-live" data-activity="leads" hidden></em>' : ''}${id === 'chats' ? '<em class="admin-mobile-live" data-activity="chats" hidden></em>' : ''}</span></button>`).join('')}<button id="adminMobileMore" type="button"><i aria-hidden="true">•••</i><span>Thêm</span></button></nav>`;
+    const openAdminNav = () => { app.classList.add('admin-mobile-nav-open'); $('#adminMobileMenu')?.setAttribute('aria-expanded', 'true'); };
+    const closeAdminNav = () => { app.classList.remove('admin-mobile-nav-open'); $('#adminMobileMenu')?.setAttribute('aria-expanded', 'false'); };
+    $('#adminMobileMenu')?.addEventListener('click', openAdminNav);
+    $('#adminMobileMore')?.addEventListener('click', openAdminNav);
+    $('#adminMobileClose')?.addEventListener('click', closeAdminNav);
+    $('#adminNavBackdrop')?.addEventListener('click', closeAdminNav);
+    $$('[data-tab]').forEach(button => button.onclick = () => {
+      const tab = button.dataset.tab;
+      $$('[data-tab]').forEach(x => x.classList.toggle('active', x.dataset.tab === tab));
+      closeAdminNav();
+      loadAdminTab(tab);
+    });
     const updateActivity = async () => {
       try {
         const activity = await request('/api/admin/activity');
-        const leadBadge = $('[data-activity="leads"]'); const chatBadge = $('[data-activity="chats"]');
-        if (leadBadge) { leadBadge.hidden = !activity.new_leads; leadBadge.textContent = activity.new_leads > 99 ? '99+' : String(activity.new_leads || ''); }
-        if (chatBadge) { chatBadge.hidden = !activity.open_chats; chatBadge.textContent = activity.open_chats > 99 ? '99+' : String(activity.open_chats || ''); }
+        $$('[data-activity="leads"]').forEach(leadBadge => { leadBadge.hidden = !activity.new_leads; leadBadge.textContent = activity.new_leads > 99 ? '99+' : String(activity.new_leads || ''); });
+        $$('[data-activity="chats"]').forEach(chatBadge => { chatBadge.hidden = !activity.open_chats; chatBadge.textContent = activity.open_chats > 99 ? '99+' : String(activity.open_chats || ''); });
       } catch {}
     };
     updateActivity(); clearInterval(window.__tamAnAdminActivityTimer); window.__tamAnAdminActivityTimer = setInterval(updateActivity, 8000);
-    $('#logoutButton').onclick = async () => { clearInterval(window.__tamAnAdminActivityTimer); await request('/api/admin/logout', { method:'POST' }); state.admin = null; renderLogin(); };
+    $('#logoutButton').onclick = async () => { clearInterval(window.__tamAnAdminActivityTimer); await request('/api/admin/logout', { method:'POST' }); state.admin = null; document.body.classList.remove('ta-admin-active'); renderLogin(); };
     loadAdminTab('overview');
   }
   async function loadAdminTab(tab) {
@@ -1839,6 +1852,7 @@
 
   const renderHomeV13 = renderHome;
   renderHome = function() {
+    document.body.classList.remove('ta-admin-active');
     renderHomeV13();
     const grid = $('.trust-grid');
     if (grid) grid.innerHTML = trustBlocks().map(item => `<div class="trust-item"><i class="trust-icon">${escapeHTML(item.icon)}</i><div><b>${escapeHTML(item.title)}</b><span>${escapeHTML(item.text)}</span></div></div>`).join('');
@@ -2264,13 +2278,18 @@
   };
 
   renderCollectionPage = function(collection) {
+    document.body.classList.remove('ta-admin-active');
     const products = state.products.filter(product => product.published !== 0 && product.collection_slug === collection.slug && product.category === collection.category);
     const cover = collection.image_url || productImage(products[0] || {});
     const productOptions = products.map(product => `<option value="${product.id}">${escapeHTML(product.name)}${product.price ? ` · ${money(productLowestPrice(product) || product.price)}` : ''}</option>`).join('');
     app.className = '';
-    app.innerHTML = `${nav('inventory')}<main class="collection-page landing-page">
+    app.innerHTML = `${nav('inventory')}<a class="landing-home-shortcut" href="/" aria-label="Về trang chủ"><span aria-hidden="true">⌂</span><b>Trang chủ</b></a><main class="collection-page landing-page">
       <section class="collection-hero landing-hero" style="--collection-cover:url('${escapeHTML(cover)}')">
         <div class="container collection-hero-inner">
+          <div class="landing-returnbar" aria-label="Điều hướng landing page">
+            <a class="landing-return-home" href="/"><span aria-hidden="true">←</span> Về trang chủ</a>
+            <a class="landing-return-inventory" href="/#inventory">Xem toàn bộ kho xe <span aria-hidden="true">→</span></a>
+          </div>
           <div class="landing-topline"><a class="collection-crumb" href="/#inventory">Kho xe</a><span>›</span><span>${escapeHTML(categoryLabel(collection.category))}</span><span>›</span><b>${escapeHTML(collection.title)}</b></div>
           <div class="collection-hero-copy">
             <span class="collection-overline">TRANG XE DÀNH RIÊNG CHO KHÁCH QUAN TÂM</span><h1>${escapeHTML(collection.title)}</h1>
@@ -2343,6 +2362,7 @@
   nav = function(active = '') {
     const s = state.site;
     const standardLinks = [
+      ['/', 'Trang chủ', 'home'],
       ['/#promo', 'Khuyến mại', 'promo'],
       ...(state.accessories?.length ? [['/#accessories', 'Phụ kiện', 'accessories']] : []),
       ['/tra-gop', 'Trả góp', 'finance'],
@@ -2361,7 +2381,7 @@
       <div class="topbar"><div class="container topbar-inner"><span>${escapeHTML(s.address || '')}</span><a href="tel:${String(s.hotline || '').replace(/\s/g, '')}">☎ ${escapeHTML(s.hotline || '')}</a></div></div>
       <div class="container nav">
         <a class="brand" href="/"><img class="brand-logo" src="${escapeHTML(s.logo_url || '/assets/logo.jpg')}" alt=""><span class="brand-copy"><b>${escapeHTML(s.brand_name || 'TÂM AN')}</b><span>XE MỚI • XE CŨ • XE ĐIỆN</span></span></a>
-        <nav id="mainNav" class="main-nav">${inventoryMenu}${standardLinks.map(([url, label, key]) => `<a href="${url}" class="${key === active ? 'active' : ''}">${label}</a>`).join('')}</nav>
+        <nav id="mainNav" class="main-nav">${inventoryMenu}${standardLinks.map(([url, label, key]) => `<a href="${url}" class="${key === active ? 'active' : ''} ${key === 'home' ? 'v12-home-link' : ''}">${label}</a>`).join('')}</nav>
         <div class="header-actions"><a class="phone-pill" href="tel:${String(s.hotline || '').replace(/\s/g, '')}">☎ ${escapeHTML(s.hotline || '')}</a><button id="menuBtn" class="menu-btn">☰</button></div>
       </div>
     </header>`;
@@ -2573,6 +2593,7 @@
   nav = function(active = '') {
     const s = state.site;
     const standardLinks = [
+      ...(active === 'inventory' ? [['/', 'Trang chủ', 'home']] : []),
       ['/#promo', 'Khuyến mại', 'promo'],
       ...(state.accessories?.length ? [['/#accessories', 'Phụ kiện', 'accessories']] : []),
       ['/tra-gop', 'Trả góp', 'finance'],
@@ -2591,7 +2612,7 @@
       <div class="topbar"><div class="container topbar-inner"><span>${escapeHTML(s.address || '')}</span><a href="tel:${String(s.hotline || '').replace(/\s/g, '')}">☎ ${escapeHTML(s.hotline || '')}</a></div></div>
       <div class="container nav">
         <a class="brand" href="/"><img class="brand-logo" src="${escapeHTML(s.logo_url || '/assets/logo.jpg')}" alt=""><span class="brand-copy"><b>${escapeHTML(s.brand_name || 'TÂM AN')}</b><span>XE MỚI • XE CŨ • XE ĐIỆN</span></span></a>
-        <nav id="mainNav" class="main-nav">${inventoryMenu}${standardLinks.map(([url, label, key]) => `<a href="${url}" class="${key === active ? 'active' : ''}">${label}</a>`).join('')}</nav>
+        <nav id="mainNav" class="main-nav">${inventoryMenu}${standardLinks.map(([url, label, key]) => `<a href="${url}" class="${key === active ? 'active' : ''} ${key === 'home' ? 'v12-home-link' : ''}">${label}</a>`).join('')}</nav>
         <div class="header-actions"><a class="phone-pill" href="tel:${String(s.hotline || '').replace(/\s/g, '')}">☎ ${escapeHTML(s.hotline || '')}</a><button id="menuBtn" class="menu-btn" aria-label="Mở menu">☰</button></div>
       </div>
     </header>`;
