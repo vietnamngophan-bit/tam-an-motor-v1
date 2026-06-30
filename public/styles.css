@@ -1923,3 +1923,73 @@ body.modal-open { overflow: hidden !important; }
   .public-folder-empty { flex: 0 0 86%; }
   .inventory-products-head { margin-top: 15px; }
 }
+
+/* ==================================================================
+   V8 — KHO XE DẠNG MENU THƯ MỤC CON
+   Thư mục Air Blade / Vision / Winner nằm trong menu Kho xe; trang chủ
+   chỉ giữ kho sản phẩm sạch, không còn rail/card thư mục.
+   ================================================================== */
+.main-nav { overflow: visible; }
+.nav-folder-dropdown { position: relative; display: flex; align-items: center; }
+.nav-folder-trigger { display: inline-flex; align-items: center; gap: 6px; min-height: 42px; padding: 11px 10px 11px 12px; border-radius: 12px; color: #4c4142; font-weight: 800; white-space: nowrap; transition: background .18s ease, color .18s ease; }
+.nav-folder-dropdown.active .nav-folder-trigger,
+.nav-folder-dropdown:hover .nav-folder-trigger,
+.nav-folder-dropdown:focus-within .nav-folder-trigger { color: var(--red); background: var(--soft); }
+.nav-folder-caret { display: inline-grid; place-items: center; width: 14px; height: 14px; color: currentColor; font-size: 16px; line-height: 1; transition: transform .18s ease; }
+.nav-folder-dropdown:hover .nav-folder-caret,
+.nav-folder-dropdown.is-open .nav-folder-caret,
+.nav-folder-dropdown:focus-within .nav-folder-caret { transform: rotate(180deg); }
+.nav-folder-toggle { display: none; }
+.nav-folder-popover { position: absolute; top: calc(100% + 14px); left: 50%; z-index: 1100; width: min(620px, calc(100vw - 42px)); padding: 15px; border: 1px solid #eadadd; border-radius: 18px; background: rgba(255,255,255,.98); box-shadow: 0 22px 52px rgba(47,15,19,.16); transform: translate(-50%, -6px); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .18s ease, transform .18s ease, visibility .18s ease; }
+.nav-folder-dropdown:hover .nav-folder-popover,
+.nav-folder-dropdown:focus-within .nav-folder-popover,
+.nav-folder-dropdown.is-open .nav-folder-popover { opacity: 1; visibility: visible; pointer-events: auto; transform: translate(-50%, 0); }
+.nav-folder-popover::before { content: ""; position: absolute; top: -7px; left: 50%; width: 13px; height: 13px; border-top: 1px solid #eadadd; border-left: 1px solid #eadadd; background: #fff; transform: translateX(-50%) rotate(45deg); }
+.nav-folder-popover-head { position: relative; display: grid; gap: 2px; padding: 3px 5px 13px; border-bottom: 1px solid #f2e7e8; }
+.nav-folder-popover-head span { color: var(--red); font-size: 10px; font-weight: 950; letter-spacing: .14em; }
+.nav-folder-popover-head b { color: #2b1c1e; font-size: 15px; line-height: 1.25; }
+.nav-folder-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px 17px; padding: 13px 2px 10px; }
+.nav-folder-group { min-width: 0; }
+.nav-folder-group-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 2px 7px; }
+.nav-folder-group-title span { color: #7f686a; font-size: 10px; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }
+.nav-folder-group-title small { color: #a58e90; font-size: 10px; font-weight: 750; }
+.nav-folder-group-list { display: grid; gap: 6px; }
+.nav-folder-link { display: grid; grid-template-columns: 28px minmax(0, 1fr) 12px; align-items: center; gap: 8px; min-height: 50px; padding: 7px 8px; border: 1px solid transparent; border-radius: 12px; background: #fff; transition: background .16s ease, border-color .16s ease, transform .16s ease; }
+.nav-folder-link:hover { border-color: #ebced0; background: #fff6f6; transform: translateX(2px); }
+.nav-folder-link-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; background: #fff0f1; color: var(--red); font-weight: 950; font-size: 17px; }
+.nav-folder-link-copy { display: grid; min-width: 0; gap: 1px; }
+.nav-folder-link-copy b { overflow: hidden; color: #3c292b; font-size: 12px; font-weight: 900; line-height: 1.18; text-overflow: ellipsis; white-space: nowrap; }
+.nav-folder-link-copy small { overflow: hidden; color: #937b7d; font-size: 10px; font-weight: 680; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.nav-folder-link-arrow { color: #b9202a; font-size: 18px; line-height: 1; }
+.nav-folder-view-all { display: flex; align-items: center; gap: 8px; min-height: 42px; margin: 2px 0 0; padding: 9px 10px; border-top: 1px solid #f2e7e8; color: #9e1d26; font-size: 12px; font-weight: 900; }
+.nav-folder-view-all span { font-size: 16px; }
+.nav-folder-view-all b { margin-left: auto; font-size: 15px; }
+.nav-folder-view-all:hover { color: var(--red); }
+.nav-folder-empty { display: grid; gap: 3px; padding: 20px 7px 12px; color: #766365; font-size: 12px; }
+.nav-folder-empty b { color: #392729; font-size: 14px; }
+
+.inventory-active-folder { display: none; align-items: center; gap: 9px; width: fit-content; max-width: 100%; margin: 13px 0 -6px; padding: 8px 9px 8px 11px; border: 1px solid #efd6d8; border-radius: 12px; background: #fff; color: #6f5658; box-shadow: 0 6px 16px rgba(55,16,20,.04); }
+.inventory-active-folder.is-visible { display: inline-flex; }
+.inventory-active-folder-label { color: #9e242c; font-size: 10px; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }
+.inventory-active-folder b { overflow: hidden; max-width: min(300px, 54vw); color: #332224; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.inventory-active-folder b::before { content: ""; display: inline-block; width: 7px; height: 7px; margin: 0 7px 1px 0; border-radius: 50%; background: #1da35a; box-shadow: 0 0 0 3px #e7f7ed; }
+.inventory-active-folder button { display: grid; place-items: center; width: 24px; height: 24px; margin-left: 2px; border: 0; border-radius: 8px; background: #fff1f2; color: #b51d27; font-size: 18px; line-height: 1; }
+.inventory-active-folder button:hover { background: var(--red); color: #fff; }
+
+@media (max-width: 980px) {
+  .main-nav.mobile-open .nav-folder-dropdown { display: grid; grid-template-columns: minmax(0, 1fr) 42px; gap: 0; border: 1px solid #f0dddd; border-radius: 14px; background: #fffafa; }
+  .main-nav.mobile-open .nav-folder-trigger { min-width: 0; padding: 12px; border-radius: 13px 0 0 13px; }
+  .main-nav.mobile-open .nav-folder-toggle { display: grid; place-items: center; width: 42px; height: 42px; margin: 4px 4px 4px 0; border: 0; border-radius: 10px; background: #fff0f1; color: var(--red); font-size: 19px; font-weight: 900; transition: transform .18s ease; }
+  .main-nav.mobile-open .nav-folder-dropdown.is-open .nav-folder-toggle { transform: rotate(180deg); }
+  .main-nav.mobile-open .nav-folder-popover { position: static; grid-column: 1 / -1; width: auto; margin: 0 7px 7px; padding: 12px; border-radius: 12px; box-shadow: none; transform: none; opacity: 1; visibility: visible; pointer-events: auto; display: none; }
+  .main-nav.mobile-open .nav-folder-popover::before { display: none; }
+  .main-nav.mobile-open .nav-folder-dropdown.is-open .nav-folder-popover { display: block; }
+  .main-nav.mobile-open .nav-folder-popover-head { padding: 2px 2px 10px; }
+  .main-nav.mobile-open .nav-folder-groups { grid-template-columns: 1fr; gap: 12px; padding: 10px 0 6px; }
+  .main-nav.mobile-open .nav-folder-link { min-height: 46px; }
+}
+
+@media (max-width: 640px) {
+  .inventory-active-folder { width: 100%; margin-top: 11px; }
+  .inventory-active-folder b { max-width: none; flex: 1; }
+}
