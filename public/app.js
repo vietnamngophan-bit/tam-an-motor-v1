@@ -246,6 +246,13 @@
     if (status === 'incoming') return quantity && quantity > 0 ? `Sắp về · dự kiến ${quantity} xe` : 'Sắp về';
     return Number.isFinite(quantity) ? `Còn ${Math.max(0, Math.floor(quantity))} xe` : 'Còn hàng';
   }
+  function colorCardStockText(color = {}) {
+    const status = color.availability || 'in_stock';
+    const quantity = color.stock_quantity === '' || color.stock_quantity === undefined || color.stock_quantity === null ? null : Number(color.stock_quantity);
+    if (status === 'out_of_stock') return 'Tạm hết';
+    if (status === 'incoming') return Number.isFinite(quantity) && quantity > 0 ? `Về ${Math.max(0, Math.floor(quantity))}` : 'Sắp về';
+    return Number.isFinite(quantity) ? `Sẵn ${Math.max(0, Math.floor(quantity))}` : 'Sẵn kho';
+  }
   function colorStockClass(color = {}) { return `stock-${String(color.availability || 'in_stock').replace(/[^a-z_]/g, '')}`; }
   function inventorySummary(product = {}) {
     const colors = allProductColors(product);
@@ -575,7 +582,7 @@
       <div class="product-body"><div class="product-meta">${escapeHTML(product.brand || 'TÂM AN')} • ${escapeHTML(categoryLabel(product.category))}</div><h3>${escapeHTML(product.name)}</h3>
       <div class="product-details">${product.year ? `<span class="mini-tag">${product.year}</span>` : ''}${product.engine ? `<span class="mini-tag">${escapeHTML(product.engine)}</span>` : ''}</div>
       <div class="price-line">${product.price ? `<span class="price">${money(product.price)}</span>${product.old_price ? `<span class="old-price">${money(product.old_price)}</span>` : ''}` : `<span class="price-hidden">Liên hệ nhận giá</span>`}</div>
-      ${colors.length ? `<div class="color-dots paint-preview-row">${colors.map(c => `<button class="paint-preview preview-color ${colorStockClass(c)}" data-image="${escapeHTML(c.images?.[0] || productImage(product))}" title="${escapeHTML(`${c.name} — ${colorStockText(c)}`)}">${paletteStrip(c)}<span class="paint-preview-copy"><b>${escapeHTML(c.name)}</b><small>${escapeHTML(colorStockText(c))}</small></span></button>`).join('')}</div>` : ''}
+      ${colors.length ? `<div class="color-dots paint-preview-row">${colors.map(c => `<button class="paint-preview preview-color ${colorStockClass(c)}" data-image="${escapeHTML(c.images?.[0] || productImage(product))}" title="${escapeHTML(`${c.name} — ${colorStockText(c)}`)}">${paletteStrip(c)}<span class="paint-preview-copy"><b>${escapeHTML(c.name)}</b><small><i class="availability-dot" aria-hidden="true"></i>${escapeHTML(colorCardStockText(c))}</small></span></button>`).join('')}</div>` : ''}
       <div class="product-cta"><button class="btn btn-ghost open-product" data-slug="${escapeHTML(product.slug)}">Xem chi tiết</button><button class="btn btn-primary lead-button" data-product="${product.id}" data-name="${escapeHTML(product.name)}">Giữ xe</button></div></div>
     </article>`;
   }
@@ -994,7 +1001,7 @@
     const panel = $('#chatPanel'); if (!panel) return;
     state.visitorKey = visitorKey();
     const hasName = localStorage.getItem('ta_visitor_name');
-    panel.innerHTML = `<div class="chat-head"><div><b>${escapeHTML(state.site.ai_name || 'Tâm An hỗ trợ')}</b><span>Chat trực tiếp với showroom</span></div><button id="chatClose" class="small-btn">×</button></div><div id="chatBody" class="chat-body"></div><form id="chatForm" class="chat-form"><input name="message" placeholder="Nhập tin nhắn…"><button>Gửi</button></form><div id="chatNameBox" class="chat-name ${hasName ? 'hidden' : ''}"><h3>Chào bạn 👋</h3><p class="muted">Nhập tên để nhân viên biết cách xưng hô.</p><input id="visitorName" placeholder="Tên của bạn"><button id="chatStart" class="btn btn-primary">Bắt đầu trò chuyện</button></div>`;
+    panel.innerHTML = `<div class="chat-head"><div><b>${escapeHTML(state.site.ai_name || 'Tâm An hỗ trợ')}</b><span>Chat trực tiếp với showroom</span></div><button id="chatClose" class="small-btn">×</button></div><div class="chat-message-area"><div id="chatBody" class="chat-body"></div><button type="button" id="chatScrollBottom" class="chat-scroll-bottom" aria-label="Cuộn xuống tin nhắn mới nhất">↓ <span>Tin mới nhất</span></button></div><form id="chatForm" class="chat-form"><input name="message" placeholder="Nhập tin nhắn…"><button>Gửi</button></form><div id="chatNameBox" class="chat-name ${hasName ? 'hidden' : ''}"><h3>Chào bạn 👋</h3><p class="muted">Nhập tên để nhân viên biết cách xưng hô.</p><input id="visitorName" placeholder="Tên của bạn"><button id="chatStart" class="btn btn-primary">Bắt đầu trò chuyện</button></div>`;
     const ensureConversation = async () => {
       const savedName = localStorage.getItem('ta_visitor_name');
       if (!savedName) return;
@@ -1004,6 +1011,22 @@
       panel.classList.remove('show');
       panel.setAttribute('aria-hidden', 'true');
     };
+    const chatBody = $('#chatBody', panel);
+    const syncChatScrollButton = () => {
+      const button = $('#chatScrollBottom', panel);
+      if (!chatBody || !button) return;
+      const awayFromLatest = chatBody.scrollHeight - chatBody.scrollTop - chatBody.clientHeight > 70;
+      button.classList.toggle('show', awayFromLatest);
+    };
+    if (chatBody) {
+      chatBody.__syncScrollButton = syncChatScrollButton;
+      chatBody.addEventListener('scroll', syncChatScrollButton, { passive:true });
+    }
+    $('#chatScrollBottom', panel)?.addEventListener('click', () => {
+      if (!chatBody) return;
+      chatBody.scrollTo({ top:chatBody.scrollHeight, behavior:'smooth' });
+      syncChatScrollButton();
+    });
     $('#chatOpen')?.addEventListener('click', async () => {
       panel.classList.add('show');
       panel.setAttribute('aria-hidden', 'false');
@@ -1046,8 +1069,13 @@
   }
   async function refreshChat(silent = false) {
     const box = $('#chatBody'); if (!box) return;
-    try { const data = await request(`/api/chat/messages?visitor_key=${encodeURIComponent(state.visitorKey)}`); box.innerHTML = (data.messages || []).map(m => `<div class="chat-msg ${escapeHTML(m.sender_type)}"><small>${escapeHTML(m.sender_type === 'visitor' ? 'Bạn' : (m.sender_name || 'Tâm An'))}</small>${escapeHTML(m.body)}</div>`).join('') || `<div class="muted">${escapeHTML(state.site.ai_greeting || 'Tâm An xin chào! Bạn cần tư vấn xe nào ạ?')}</div>`; box.scrollTop = box.scrollHeight; }
-    catch (error) { if (!silent) notify(error.message); }
+    const wasNearLatest = box.scrollHeight - box.scrollTop - box.clientHeight < 70;
+    try {
+      const data = await request(`/api/chat/messages?visitor_key=${encodeURIComponent(state.visitorKey)}`);
+      box.innerHTML = (data.messages || []).map(m => `<div class="chat-msg ${escapeHTML(m.sender_type)}"><small>${escapeHTML(m.sender_type === 'visitor' ? 'Bạn' : (m.sender_name || 'Tâm An'))}</small>${escapeHTML(m.body)}</div>`).join('') || `<div class="muted">${escapeHTML(state.site.ai_greeting || 'Tâm An xin chào! Bạn cần tư vấn xe nào ạ?')}</div>`;
+      if (!silent || wasNearLatest) box.scrollTop = box.scrollHeight;
+      box.__syncScrollButton?.();
+    } catch (error) { if (!silent) notify(error.message); }
   }
 
   // ----- ADMIN -----
@@ -1711,18 +1739,123 @@
   };
 
   adminChats = async function(main) {
-    const users=state.admin.role==='admin'?(await request('/api/admin/users')).users:[];
-    main.innerHTML=`<div class="admin-toolbar admin-toolbar-pro"><div><span class="admin-kicker">Hộp thư</span><h1 class="admin-title">Chat trực tuyến</h1><p class="admin-sub">Cuộn riêng vùng tin nhắn như Messenger. Chat đã xong chỉ xem lại.</p></div><button id="chatSound" class="small-btn">Bật chuông chat</button></div><div class="admin-filter-row admin-filter-pro"><div class="admin-filter-title"><span>⌁</span><div><b>Lọc hội thoại</b><small>Danh sách tự cập nhật mỗi 8 giây</small></div></div><label class="filter-control"><span>Trạng thái</span><select id="chatStatus"><option value="">Tất cả</option><option value="open">Đang mở</option><option value="done">Đã xong</option></select></label>${state.admin.role==='admin'?`<label class="filter-control"><span>Nhân viên</span><select id="chatAssigned"><option value="">Tất cả nhân viên</option>${users.filter(u=>u.role==='employee').map(u=>`<option value="${u.id}">${escapeHTML(u.full_name)}</option>`).join('')}</select></label>`:''}<label class="filter-control"><span>Từ ngày</span><input id="chatFrom" type="date"></label><label class="filter-control"><span>Đến ngày</span><input id="chatTo" type="date"></label></div><div class="admin-chat"><div id="conversationList" class="chat-list-admin"></div><div id="conversationThread" class="chat-admin-thread"><div class="admin-empty">Chọn hội thoại để xem.</div></div></div>`;
-    let selected=null,soundOn=false;$('#chatSound').onclick=()=>{soundOn=true;notify('Đã bật chuông chat cho tab này.');};
-    const beep=()=>{if(!soundOn)return;try{const c=new AudioContext(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);g.gain.value=.08;o.frequency.value=720;o.start();o.stop(c.currentTime+.12);}catch{}};
-    async function openThread(id){selected=id;const data=await request(`/api/admin/conversations/${id}`);const conv=data.conversation;const done=conv.status==='done';$('#conversationThread').innerHTML=`<div class="chat-body admin-message-scroll">${data.messages.map(m=>`<div class="chat-msg ${escapeHTML(m.sender_type)}"><small>${escapeHTML(m.sender_type==='visitor'?'Khách':(m.sender_name||'Tâm An'))}</small>${escapeHTML(m.body)}</div>`).join('')}</div><div class="chat-thread-actions"><div class="form-two">${done?`<span class="done-badge">✓ Đã xong</span>`:`<select id="conversationState"><option value="open" selected>Đang mở</option><option value="done">✓ Đã xong</option></select>`}${state.admin.role==='admin'?`<select id="conversationAssignee" ${done?'disabled':''}><option value="">Chưa gán</option>${users.filter(u=>u.role==='employee').map(u=>`<option value="${u.id}" ${conv.assigned_to===u.id?'selected':''}>${escapeHTML(u.full_name)}</option>`).join('')}</select>`:`<input value="${escapeHTML(conv.assigned_name||state.admin.name)}" disabled>`}</div>${done?`<div class="thread-read-only">Hội thoại đã hoàn thành — chỉ xem lại.</div>`:`<form id="replyForm" class="chat-form"><input name="body" placeholder="Trả lời với tên ${escapeHTML(state.admin.name)}…"><button>Gửi</button></form>`}${state.admin.role==='admin'?`<button id="deleteConversation" class="small-btn danger">Xoá hội thoại</button>`:''}</div>`;const body=$('.chat-body',$('#conversationThread'));if(body)body.scrollTop=body.scrollHeight;
-      $('#conversationState')?.addEventListener('change',async()=>{const status=$('#conversationState').value;if(status==='done'&&!confirm('Xác nhận hoàn tất hội thoại? Sau đó chỉ xem lại, không thể nhắn thêm.')){ $('#conversationState').value='open'; return;}try{const payload={status};if(state.admin.role==='admin')payload.assigned_to=$('#conversationAssignee')?.value||null;await request(`/api/admin/conversations/${id}`,{method:'PUT',body:payload});notify(status==='done'?'Đã hoàn tất hội thoại.':'Đã cập nhật.');refresh(true);openThread(id);}catch(error){notify(error.message);}});
-      $('#conversationAssignee')?.addEventListener('change',async()=>{try{await request(`/api/admin/conversations/${id}`,{method:'PUT',body:{status:'open',assigned_to:$('#conversationAssignee').value||null}});notify('Đã gán nhân viên.');}catch(error){notify(error.message);}});
-      $('#replyForm')?.addEventListener('submit',async e=>{e.preventDefault();const input=$('input',e.target),body=input.value.trim();if(!body)return;try{await request(`/api/admin/conversations/${id}/messages`,{method:'POST',body:{body}});input.value='';openThread(id);refresh(true);}catch(error){notify(error.message);}});
-      $('#deleteConversation')?.addEventListener('click',async()=>{if(!confirm('Xoá toàn bộ hội thoại?'))return;try{await request(`/api/admin/conversations/${id}`,{method:'DELETE'});selected=null;$('#conversationThread').innerHTML='<div class="admin-empty">Đã xoá hội thoại.</div>';refresh(true);}catch(error){notify(error.message);}});
+    const users = state.admin.role === 'admin' ? (await request('/api/admin/users')).users : [];
+    main.innerHTML = `<div class="admin-toolbar admin-toolbar-pro"><div><span class="admin-kicker">Hộp thư</span><h1 class="admin-title">Chat trực tuyến</h1><p class="admin-sub">Tin nhắn cuộn riêng như Messenger, không kéo cả trang. Chat đã xong chỉ xem lại.</p></div><button id="chatSound" class="small-btn">Bật chuông chat</button></div><div class="admin-filter-row admin-filter-pro"><div class="admin-filter-title"><span>⌁</span><div><b>Lọc hội thoại</b><small>Danh sách tự cập nhật mỗi 8 giây</small></div></div><label class="filter-control"><span>Trạng thái</span><select id="chatStatus"><option value="">Tất cả</option><option value="open">Đang mở</option><option value="done">Đã xong</option></select></label>${state.admin.role === 'admin' ? `<label class="filter-control"><span>Nhân viên</span><select id="chatAssigned"><option value="">Tất cả nhân viên</option>${users.filter(u => u.role === 'employee').map(u => `<option value="${u.id}">${escapeHTML(u.full_name)}</option>`).join('')}</select></label>` : ''}<label class="filter-control"><span>Từ ngày</span><input id="chatFrom" type="date"></label><label class="filter-control"><span>Đến ngày</span><input id="chatTo" type="date"></label></div><div class="admin-chat"><div id="conversationList" class="chat-list-admin"></div><div id="conversationThread" class="chat-admin-thread"><div class="admin-empty">Chọn hội thoại để xem.</div></div></div>`;
+
+    let selected = null;
+    let soundOn = false;
+    $('#chatSound').onclick = () => { soundOn = true; notify('Đã bật chuông chat cho tab này.'); };
+    const beep = () => {
+      if (!soundOn) return;
+      try {
+        const context = new AudioContext(); const osc = context.createOscillator(); const gain = context.createGain();
+        osc.connect(gain); gain.connect(context.destination); gain.gain.value = .08; osc.frequency.value = 720; osc.start(); osc.stop(context.currentTime + .12);
+      } catch {}
+    };
+    const messageMarkup = messages => (messages || []).map(m => `<div class="chat-msg ${escapeHTML(m.sender_type)}"><small>${escapeHTML(m.sender_type === 'visitor' ? 'Khách' : (m.sender_name || 'Tâm An'))}</small>${escapeHTML(m.body)}</div>`).join('') || '<div class="admin-empty">Chưa có tin nhắn.</div>';
+    const messageSignature = messages => (messages || []).map(m => `${m.id || ''}|${m.created_at || ''}|${m.sender_type || ''}|${m.body || ''}`).join('\u0001');
+    const bindThreadScroller = (body, button) => {
+      if (!body || !button) return;
+      const sync = () => {
+        const awayFromLatest = body.scrollHeight - body.scrollTop - body.clientHeight > 70;
+        button.classList.toggle('show', awayFromLatest);
+      };
+      body.__syncScrollButton = sync;
+      body.addEventListener('scroll', sync, { passive:true });
+      button.addEventListener('click', () => { body.scrollTo({ top:body.scrollHeight, behavior:'smooth' }); sync(); });
+      sync();
+    };
+
+    async function openThread(id) {
+      selected = id;
+      const data = await request(`/api/admin/conversations/${id}`);
+      const conv = data.conversation;
+      const done = conv.status === 'done';
+      const signature = messageSignature(data.messages);
+      $('#conversationThread').innerHTML = `<div class="admin-message-area"><div class="chat-body admin-message-scroll" data-signature="${escapeHTML(signature)}">${messageMarkup(data.messages)}</div><button type="button" id="adminScrollBottom" class="chat-scroll-bottom" aria-label="Cuộn xuống tin nhắn mới nhất">↓ <span>Tin mới nhất</span></button></div><div class="chat-thread-actions"><div class="form-two">${done ? `<span class="done-badge">✓ Đã xong</span>` : `<select id="conversationState"><option value="open" selected>Đang mở</option><option value="done">✓ Đã xong</option></select>`}${state.admin.role === 'admin' ? `<select id="conversationAssignee" ${done ? 'disabled' : ''}><option value="">Chưa gán</option>${users.filter(u => u.role === 'employee').map(u => `<option value="${u.id}" ${conv.assigned_to === u.id ? 'selected' : ''}>${escapeHTML(u.full_name)}</option>`).join('')}</select>` : `<input value="${escapeHTML(conv.assigned_name || state.admin.name)}" disabled>`}</div>${done ? `<div class="thread-read-only">Hội thoại đã hoàn thành — chỉ xem lại.</div>` : `<form id="replyForm" class="chat-form"><input name="body" placeholder="Trả lời với tên ${escapeHTML(state.admin.name)}…"><button>Gửi</button></form>`}${state.admin.role === 'admin' ? `<button id="deleteConversation" class="small-btn danger">Xoá hội thoại</button>` : ''}</div>`;
+      const body = $('.admin-message-scroll', $('#conversationThread'));
+      const down = $('#adminScrollBottom', $('#conversationThread'));
+      bindThreadScroller(body, down);
+      if (body) { body.scrollTop = body.scrollHeight; body.__syncScrollButton?.(); }
+
+      $('#conversationState')?.addEventListener('change', async () => {
+        const status = $('#conversationState').value;
+        if (status === 'done' && !confirm('Xác nhận hoàn tất hội thoại? Sau đó chỉ xem lại, không thể nhắn thêm.')) { $('#conversationState').value = 'open'; return; }
+        try {
+          const payload = { status };
+          if (state.admin.role === 'admin') payload.assigned_to = $('#conversationAssignee')?.value || null;
+          await request(`/api/admin/conversations/${id}`, { method:'PUT', body:payload });
+          notify(status === 'done' ? 'Đã hoàn tất hội thoại.' : 'Đã cập nhật.');
+          await refresh(true); await openThread(id);
+        } catch (error) { notify(error.message); }
+      });
+      $('#conversationAssignee')?.addEventListener('change', async () => {
+        try {
+          await request(`/api/admin/conversations/${id}`, { method:'PUT', body:{ status:'open', assigned_to:$('#conversationAssignee').value || null } });
+          notify('Đã gán nhân viên.');
+        } catch (error) { notify(error.message); }
+      });
+      $('#replyForm')?.addEventListener('submit', async event => {
+        event.preventDefault();
+        const input = $('input', event.target); const bodyText = input.value.trim();
+        if (!bodyText) return;
+        try {
+          await request(`/api/admin/conversations/${id}/messages`, { method:'POST', body:{ body:bodyText } });
+          input.value = ''; await openThread(id); await refresh(true);
+        } catch (error) { notify(error.message); }
+      });
+      $('#deleteConversation')?.addEventListener('click', async () => {
+        if (!confirm('Xoá toàn bộ hội thoại?')) return;
+        try {
+          await request(`/api/admin/conversations/${id}`, { method:'DELETE' });
+          selected = null; $('#conversationThread').innerHTML = '<div class="admin-empty">Đã xoá hội thoại.</div>'; await refresh(true);
+        } catch (error) { notify(error.message); }
+      });
     }
-    async function refresh(silent=false){const qs=new URLSearchParams();if($('#chatStatus').value)qs.set('status',$('#chatStatus').value);if($('#chatFrom').value)qs.set('from',$('#chatFrom').value);if($('#chatTo').value)qs.set('to',$('#chatTo').value);if($('#chatAssigned')?.value)qs.set('assigned_to',$('#chatAssigned').value);const data=await request(`/api/admin/conversations?${qs}`);const old=$('#conversationList').dataset.ids||'',now=data.conversations.map(c=>`${c.id}:${c.updated_at}`).join(',');if(old&&old!==now&&!silent)beep();$('#conversationList').dataset.ids=now;$('#conversationList').innerHTML=data.conversations.map(c=>`<div class="chat-list-item ${selected===c.id?'active':''}" data-id="${c.id}"><b>${escapeHTML(c.visitor_name||'Khách')} ${c.status==='done'?'✓':''}</b><span>${escapeHTML(c.assigned_name||'Chưa gán')} • ${escapeHTML(c.last_message||'')}</span></div>`).join('')||'<div class="admin-empty">Chưa có hội thoại.</div>';$$('.chat-list-item').forEach(item=>item.onclick=()=>openThread(Number(item.dataset.id)));}
-    ['chatStatus','chatAssigned','chatFrom','chatTo'].forEach(id=>$(`#${id}`)&&($(`#${id}`).onchange=()=>refresh()));await refresh();clearInterval(window.__tamAnAdminChatTimer);window.__tamAnAdminChatTimer=setInterval(()=>refresh(true).catch(()=>{}),9000);
+
+    async function refreshOpenedThread() {
+      if (!selected) return;
+      const thread = $('#conversationThread');
+      const body = $('.admin-message-scroll', thread);
+      if (!body) return;
+      const wasNearLatest = body.scrollHeight - body.scrollTop - body.clientHeight < 70;
+      const currentId = selected;
+      try {
+        const data = await request(`/api/admin/conversations/${currentId}`);
+        if (selected !== currentId) return;
+        const signature = messageSignature(data.messages);
+        if (body.dataset.signature === signature) { body.__syncScrollButton?.(); return; }
+        body.innerHTML = messageMarkup(data.messages);
+        body.dataset.signature = signature;
+        if (wasNearLatest) body.scrollTop = body.scrollHeight;
+        body.__syncScrollButton?.();
+      } catch {}
+    }
+
+    async function refresh(silent = false) {
+      const qs = new URLSearchParams();
+      if ($('#chatStatus').value) qs.set('status', $('#chatStatus').value);
+      if ($('#chatFrom').value) qs.set('from', $('#chatFrom').value);
+      if ($('#chatTo').value) qs.set('to', $('#chatTo').value);
+      if ($('#chatAssigned')?.value) qs.set('assigned_to', $('#chatAssigned').value);
+      const data = await request(`/api/admin/conversations?${qs}`);
+      const old = $('#conversationList').dataset.ids || '';
+      const now = data.conversations.map(c => `${c.id}:${c.updated_at}`).join(',');
+      if (old && old !== now && !silent) beep();
+      $('#conversationList').dataset.ids = now;
+      $('#conversationList').innerHTML = data.conversations.map(c => `<div class="chat-list-item ${selected === c.id ? 'active' : ''}" data-id="${c.id}"><b>${escapeHTML(c.visitor_name || 'Khách')} ${c.status === 'done' ? '✓' : ''}</b><span>${escapeHTML(c.assigned_name || 'Chưa gán')} • ${escapeHTML(c.last_message || '')}</span></div>`).join('') || '<div class="admin-empty">Chưa có hội thoại.</div>';
+      $$('.chat-list-item').forEach(item => item.onclick = () => openThread(Number(item.dataset.id)));
+      if (selected && !data.conversations.some(c => c.id === selected)) {
+        selected = null; $('#conversationThread').innerHTML = '<div class="admin-empty">Hội thoại không còn trong danh sách lọc.</div>';
+      } else {
+        refreshOpenedThread();
+      }
+    }
+
+    ['chatStatus','chatAssigned','chatFrom','chatTo'].forEach(id => $(`#${id}`) && ($(`#${id}`).onchange = () => refresh()));
+    await refresh();
+    clearInterval(window.__tamAnAdminChatTimer);
+    window.__tamAnAdminChatTimer = setInterval(() => refresh(true).catch(() => {}), 8000);
   };
 
   async function boot() {
