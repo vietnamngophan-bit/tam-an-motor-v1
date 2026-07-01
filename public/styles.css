@@ -2808,3 +2808,30 @@ body.v11-menu-open { overflow: hidden !important; }
   -webkit-user-select:none;
 }
 #app:not(.admin-wrap) .collection-hero{user-select:none;-webkit-user-select:none}
+
+/* V18 – block ordinary Save image / long-press actions on the public site.
+   Clicks keep working because event delegation receives the parent button/card.
+   Admin is excluded so image uploading and editing remain normal. */
+#app:not(.admin-wrap) img,
+#app:not(.admin-wrap) picture,
+#app:not(.admin-wrap) picture img,
+#app:not(.admin-wrap) .gallery-main img,
+#app:not(.admin-wrap) .accessory-gallery-main img,
+#app:not(.admin-wrap) .thumb img,
+#app:not(.admin-wrap) .vehicle-spec-sheet img{
+  pointer-events:none !important;
+  -webkit-user-drag:none !important;
+  user-drag:none !important;
+  -webkit-touch-callout:none !important;
+  -webkit-user-select:none !important;
+  user-select:none !important;
+}
+#app:not(.admin-wrap) .product-card,
+#app:not(.admin-wrap) .accessory-card-pro,
+#app:not(.admin-wrap) .gallery-main,
+#app:not(.admin-wrap) .accessory-gallery-main,
+#app:not(.admin-wrap) .thumb,
+#app:not(.admin-wrap) .vehicle-spec-sheet,
+#app:not(.admin-wrap) .collection-hero{
+  -webkit-touch-callout:none;
+}
