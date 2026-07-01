@@ -2835,3 +2835,52 @@ body.v11-menu-open { overflow: hidden !important; }
 #app:not(.admin-wrap) .collection-hero{
   -webkit-touch-callout:none;
 }
+
+/* ==================================================================
+   V19 — Popup thông số kỹ thuật: cuộn độc lập, đọc hết nội dung
+   Lỗi trước đây: V16 đặt overflow:hidden cho thẻ modal riêng, ghi đè
+   overflow:auto của .modal-card. Khối dưới đây khôi phục vùng cuộn.
+   ================================================================== */
+.vehicle-spec-modal{
+  align-items:center;
+  justify-content:center;
+  overscroll-behavior:contain;
+}
+.vehicle-spec-modal-card{
+  max-height:calc(100dvh - 32px) !important;
+  overflow-x:hidden !important;
+  overflow-y:auto !important;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
+  scrollbar-gutter:stable;
+}
+.vehicle-spec-modal-card .vehicle-spec-sheet{
+  min-height:100%;
+  padding-bottom:18px;
+}
+.vehicle-spec-modal-card::-webkit-scrollbar{width:10px;}
+.vehicle-spec-modal-card::-webkit-scrollbar-track{background:rgba(0,0,0,.05);}
+.vehicle-spec-modal-card::-webkit-scrollbar-thumb{background:#c7ced1;border:3px solid #edf0f2;border-radius:99px;}
+.vehicle-spec-modal-card::-webkit-scrollbar-thumb:hover{background:#aeb6ba;}
+
+@media(max-width:720px){
+  .vehicle-spec-modal{
+    align-items:flex-start;
+    padding:0;
+  }
+  .vehicle-spec-modal-card{
+    width:100% !important;
+    min-height:0 !important;
+    height:100dvh;
+    max-height:100dvh !important;
+    border-radius:0 !important;
+    padding-top:0;
+  }
+  .vehicle-spec-modal-card>.modal-close{
+    position:fixed;
+    top:13px;
+    right:13px;
+    z-index:150;
+  }
+}
