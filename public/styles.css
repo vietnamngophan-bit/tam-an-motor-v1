@@ -2884,3 +2884,132 @@ body.v11-menu-open { overflow: hidden !important; }
     z-index:150;
   }
 }
+
+/* ==================================================================
+   V20 — product grid, stable card actions and nested product readers
+   ================================================================== */
+/* Desktop inventory is a normal responsive grid. Extra vehicles flow to the
+   next row instead of creating a long horizontal strip. */
+#inventory .product-row,
+#productRow.product-row,
+.product-row:not(.collection-product-row){
+  display:grid!important;
+  grid-auto-flow:row!important;
+  grid-auto-columns:initial!important;
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  gap:18px!important;
+  overflow:visible!important;
+  scroll-snap-type:none!important;
+  padding:2px 0 0!important;
+}
+#inventory .slider-controls{display:none!important;}
+.product-row .product-card,
+#productRow .product-card{
+  min-width:0!important;
+  width:auto!important;
+  height:100%;
+}
+.product-card .product-body{
+  display:flex!important;
+  flex:1 1 auto!important;
+  min-height:0;
+  flex-direction:column!important;
+}
+.product-card .paint-preview-row{
+  min-height:88px!important;
+  align-content:start!important;
+}
+.product-card .product-cta{
+  margin-top:auto!important;
+  min-height:48px;
+  align-items:stretch;
+}
+.product-card .product-cta .btn{
+  min-height:48px!important;
+  white-space:nowrap;
+}
+
+/* Reader lives inside the active vehicle popup: the close button only returns
+   to that vehicle; it never dismisses the parent product modal. */
+.product-modal-card{position:relative!important;}
+.product-inline-reader{
+  position:absolute;
+  inset:0;
+  z-index:80;
+  display:flex;
+  min-width:0;
+  min-height:0;
+  background:#eef0f2;
+  isolation:isolate;
+}
+.product-inline-reader-scroll{
+  inline-size:100%;
+  block-size:100%;
+  overflow:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
+  padding:0;
+}
+.product-inline-reader-close{
+  position:absolute;
+  z-index:90;
+  top:14px;
+  right:16px;
+  inline-size:46px;
+  block-size:46px;
+  display:grid;
+  place-items:center;
+  border:0;
+  border-radius:999px;
+  background:#fff;
+  color:#bd1720;
+  box-shadow:0 8px 22px rgba(22,10,11,.22);
+  font-size:29px;
+  font-weight:900;
+  line-height:1;
+  touch-action:manipulation;
+}
+.product-inline-reader-description{background:#fff;}
+.product-inline-reader-description .product-inline-reader-scroll{padding:72px clamp(22px,4vw,54px) 40px;}
+.description-reader-article{max-width:820px;margin:0 auto;}
+.description-reader-article h2{font-family:var(--heading);font-size:clamp(32px,4vw,52px);line-height:1;margin:10px 0 20px;}
+.product-inline-reader .vehicle-spec-sheet{min-height:100%;}
+
+/* Full accessory catalog is opened by “Xem phụ kiện”. */
+.accessory-catalog-modal{padding:22px;align-items:flex-start;overflow:auto;}
+.accessory-catalog-card{width:min(1180px,100%);max-height:none!important;overflow:visible!important;padding:30px;position:relative;}
+.accessory-catalog-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding:6px 56px 24px 0;}
+.accessory-catalog-head h2{font-family:var(--heading);font-size:clamp(36px,5vw,60px);line-height:.98;margin:5px 0 8px;}
+.accessory-catalog-head>b{display:inline-flex;padding:8px 11px;border-radius:999px;background:#fff0f1;color:var(--red);font-size:12px;white-space:nowrap;}
+.accessory-catalog-grid{padding-top:2px;}
+
+@media (max-width:1160px){
+  #inventory .product-row,
+  #productRow.product-row,
+  .product-row:not(.collection-product-row){grid-template-columns:repeat(3,minmax(0,1fr))!important;}
+}
+@media (max-width:860px){
+  #inventory .product-row,
+  #productRow.product-row,
+  .product-row:not(.collection-product-row){grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:13px!important;}
+  .product-card .paint-preview-row{min-height:88px!important;}
+}
+@media (max-width:640px){
+  #inventory .product-row,
+  #productRow.product-row,
+  .product-row:not(.collection-product-row){grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important;}
+  .product-card .product-body{padding:12px!important;}
+  .product-card .product-cta{gap:7px!important;min-height:42px;}
+  .product-card .product-cta .btn{min-height:42px!important;padding:8px 7px!important;font-size:11px!important;}
+  .product-card .paint-preview-row{min-height:86px!important;}
+  .product-inline-reader{position:fixed;inset:0;z-index:7000;}
+  .product-inline-reader-close{top:12px;right:12px;inline-size:44px;block-size:44px;}
+  .product-inline-reader-description .product-inline-reader-scroll{padding:74px 17px 32px;}
+  .description-reader-article h2{font-size:34px;}
+  .accessory-catalog-modal{padding:0;}
+  .accessory-catalog-card{width:100%;min-height:100dvh;border-radius:0;padding:21px 15px 28px;}
+  .accessory-catalog-head{align-items:flex-start;padding:6px 52px 18px 0;}
+  .accessory-catalog-head h2{font-size:38px;}
+  .accessory-catalog-head>b{display:none;}
+}
