@@ -737,20 +737,31 @@
   }
 
   function bindAccessoryEvents() {
-    // Delegation keeps both buttons working after every homepage re-render.
+    // Delegation at CAPTURE phase: older menu/overlay code cannot swallow the click
+    // before the accessory action sees it. This is intentionally global because
+    // the accessory cards are re-rendered during filtering and page changes.
     if (!state.accessoryActionsBound) {
       state.accessoryActionsBound = true;
       document.addEventListener('click', event => {
-        const button = event.target.closest('.open-accessory, .accessory-contact');
-        if (!button) return;
-        const id = Number(button.dataset.accessoryId);
+        const target = event.target instanceof Element ? event.target.closest('.open-accessory, .accessory-contact') : null;
+        if (!target || target.dataset.accessoryHandled === '1') return;
+        const id = Number(target.dataset.accessoryId);
         if (!Number.isFinite(id) || id <= 0) return;
+        target.dataset.accessoryHandled = '1';
+        window.setTimeout(() => { if (target.isConnected) delete target.dataset.accessoryHandled; }, 0);
         event.preventDefault();
-        event.stopPropagation();
-        openAccessory(id, button.classList.contains('accessory-contact'));
-      });
+        event.stopImmediatePropagation();
+        openAccessory(id, target.classList.contains('accessory-contact'));
+      }, true);
     }
-    $('.accessory-scroll-btn')?.addEventListener('click', () => $('#accessories')?.scrollIntoView({ behavior:'smooth', block:'start' }));
+    $$('.accessory-scroll-btn').forEach(button => {
+      if (button.dataset.accessoryScrollBound === '1') return;
+      button.dataset.accessoryScrollBound = '1';
+      button.addEventListener('click', event => {
+        event.preventDefault();
+        $('#accessories')?.scrollIntoView({ behavior:'smooth', block:'start' });
+      });
+    });
   }
 
   function openAccessory(accessoryId, focusLead = false) {
@@ -1181,7 +1192,11 @@
       const modal = document.createElement('div');
       modal.className = 'modal';
       modal.innerHTML = `<div class="modal-card product-modal-card"><button class="modal-close">×</button><div class="product-modal"><div class="gallery"><div class="gallery-main"><img id="galleryImage" alt="${escapeHTML(product.name)}"></div><div id="thumbs" class="thumb-row"></div><div id="versionChoices" class="version-choices"></div><div id="colorChoices" class="gallery-colors"></div></div><div class="product-content"><span class="status-badge" style="position:static;display:inline-block">${statusName(product.status)}</span><div class="product-meta" style="margin-top:12px">${escapeHTML(product.brand || 'TÂM AN')} • ${escapeHTML(categoryLabel(product.category))}</div><div class="product-title-row"><h2>${escapeHTML(product.name)}</h2><button type="button" id="copyProductShare" class="share-product-btn" title="Sao chép link có ảnh xem trước">↗ Chia sẻ</button></div><div id="selectedVersionInfo" class="selected-version-info"></div><div id="selectedColorStock" class="selected-color-stock"></div><div id="dynamicPrice" class="price-line"></div><section class="product-description"><div class="product-description-head"><span>THÔNG TIN XE</span><h3>Thông tin tổng quan</h3></div><div class="product-description-body">${descriptionHTML(product.description)}</div><button type="button" id="openDescriptionReader" class="description-reader-btn">Đọc toàn bộ mô tả <span>→</span></button></section>${technicalSpecSections(product).length ? `<button type="button" id="openVehicleSpecs" class="vehicle-tech-trigger"><span><small>THÔNG SỐ KỸ THUẬT</small><b>Xem thông số chi tiết</b></span><i>→</i></button>` : ''}<section class="basic-spec-block"><div class="basic-spec-heading"><span>THÔNG SỐ CƠ BẢN</span><b>Thông tin nhanh</b></div><div class="detail-grid"><div class="detail-item"><small>Năm sản xuất</small><b>${product.year || '—'}</b></div><div class="detail-item"><small>Số km</small><b>${product.mileage === null || product.mileage === undefined ? '—' : `${Number(product.mileage).toLocaleString('vi-VN')} km`}</b></div><div class="detail-item"><small>Động cơ</small><b>${escapeHTML(product.engine || '—')}</b></div><div class="detail-item"><small>Giấy tờ</small><b>${escapeHTML(product.documents || '—')}</b></div></div></section>${product.installment_from || product.bad_debt_from ? `<div class="finance-box"><b>Hỗ trợ trả góp</b><div>${product.installment_from ? `Trả trước tham khảo từ ${money(product.installment_from)}. ` : ''}${product.bad_debt_from ? `Thông tin hỗ trợ hồ sơ từ ${money(product.bad_debt_from)}.` : ''}</div><small>Thông tin tham khảo, Tâm An kiểm tra hồ sơ trước khi xác nhận.</small></div>` : ''}<div class="consult-box"><h3>Để lại thông tin tư vấn</h3><p class="muted">Nhân viên Tâm An sẽ liên hệ theo số điện thoại của bạn.</p><form id="detailLead" class="form-grid"><input type="hidden" name="product_id" value="${product.id}"><div class="field"><label>Họ và tên *</label><input name="name" required></div><div class="field"><label>Số điện thoại *</label><input name="phone" required inputmode="tel"></div>${paymentIntentFields(product.installment_from)}<div class="field full"><label>Ghi chú</label><textarea name="note" placeholder="Muốn xem xe, giữ xe hoặc hỏi trả góp…"></textarea></div>${locationConsentField()}${consultationConsentField()}<div class="field full"><button class="btn btn-primary">Gửi yêu cầu tư vấn</button></div></form></div></div></div>${data.related?.length ? `<div class="related"><div class="section-kicker">Gợi ý thêm</div><h2 style="font-size:34px">Xe tương tự</h2><div class="product-row">${data.related.map(card).join('')}</div></div>` : ''}</div>`;
-      document.body.appendChild(modal); document.body.classList.add('modal-open');
+      document.body.appendChild(modal);
+      // Keep the full product object on the modal so the detailed-spec action
+      // still works even when a legacy click listener is present.
+      modal.__tamAnProduct = product;
+      document.body.classList.add('modal-open');
       const close = bindOverlayDismissal(modal);
       const hasVersions = Array.isArray(product.versions) && product.versions.length;
       let versionIndex = hasVersions ? 0 : -1;
@@ -3069,6 +3084,83 @@
     }
   };
 
+  /* ==================================================================
+     V17 — reliable public actions + image deterrence
+     - Accessory buttons are handled in capture phase, so a previous patch's
+       listener / overlay cannot swallow touch or click events.
+     - Image protection is browser-level deterrence only; screenshots and
+       browser developer tools can never be completely prevented on a public web.
+     ================================================================== */
+  function initPublicMediaProtection() {
+    if (window.__tamAnPublicMediaProtectionV17) return;
+    window.__tamAnPublicMediaProtectionV17 = true;
+    const protectedSelector = [
+      '#app:not(.admin-wrap) .product-card img',
+      '#app:not(.admin-wrap) .accessory-card-pro img',
+      '#app:not(.admin-wrap) .gallery-main',
+      '#app:not(.admin-wrap) .accessory-gallery-main',
+      '#app:not(.admin-wrap) .thumb img',
+      '#app:not(.admin-wrap) .vehicle-spec-sheet img',
+      '#app:not(.admin-wrap) .collection-hero'
+    ].join(',');
+    const isProtected = node => node instanceof Element && Boolean(node.closest(protectedSelector));
+    document.addEventListener('contextmenu', event => {
+      if (!isProtected(event.target)) return;
+      event.preventDefault();
+      notify('Hình ảnh thuộc bản quyền Tâm An.');
+    }, true);
+    document.addEventListener('dragstart', event => {
+      if (!isProtected(event.target)) return;
+      event.preventDefault();
+    }, true);
+    document.addEventListener('selectstart', event => {
+      if (!isProtected(event.target)) return;
+      event.preventDefault();
+    }, true);
+  }
+
+  function initV17PublicActionFallback() {
+    if (window.__tamAnPublicActionFallbackV17) return;
+    window.__tamAnPublicActionFallbackV17 = true;
+    document.addEventListener('click', event => {
+      const element = event.target instanceof Element ? event.target : null;
+      if (!element) return;
+
+      const accessoryAction = element.closest('.open-accessory, .accessory-contact');
+      if (accessoryAction && accessoryAction.closest('#app:not(.admin-wrap)')) {
+        const id = Number(accessoryAction.dataset.accessoryId);
+        if (Number.isFinite(id) && id > 0) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          openAccessory(id, accessoryAction.classList.contains('accessory-contact'));
+          return;
+        }
+      }
+
+      const specTrigger = element.closest('#openVehicleSpecs');
+      if (specTrigger) {
+        const modal = specTrigger.closest('.modal');
+        const product = modal?.__tamAnProduct;
+        if (product) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          openVehicleSpecs(product);
+          return;
+        }
+      }
+
+      const accessoryLink = element.closest('.accessory-scroll-btn, a[href="#accessories"], a[href="/#accessories"]');
+      if (accessoryLink && $('#accessories')) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        $('#accessories')?.scrollIntoView({ behavior:'smooth', block:'start' });
+      }
+    }, true);
+  }
+
+  initV17PublicActionFallback();
+  initPublicMediaProtection();
+
   bindHomeEvents = function() {
     $('.public-inventory-explorer')?.remove();
     const inventory = $('#inventory');
@@ -3161,6 +3253,11 @@
     $$('.footer-links [data-policy]').forEach(link => link.addEventListener('click', event => { event.preventDefault(); openPolicy(link.dataset.policy); }));
     bindFolderDropdown(selectFolder);
     render();
+    // The final V11 home binder replaces earlier binders, so re-bind accessory
+    // actions here as well. Without this call the cards render but their buttons
+    // have no listener after a homepage refresh.
+    bindAccessoryEvents();
+    initPublicMediaProtection();
     if (selectedCollection && location.hash === '#inventory') window.setTimeout(() => inventory.scrollIntoView({ behavior:'auto', block:'start' }), 0);
     initChat();
   };
