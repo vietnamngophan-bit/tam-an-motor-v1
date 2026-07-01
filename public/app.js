@@ -706,9 +706,44 @@
     return `<article class="vehicle-spec-sheet"><header class="vehicle-spec-sheet-hero"><div><span>THÔNG SỐ KỸ THUẬT</span><h2>${escapeHTML(product.name || 'Mẫu xe')}</h2><p>${escapeHTML(product.brand || 'TÂM AN')}</p></div><img src="${escapeHTML(image)}" alt="${escapeHTML(product.name || 'Mẫu xe')}"></header>${sections.map(section => `<section class="vehicle-spec-section"><h3>${escapeHTML(section.title)}</h3><dl>${section.items.map(item => `<div><dt>${escapeHTML(item.label)}</dt><dd>${escapeHTML(item.value)}</dd></div>`).join('')}</dl></section>`).join('')}</article>`;
   }
 
+  // Opens the extended technical sheet *inside* the current vehicle dialog when one is
+  // already open. On a phone, closing the sheet therefore returns to the same vehicle
+  // instead of dismissing the product dialog and sending the visitor back to the grid.
+  function openProductInlineReader(product, kind, content, title) {
+    const owner = [...document.querySelectorAll('.modal')].reverse().find(item => item.__tamAnProduct && item.__tamAnProduct.slug === product?.slug);
+    if (!owner) return null;
+    const card = $('.modal-card', owner);
+    if (!card) return null;
+    $('.product-inline-reader', card)?.remove();
+    const reader = document.createElement('section');
+    reader.className = `product-inline-reader product-inline-reader-${kind}`;
+    reader.setAttribute('role', 'dialog');
+    reader.setAttribute('aria-modal', 'true');
+    reader.setAttribute('aria-label', title);
+    reader.innerHTML = `<button type="button" class="product-inline-reader-close" aria-label="Quay lại thông tin xe">×</button><div class="product-inline-reader-scroll">${content}</div>`;
+    const close = event => {
+      event?.preventDefault();
+      event?.stopPropagation();
+      event?.stopImmediatePropagation?.();
+      reader.remove();
+      // Keep the product modal open; focus returns to the originating action.
+      const trigger = kind === 'specs' ? $('#openVehicleSpecs', owner) : $('#openDescriptionReader', owner);
+      trigger?.focus?.({ preventScroll:true });
+    };
+    reader.addEventListener('pointerdown', event => event.stopPropagation());
+    reader.addEventListener('click', event => event.stopPropagation());
+    const closeButton = $('.product-inline-reader-close', reader);
+    closeButton?.addEventListener('pointerup', close, true);
+    closeButton?.addEventListener('click', close, true);
+    card.appendChild(reader);
+    requestAnimationFrame(() => $('.product-inline-reader-scroll', reader)?.scrollTo({ top:0 }));
+    return reader;
+  }
+
   function openVehicleSpecs(product) {
     const content = technicalSpecSheetHTML(product);
     if (!content) { notify('Mẫu xe này chưa có thông số kỹ thuật chi tiết.'); return; }
+    if (openProductInlineReader(product, 'specs', content, 'Thông số kỹ thuật chi tiết')) return;
     const modal = document.createElement('div');
     modal.className = 'modal vehicle-spec-modal';
     modal.innerHTML = `<div class="modal-card vehicle-spec-modal-card"><button class="modal-close">×</button>${content}</div>`;
@@ -736,6 +771,16 @@
     </article>`;
   }
 
+  function openAccessoryCatalog() {
+    const items = (state.accessories || []).filter(item => item.published !== 0);
+    const modal = document.createElement('div');
+    modal.className = 'modal accessory-catalog-modal';
+    modal.innerHTML = `<div class="modal-card accessory-catalog-card"><button type="button" class="modal-close" aria-label="Đóng danh sách phụ kiện">×</button><div class="accessory-catalog-head"><div><span class="section-kicker">Phụ tùng & phụ kiện</span><h2>Khám phá tất cả phụ kiện</h2><p class="muted">Chọn sản phẩm để xem thông số, xe phù hợp và gửi yêu cầu tư vấn.</p></div><b>${items.length} sản phẩm</b></div><div class="accessory-grid accessory-grid-pro accessory-catalog-grid">${items.map(accessoryCard).join('') || '<div class="admin-empty">Hiện chưa có phụ kiện nào.</div>'}</div></div>`;
+    document.body.appendChild(modal);
+    document.body.classList.add('modal-open');
+    bindOverlayDismissal(modal);
+  }
+
   function bindAccessoryEvents() {
     // Delegation at CAPTURE phase: older menu/overlay code cannot swallow the click
     // before the accessory action sees it. This is intentionally global because
@@ -759,7 +804,7 @@
       button.dataset.accessoryScrollBound = '1';
       button.addEventListener('click', event => {
         event.preventDefault();
-        $('#accessories')?.scrollIntoView({ behavior:'smooth', block:'start' });
+        openAccessoryCatalog();
       });
     });
   }
@@ -1228,7 +1273,17 @@
       draw();
       $('#openDescriptionReader', modal)?.addEventListener('click', () => openDescriptionReader(product));
       $('#openVehicleSpecs', modal)?.addEventListener('click', () => openVehicleSpecs(product));
-      $('#copyProductShare', modal)?.addEventListener('click', async () => { const link = `${location.origin}/xe/${encodeURIComponent(product.slug)}`; try { await navigator.clipboard.writeText(link); notify('Đã sao chép link xe. Khi gửi link sẽ hiện ảnh và thông tin xe.'); } catch { window.prompt('Sao chép link xe:', link); } });
+      $('#copyProductShare', modal)?.addEventListener('click', async event => {
+        event.preventDefault();
+        const link = `${location.origin}/xe/${encodeURIComponent(product.slug)}`;
+        const payload = { title: product.name, text: `Xem ${product.name} tại Tâm An`, url: link };
+        if (navigator.share) {
+          try { await navigator.share(payload); notify('Đã mở bảng chia sẻ.'); return; }
+          catch (error) { if (error?.name === 'AbortError') return; }
+        }
+        try { await navigator.clipboard.writeText(link); notify('Đã sao chép link xe.'); }
+        catch { window.prompt('Sao chép link xe:', link); }
+      });
       $('.gallery-main', modal).onclick = () => openLightbox(gallery, $('#galleryImage', modal).src);
       const detailLeadForm = $('#detailLead', modal);
       bindPaymentIntent(detailLeadForm);
@@ -1244,9 +1299,11 @@
   }
 
   function openDescriptionReader(product) {
+    const content = `<article class="description-reader-article"><div class="product-meta">${escapeHTML(product.brand || 'TÂM AN')} • ${escapeHTML(product.name || '')}</div><h2>Mô tả & thông số chi tiết</h2><div class="description-reader-content">${descriptionHTML(product.description)}</div></article>`;
+    if (openProductInlineReader(product, 'description', content, 'Mô tả chi tiết')) return;
     const reader = document.createElement('div');
     reader.className = 'modal description-reader-modal';
-    reader.innerHTML = `<div class="modal-card description-reader-card"><button class="modal-close">×</button><article><div class="product-meta">${escapeHTML(product.brand || 'TÂM AN')} • ${escapeHTML(product.name || '')}</div><h2>Mô tả & thông số chi tiết</h2><div class="description-reader-content">${descriptionHTML(product.description)}</div></article></div>`;
+    reader.innerHTML = `<div class="modal-card description-reader-card"><button class="modal-close">×</button>${content}</div>`;
     document.body.appendChild(reader);
     document.body.classList.add('modal-open');
     bindOverlayDismissal(reader);
@@ -1614,6 +1671,99 @@
     const form = $('#promoForm', modal);
     $('#promoImageFile', modal).onchange = async event => { try { form.image_url.value = await uploadFile(event.target.files[0]); } catch (error) { notify(error.message); } };
     form.onsubmit = async event => { event.preventDefault(); const fd = new FormData(form); const body = Object.fromEntries(fd.entries()); body.active = fd.get('active') === 'on'; try { await request(promotion ? `/api/admin/promotions/${p.id}` : '/api/admin/promotions', { method:promotion ? 'PUT' : 'POST', body }); notify('Đã lưu khuyến mại'); modal.remove(); document.body.classList.remove('modal-open'); loadAdminTab('promotions'); } catch (error) { notify(error.message); } };
+  }
+
+  // ----- ADMIN CONTENT PAGES -----
+  // These tabs are independent editors that all save through /api/admin/site.
+  // Earlier patch files referenced them but did not include the functions, which
+  // caused the "... is not defined" errors. Keeping them here makes each item
+  // work without changing the database schema.
+  function adminSitePayload(form, booleanKeys = []) {
+    const fd = new FormData(form);
+    const body = Object.fromEntries(fd.entries());
+    booleanKeys.forEach(key => { body[key] = fd.get(key) === 'on'; });
+    return body;
+  }
+  async function saveAdminSite(form, booleanKeys = [], message = 'Đã lưu thay đổi.') {
+    const out = await request('/api/admin/site', { method:'PUT', body:adminSitePayload(form, booleanKeys) });
+    state.site = out.site;
+    setSiteTheme(state.site);
+    notify(message);
+    return out.site;
+  }
+  function compactImageField(label, name, value = '') {
+    return `<div class="field"><label>${escapeHTML(label)}</label><input class="admin-site-upload" data-target="${escapeHTML(name)}" type="file" accept="image/*"><input name="${escapeHTML(name)}" value="${escapeHTML(value || '')}" placeholder="Dán link ảnh hoặc tải ảnh lên"></div>`;
+  }
+  async function adminSite(main) {
+    const { site:s } = await request('/api/admin/site');
+    main.innerHTML = `<div class="admin-page-head"><div><span>Giao diện website</span><h1 class="admin-title">Theme Studio</h1><p class="admin-sub">Chỉnh nhận diện, nội dung trang chủ và ảnh khi chia sẻ link.</p></div></div>
+      <form id="siteForm" class="admin-product-form admin-pro-form">
+        <fieldset class="fieldset"><legend>Thương hiệu & giao diện</legend><div class="form-three">
+          <div class="field"><label>Tên thương hiệu</label><input name="brand_name" value="${escapeHTML(s.brand_name || '')}"></div>
+          <div class="field"><label>Tiêu đề tab trình duyệt</label><input name="page_title" value="${escapeHTML(s.page_title || '')}"></div>
+          ${compactImageField('Logo', 'logo_url', s.logo_url)}
+          ${compactImageField('Favicon / icon tab', 'favicon_url', s.favicon_url)}
+          <div class="field"><label>Màu chủ đạo</label><input name="primary_color" type="color" value="${escapeHTML(s.primary_color || '#c81924')}"></div>
+          <div class="field"><label>Màu nhấn</label><input name="accent_color" type="color" value="${escapeHTML(s.accent_color || '#ff6b76')}"></div>
+          <div class="field"><label>Màu nền</label><input name="background_color" type="color" value="${escapeHTML(s.background_color || '#ffffff')}"></div>
+          <div class="field"><label>Màu chữ</label><input name="text_color" type="color" value="${escapeHTML(s.text_color || '#1b1214')}"></div>
+          <div class="field"><label>Font nội dung</label><select name="body_font">${fontOptions(s.body_font || 'Be Vietnam Pro')}</select></div>
+          <div class="field"><label>Font tiêu đề</label><select name="heading_font">${fontOptions(s.heading_font || 'Barlow Condensed')}</select></div>
+        </div></fieldset>
+        <fieldset class="fieldset"><legend>Trang chủ</legend>
+          <div class="field"><label>Tiêu đề Hero</label><textarea name="hero_title">${escapeHTML(s.hero_title || '')}</textarea></div>
+          <div class="field"><label>Mô tả Hero</label><textarea name="hero_subtitle">${escapeHTML(s.hero_subtitle || '')}</textarea></div>
+          ${compactImageField('Ảnh Hero chính', 'hero_image', s.hero_image)}
+          <div class="form-two"><div class="field"><label>Tiêu đề giao xe</label><input name="delivery_title" value="${escapeHTML(s.delivery_title || '')}"></div><div class="field"><label>Nội dung giao xe</label><textarea name="delivery_text">${escapeHTML(s.delivery_text || '')}</textarea></div></div>
+          ${compactImageField('Ảnh Showroom', 'showroom_image', s.showroom_image)}
+          ${compactImageField('Ảnh Giao xe', 'delivery_image', s.delivery_image)}
+        </fieldset>
+        <fieldset class="fieldset"><legend>Ảnh khi chia sẻ link</legend><div class="form-two"><div class="field"><label>Tiêu đề chia sẻ</label><input name="share_title" value="${escapeHTML(s.share_title || '')}"></div><div class="field"><label>Mô tả chia sẻ</label><textarea name="share_description">${escapeHTML(s.share_description || '')}</textarea></div></div>${compactImageField('Ảnh preview link (nên dùng 1200 × 630)', 'share_image', s.share_image)}</fieldset>
+        <button class="btn btn-primary">Lưu Theme Studio</button>
+      </form>`;
+    $$('.admin-site-upload', main).forEach(input => input.addEventListener('change', async () => {
+      if (!input.files?.[0]) return;
+      try { $(`[name="${input.dataset.target}"]`, main).value = await uploadFile(input.files[0]); notify('Đã tải ảnh. Nhấn Lưu để áp dụng.'); }
+      catch (error) { notify(error.message); }
+    }));
+    $('#siteForm', main).onsubmit = async event => { event.preventDefault(); try { await saveAdminSite(event.target, [], 'Đã lưu Theme Studio.'); } catch (error) { notify(error.message); } };
+  }
+  async function adminContacts(main) {
+    const { site:s } = await request('/api/admin/site');
+    const check = key => s[key] !== false ? 'checked' : '';
+    main.innerHTML = `<div class="admin-page-head"><div><span>Liên hệ khách hàng</span><h1 class="admin-title">Liên hệ & nút nổi</h1><p class="admin-sub">Điền các kênh liên hệ và bật/tắt từng nút hiển thị ngoài website.</p></div></div>
+      <form id="contactsForm" class="admin-product-form admin-pro-form">
+        <fieldset class="fieldset"><legend>Thông tin showroom</legend><div class="form-two"><div class="field"><label>Hotline</label><input name="hotline" value="${escapeHTML(s.hotline || '')}"></div><div class="field"><label>Email hỗ trợ</label><input name="support_email" type="email" value="${escapeHTML(s.support_email || '')}"></div><div class="field full"><label>Địa chỉ</label><input name="address" value="${escapeHTML(s.address || '')}"></div><div class="field"><label>Giờ làm việc</label><textarea name="business_hours">${escapeHTML(s.business_hours || '')}</textarea></div><div class="field"><label>Link Google Maps nhúng</label><textarea name="map_embed_url">${escapeHTML(s.map_embed_url || '')}</textarea></div></div></fieldset>
+        <fieldset class="fieldset"><legend>Kênh liên hệ</legend><div class="form-three"><div class="field"><label>Zalo</label><input name="zalo_url" value="${escapeHTML(s.zalo_url || '')}" placeholder="https://zalo.me/... "></div><div class="field"><label>Messenger</label><input name="messenger_url" value="${escapeHTML(s.messenger_url || '')}"></div><div class="field"><label>Facebook</label><input name="facebook_url" value="${escapeHTML(s.facebook_url || '')}"></div><div class="field"><label>TikTok</label><input name="tiktok_url" value="${escapeHTML(s.tiktok_url || '')}"></div><div class="field"><label>YouTube</label><input name="youtube_url" value="${escapeHTML(s.youtube_url || '')}"></div></div></fieldset>
+        <fieldset class="fieldset"><legend>Nút nổi</legend><div class="form-three"><label class="admin-check"><input name="floating_show_zalo" type="checkbox" ${check('floating_show_zalo')}><span>✓</span> Hiện nút Zalo</label><label class="admin-check"><input name="floating_show_messenger" type="checkbox" ${check('floating_show_messenger')}><span>✓</span> Hiện nút Messenger</label><label class="admin-check"><input name="floating_show_facebook" type="checkbox" ${check('floating_show_facebook')}><span>✓</span> Hiện nút Facebook</label><label class="admin-check"><input name="floating_show_tiktok" type="checkbox" ${check('floating_show_tiktok')}><span>✓</span> Hiện nút TikTok</label><label class="admin-check"><input name="floating_show_chat" type="checkbox" ${check('floating_show_chat')}><span>✓</span> Hiện nút Chat tư vấn</label><label class="admin-check"><input name="floating_pulse_enabled" type="checkbox" ${check('floating_pulse_enabled')}><span>✓</span> Hiệu ứng nhấn nhẹ</label></div><div class="form-two" style="margin-top:14px"><div class="field"><label>Nút ưu tiên nhấp nháy</label><select name="floating_primary_action"><option value="call" ${s.floating_primary_action==='call'?'selected':''}>Gọi ngay</option><option value="zalo" ${s.floating_primary_action==='zalo'?'selected':''}>Zalo</option><option value="messenger" ${s.floating_primary_action==='messenger'?'selected':''}>Messenger</option><option value="chat" ${s.floating_primary_action==='chat'?'selected':''}>Chat tư vấn</option></select></div><div class="field"><label>Nhịp hiệu ứng</label><select name="floating_pulse_speed"><option value="slow" ${s.floating_pulse_speed==='slow'?'selected':''}>Chậm</option><option value="normal" ${!s.floating_pulse_speed||s.floating_pulse_speed==='normal'?'selected':''}>Bình thường</option><option value="fast" ${s.floating_pulse_speed==='fast'?'selected':''}>Nhanh</option></select></div><div class="field"><label>Nhãn nút gọi</label><input name="floating_call_label" value="${escapeHTML(s.floating_call_label || 'Gọi ngay')}"></div><div class="field"><label>Nhãn nút chat</label><input name="floating_chat_label" value="${escapeHTML(s.floating_chat_label || 'Tư vấn')}"></div></div></fieldset>
+        <button class="btn btn-primary">Lưu liên hệ & nút nổi</button>
+      </form>`;
+    $('#contactsForm', main).onsubmit = async event => { event.preventDefault(); try { await saveAdminSite(event.target, ['floating_show_zalo','floating_show_messenger','floating_show_facebook','floating_show_tiktok','floating_show_chat','floating_pulse_enabled'], 'Đã lưu liên hệ & nút nổi.'); } catch (error) { notify(error.message); } };
+  }
+  async function adminNotices(main) {
+    const { site:s } = await request('/api/admin/site');
+    main.innerHTML = `<div class="admin-page-head"><div><span>Thông báo ngoài website</span><h1 class="admin-title">Thông báo nổi bật</h1><p class="admin-sub">Mỗi dòng một thông báo theo mẫu: Nhãn | Nội dung. Có thể dùng {xe} để tự thay bằng một mẫu xe đang hiển thị.</p></div></div><form id="noticesForm" class="admin-product-form admin-pro-form"><fieldset class="fieldset"><legend>Cài đặt thông báo</legend><div class="form-two"><div class="field"><label>Tiêu đề</label><input name="notice_title" value="${escapeHTML(s.notice_title || 'Thông báo nổi bật')}"></div><div class="field"><label>Vị trí</label><select name="notice_position"><option value="left" ${!s.notice_position||s.notice_position==='left'?'selected':''}>Bên trái</option><option value="center" ${s.notice_position==='center'?'selected':''}>Chính giữa</option><option value="right" ${s.notice_position==='right'?'selected':''}>Bên phải</option></select></div><div class="field"><label>Thời gian đổi tin (ms)</label><input name="notice_interval" type="number" min="3500" max="30000" step="500" value="${escapeHTML(s.notice_interval || 6000)}"></div><label class="admin-check"><input name="notice_enabled" type="checkbox" ${s.notice_enabled?'checked':''}><span>✓</span> Hiển thị ngoài website</label></div><div class="field"><label>Nội dung thông báo</label><textarea name="notice_items" style="min-height:220px" placeholder="Ví dụ:\nTâm An | Nhận tư vấn giá và tình trạng {xe}\nTrả góp | Hồ sơ được kiểm tra theo nhu cầu thực tế">${escapeHTML(s.notice_items || '')}</textarea></div></fieldset><button class="btn btn-primary">Lưu thông báo</button></form>`;
+    $('#noticesForm', main).onsubmit = async event => { event.preventDefault(); try { await saveAdminSite(event.target, ['notice_enabled'], 'Đã lưu thông báo nổi bật.'); } catch (error) { notify(error.message); } };
+  }
+  async function adminMarketingAi(main) {
+    const { site:s } = await request('/api/admin/site');
+    const provider = s.ai_provider || 'cloudflare';
+    main.innerHTML = `<div class="admin-page-head"><div><span>Đo lường & chatbot</span><h1 class="admin-title">Pixel & Chatbot AI</h1><p class="admin-sub">Chỉ nhập Pixel ID; landing riêng vẫn có thể cài Pixel riêng trong Kho xe & landing.</p></div></div><form id="marketingForm" class="admin-product-form admin-pro-form"><fieldset class="fieldset"><legend>Pixel chung website</legend><div class="form-two"><div class="field"><label>Meta / Facebook Pixel ID</label><input name="meta_pixel_id" value="${escapeHTML(s.meta_pixel_id || '')}"></div><div class="field"><label>TikTok Pixel ID</label><input name="tiktok_pixel_id" value="${escapeHTML(s.tiktok_pixel_id || '')}"></div></div></fieldset><fieldset class="fieldset"><legend>Chatbot AI</legend><div class="form-three"><div class="field"><label>Tên chatbot</label><input name="ai_name" value="${escapeHTML(s.ai_name || 'Tâm An AI')}"></div><div class="field"><label>Nhà cung cấp</label><select name="ai_provider"><option value="cloudflare" ${provider==='cloudflare'?'selected':''}>Cloudflare Workers AI</option><option value="gemini" ${provider==='gemini'?'selected':''}>Gemini API</option><option value="webhook" ${provider==='webhook'?'selected':''}>Webhook</option></select></div><div class="field"><label>Model</label><input name="ai_model" value="${escapeHTML(s.ai_model || '')}"></div></div><label class="admin-check"><input name="ai_enabled" type="checkbox" ${s.ai_enabled?'checked':''}><span>✓</span> Bật trả lời AI khi chưa có nhân viên nhận chat</label><div class="field"><label>Lời chào</label><textarea name="ai_greeting">${escapeHTML(s.ai_greeting || '')}</textarea></div><div class="field"><label>Kiến thức / nguyên tắc trả lời</label><textarea name="ai_knowledge">${escapeHTML(s.ai_knowledge || '')}</textarea></div><div class="field"><label>Từ khóa chuyển nhân viên (phân cách bằng dấu phẩy)</label><input name="ai_handoff_words" value="${escapeHTML(s.ai_handoff_words || '')}"></div><button type="button" class="small-btn" id="testAi">Kiểm tra AI</button><span id="testAiResult" class="muted"></span></fieldset><button class="btn btn-primary">Lưu Pixel & Chatbot</button></form>`;
+    $('#marketingForm', main).onsubmit = async event => { event.preventDefault(); try { await saveAdminSite(event.target, ['ai_enabled'], 'Đã lưu Pixel & Chatbot AI.'); } catch (error) { notify(error.message); } };
+    $('#testAi', main).onclick = async () => { const result=$('#testAiResult', main); result.textContent='Đang kiểm tra…'; try { const out=await request('/api/admin/ai/test',{method:'POST'}); result.textContent=`Hoạt động: ${String(out.reply || '').slice(0,130)}`; } catch(error) { result.textContent=`Chưa kết nối: ${error.message}`; } };
+  }
+  async function adminPolicies(main) {
+    const data = await request('/api/admin/policies');
+    const policies = data.policies || [];
+    main.innerHTML = `<div class="admin-toolbar"><div><h1 class="admin-title">Chính sách & bài viết</h1><p class="admin-sub">Tạo các trang nội dung để hiển thị ở chân website.</p></div><button class="btn btn-primary" id="addPolicy">+ Viết bài</button></div><div class="admin-card"><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Tiêu đề</th><th>Đường dẫn</th><th>Hiển thị</th><th></th></tr></thead><tbody>${policies.map(item => `<tr><td><b>${escapeHTML(item.title)}</b></td><td>${escapeHTML(item.slug)}</td><td>${item.published ? 'Bật' : 'Ẩn'}</td><td><button type="button" class="small-btn edit-policy" data-id="${item.id}">Sửa</button><button type="button" class="small-btn danger delete-policy" data-id="${item.id}">Xoá</button></td></tr>`).join('') || '<tr><td colspan="4" class="admin-empty">Chưa có bài viết.</td></tr>'}</tbody></table></div></div>`;
+    const editor = policy => {
+      const item = policy || { published:true };
+      const modal = adminModal(policy ? 'Sửa bài viết' : 'Viết bài mới', `<form id="policyEditor" class="admin-product-form"><div class="field"><label>Tiêu đề *</label><input name="title" required value="${escapeHTML(item.title || '')}"></div><div class="field"><label>Slug / đường dẫn</label><input name="slug" value="${escapeHTML(item.slug || '')}" placeholder="vi-du-chinh-sach"></div><div class="field"><label>Nội dung</label><textarea name="content" style="min-height:260px">${escapeHTML(item.content || '')}</textarea></div><label class="admin-check"><input name="published" type="checkbox" ${item.published !== 0 ? 'checked' : ''}><span>✓</span> Hiển thị</label><button class="btn btn-primary">Lưu bài viết</button></form>`);
+      $('#policyEditor', modal).onsubmit = async event => { event.preventDefault(); const body=adminSitePayload(event.target,['published']); try { await request(policy ? `/api/admin/policies/${item.id}` : '/api/admin/policies',{method:policy?'PUT':'POST',body}); modal.remove(); document.body.classList.remove('modal-open'); adminPolicies(main); notify('Đã lưu bài viết.'); } catch(error) { notify(error.message); } };
+    };
+    $('#addPolicy', main).onclick = () => editor(null);
+    $$('.edit-policy', main).forEach(button => button.onclick = () => editor(policies.find(item => Number(item.id) === Number(button.dataset.id))));
+    $$('.delete-policy', main).forEach(button => button.onclick = async () => { if(!confirm('Xoá bài viết này?')) return; try { await request(`/api/admin/policies/${button.dataset.id}`,{method:'DELETE'}); adminPolicies(main); } catch(error) { notify(error.message); } });
   }
 
   async function adminAccessories(main) {
@@ -3150,10 +3300,10 @@
       }
 
       const accessoryLink = element.closest('.accessory-scroll-btn, a[href="#accessories"], a[href="/#accessories"]');
-      if (accessoryLink && $('#accessories')) {
+      if (accessoryLink) {
         event.preventDefault();
         event.stopImmediatePropagation();
-        $('#accessories')?.scrollIntoView({ behavior:'smooth', block:'start' });
+        openAccessoryCatalog();
       }
     }, true);
   }
@@ -3261,6 +3411,17 @@
     if (selectedCollection && location.hash === '#inventory') window.setTimeout(() => inventory.scrollIntoView({ behavior:'auto', block:'start' }), 0);
     initChat();
   };
+
+  /* V20 — final reliability layer */
+  // Guard against a legacy global click handler: every public "Xem phụ kiện"
+  // action always opens the all-accessories catalog.
+  document.addEventListener('click', event => {
+    const target = event.target instanceof Element ? event.target.closest('.accessory-scroll-btn') : null;
+    if (!target || app.classList.contains('admin-wrap')) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    openAccessoryCatalog();
+  }, true);
 
   boot();
 })();
