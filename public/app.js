@@ -662,7 +662,7 @@
       <div class="product-body"><div class="product-meta">${escapeHTML(product.brand || 'TÂM AN')} • ${escapeHTML(categoryLabel(product.category))}</div><h3>${escapeHTML(product.name)}</h3>
       <div class="product-details">${product.year ? `<span class="mini-tag">${product.year}</span>` : ''}${product.engine ? `<span class="mini-tag">${escapeHTML(product.engine)}</span>` : ''}</div>
       <div class="price-line">${product.price ? `<span class="price">${money(product.price)}</span>${product.old_price ? `<span class="old-price">${money(product.old_price)}</span>` : ''}` : `<span class="price-hidden">Liên hệ nhận giá</span>`}</div>
-      ${colors.length ? `<div class="color-dots paint-preview-row" aria-label="Chọn màu xe">${colors.map((c, index) => `<button type="button" class="paint-preview preview-color ${colorStockClass(c)} ${index === 0 ? 'active' : ''}" data-image="${escapeHTML(c.images?.[0] || productImage(product))}" data-color-name="${escapeHTML(c.name || '')}" aria-pressed="${index === 0 ? 'true' : 'false'}" title="${escapeHTML(`${c.name} — ${colorCardStockText(c)}`)}">${paletteStrip(c)}<span class="paint-preview-copy"><b>${escapeHTML(c.name)}</b><small>${escapeHTML(colorCardStockText(c))}</small></span></button>`).join('')}</div>` : ''}
+      ${colors.length ? `<div class="color-dots paint-preview-row" aria-label="Chọn màu xe">${colors.map((c, index) => `<button type="button" class="paint-preview preview-color ${colorStockClass(c)} ${index === 0 ? 'active' : ''}" data-image="${escapeHTML(c.images?.[0] || productImage(product))}" data-color-name="${escapeHTML(c.name || '')}" aria-pressed="${index === 0 ? 'true' : 'false'}" aria-label="${escapeHTML(`${c.name || 'Màu xe'} — ${colorCardStockText(c)}`)}" title="${escapeHTML(`${c.name || 'Màu xe'} — ${colorCardStockText(c)}`)}">${paletteStrip(c)}<span class="paint-preview-copy"><b>${escapeHTML(c.name)}</b><small>${escapeHTML(colorCardStockText(c))}</small></span></button>`).join('')}</div>` : ''}
       <div class="product-cta"><button class="btn btn-ghost open-product" data-slug="${escapeHTML(product.slug)}">Xem chi tiết</button><button class="btn btn-primary lead-button" data-product="${product.id}" data-name="${escapeHTML(product.name)}">Giữ xe</button></div></div>
     </article>`;
   }
@@ -2675,7 +2675,14 @@
     const renderProducts = () => {
       const items = productFilter();
       const row = $('#productRow');
-      if (row) row.innerHTML = items.map(card).join('') || '<div class="admin-empty">Không tìm thấy xe phù hợp.</div>';
+      if (row) {
+        // Mobile behaviour: browsing the whole inventory is a swipeable rail.
+        // Once a visitor chooses a specific folder (Air Blade, Vision, Winner…),
+        // products become full-width cards for easier comparison.
+        row.classList.toggle('mobile-carousel', !activeFolder);
+        row.classList.toggle('mobile-folder-list', Boolean(activeFolder));
+        row.innerHTML = items.map(card).join('') || '<div class="admin-empty">Không tìm thấy xe phù hợp.</div>';
+      }
       const count = $('#productCount');
       if (count) count.textContent = `${items.length} xe phù hợp`;
       const selectedFolder = currentFolder();
