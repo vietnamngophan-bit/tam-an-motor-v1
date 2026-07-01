@@ -102,7 +102,7 @@ const DEFAULT_SITE = {
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS site_settings (id INTEGER PRIMARY KEY CHECK (id=1), data TEXT NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, full_name TEXT NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'employee', active INTEGER NOT NULL DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL, name TEXT NOT NULL, brand TEXT, category TEXT NOT NULL, collection_slug TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'in_stock', price INTEGER, old_price INTEGER, year INTEGER, mileage INTEGER, engine TEXT, documents TEXT, description TEXT, installment_from INTEGER, bad_debt_from INTEGER, images_json TEXT NOT NULL DEFAULT '[]', colors_json TEXT NOT NULL DEFAULT '[]', versions_json TEXT NOT NULL DEFAULT '[]', featured INTEGER NOT NULL DEFAULT 0, published INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_by INTEGER, updated_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL, name TEXT NOT NULL, brand TEXT, category TEXT NOT NULL, collection_slug TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'in_stock', price INTEGER, old_price INTEGER, year INTEGER, mileage INTEGER, engine TEXT, documents TEXT, description TEXT, installment_from INTEGER, bad_debt_from INTEGER, images_json TEXT NOT NULL DEFAULT '[]', colors_json TEXT NOT NULL DEFAULT '[]', versions_json TEXT NOT NULL DEFAULT '[]', technical_specs_json TEXT NOT NULL DEFAULT '[]', featured INTEGER NOT NULL DEFAULT 0, published INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_by INTEGER, updated_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS promotions (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, content TEXT, image_url TEXT, active INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS accessories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, price INTEGER, image_url TEXT, images_json TEXT NOT NULL DEFAULT '[]', description TEXT, specifications_json TEXT NOT NULL DEFAULT '[]', compatibility TEXT, warranty TEXT, stock_status TEXT NOT NULL DEFAULT 'in_stock', published INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS landing_collections (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL, title TEXT NOT NULL, category TEXT NOT NULL DEFAULT 'motor_new', description TEXT, image_url TEXT, meta_pixel_id TEXT NOT NULL DEFAULT '', tiktok_pixel_id TEXT NOT NULL DEFAULT '', pixel_mode TEXT NOT NULL DEFAULT 'inherit', visible INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -165,6 +165,7 @@ async function ensureProductColumns(env) {
   const info = await env.DB.prepare('PRAGMA table_info(products)').all();
   const cols = new Set((info.results || []).map(row => row.name));
   if (!cols.has('collection_slug')) await env.DB.exec("ALTER TABLE products ADD COLUMN collection_slug TEXT NOT NULL DEFAULT ''");
+  if (!cols.has('technical_specs_json')) await env.DB.exec("ALTER TABLE products ADD COLUMN technical_specs_json TEXT NOT NULL DEFAULT '[]'");
 }
 async function ensureCollectionColumns(env) {
   const info = await env.DB.prepare('PRAGMA table_info(landing_collections)').all();
@@ -272,6 +273,17 @@ function normalizeInventoryVersion(v = {}) {
     colors: Array.isArray(v?.colors) ? v.colors.map(normalizeInventoryColor).filter(c => c.name) : [],
   };
 }
+
+function normalizeTechnicalSpecs(raw = []) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(section => ({
+    title: safeStr(section?.title || section?.name, 120),
+    items: (Array.isArray(section?.items) ? section.items : (Array.isArray(section?.specifications) ? section.specifications : [])).map(item => ({
+      label: safeStr(item?.label || item?.name, 140),
+      value: safeStr(item?.value, 360)
+    })).filter(item => item.label && item.value).slice(0, 30)
+  })).filter(section => section.title && section.items.length).slice(0, 12);
+}
 function productOut(row) {
   if (!row) return null;
   return {
@@ -281,6 +293,7 @@ function productOut(row) {
     images:parseJSON(row.images_json,[]),
     colors:parseJSON(row.colors_json,[]).map(normalizeInventoryColor),
     versions:parseJSON(row.versions_json,[]).map(normalizeInventoryVersion),
+    technical_specs: normalizeTechnicalSpecs(parseJSON(row.technical_specs_json, [])),
   };
 }
 function accessoryOut(row) {
@@ -319,8 +332,9 @@ async function productPayload(req) {
   const images = Array.isArray(b.images) ? b.images.filter(x=>typeof x==='string' && x).slice(0,30) : [];
   const colors = Array.isArray(b.colors) ? b.colors.slice(0,20).map(normalizeInventoryColor).filter(c=>c.name) : [];
   const versions = Array.isArray(b.versions) ? b.versions.slice(0,20).map(normalizeInventoryVersion).filter(v=>v.name) : [];
+  const technical_specs = normalizeTechnicalSpecs(b.technical_specs);
   const collection_slug = safeStr(b.collection_slug,80).replace(/[^a-z0-9-]/gi,'').toLowerCase();
-  return { name, slug:slugify(b.slug || name), brand:safeStr(b.brand,80), category, collection_slug, status:['in_stock','incoming','reserved','sold'].includes(b.status)?b.status:'in_stock', price:asNumber(b.price), old_price:asNumber(b.old_price), year:asNumber(b.year), mileage:asNumber(b.mileage), engine:safeStr(b.engine,60), documents:safeStr(b.documents,300), description:safeStr(b.description,30000), installment_from:asNumber(b.installment_from), bad_debt_from:asNumber(b.bad_debt_from), images, colors, versions, featured:b.featured?1:0, published:b.published===false?0:1, sort_order:asNumber(b.sort_order)||0 };
+  return { name, slug:slugify(b.slug || name), brand:safeStr(b.brand,80), category, collection_slug, status:['in_stock','incoming','reserved','sold'].includes(b.status)?b.status:'in_stock', price:asNumber(b.price), old_price:asNumber(b.old_price), year:asNumber(b.year), mileage:asNumber(b.mileage), engine:safeStr(b.engine,60), documents:safeStr(b.documents,300), description:safeStr(b.description,30000), installment_from:asNumber(b.installment_from), bad_debt_from:asNumber(b.bad_debt_from), images, colors, versions, technical_specs, featured:b.featured?1:0, published:b.published===false?0:1, sort_order:asNumber(b.sort_order)||0 };
 }
 async function validateProductCollection(env, product) {
   if (!product.collection_slug) return;
@@ -787,10 +801,10 @@ async function adminApi(req, env, url, user) {
   }
   if(url.pathname==='/api/admin/products'){
     if(req.method==='GET'){const rows=(await env.DB.prepare('SELECT * FROM products ORDER BY updated_at DESC,id DESC').all()).results||[];return json({ok:true,products:rows.map(productOut)});}
-    if(req.method==='POST'){if(!can(user,'product:create'))return json({ok:false,error:'Bạn không có quyền thêm xe.'},403);const p=await productPayload(req); await validateProductCollection(env,p); const slug=await uniqueSlug(env,p.slug); const r=await env.DB.prepare('INSERT INTO products(slug,name,brand,category,collection_slug,status,price,old_price,year,mileage,engine,documents,description,installment_from,bad_debt_from,images_json,colors_json,versions_json,featured,published,sort_order,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(slug,p.name,p.brand,p.category,p.collection_slug,p.status,p.price,p.old_price,p.year,p.mileage,p.engine,p.documents,p.description,p.installment_from,p.bad_debt_from,JSON.stringify(p.images),JSON.stringify(p.colors),JSON.stringify(p.versions),p.featured,p.published,p.sort_order,user.id,user.id).run();await log(env,user,'Thêm sản phẩm','product',r.meta.last_row_id,p.name);return json({ok:true,id:r.meta.last_row_id});}
+    if(req.method==='POST'){if(!can(user,'product:create'))return json({ok:false,error:'Bạn không có quyền thêm xe.'},403);const p=await productPayload(req); await validateProductCollection(env,p); const slug=await uniqueSlug(env,p.slug); const r=await env.DB.prepare('INSERT INTO products(slug,name,brand,category,collection_slug,status,price,old_price,year,mileage,engine,documents,description,installment_from,bad_debt_from,images_json,colors_json,versions_json,technical_specs_json,featured,published,sort_order,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(slug,p.name,p.brand,p.category,p.collection_slug,p.status,p.price,p.old_price,p.year,p.mileage,p.engine,p.documents,p.description,p.installment_from,p.bad_debt_from,JSON.stringify(p.images),JSON.stringify(p.colors),JSON.stringify(p.versions),JSON.stringify(p.technical_specs),p.featured,p.published,p.sort_order,user.id,user.id).run();await log(env,user,'Thêm sản phẩm','product',r.meta.last_row_id,p.name);return json({ok:true,id:r.meta.last_row_id});}
   }
   const prodMatch=url.pathname.match(/^\/api\/admin\/products\/(\d+)$/);
-  if(prodMatch){const id=Number(prodMatch[1]);if(req.method==='PUT'){if(!can(user,'product:update'))return json({ok:false,error:'Bạn không có quyền sửa xe.'},403);const p=await productPayload(req);await validateProductCollection(env,p);const slug=await uniqueSlug(env,p.slug,id);await env.DB.prepare('UPDATE products SET slug=?,name=?,brand=?,category=?,collection_slug=?,status=?,price=?,old_price=?,year=?,mileage=?,engine=?,documents=?,description=?,installment_from=?,bad_debt_from=?,images_json=?,colors_json=?,versions_json=?,featured=?,published=?,sort_order=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(slug,p.name,p.brand,p.category,p.collection_slug,p.status,p.price,p.old_price,p.year,p.mileage,p.engine,p.documents,p.description,p.installment_from,p.bad_debt_from,JSON.stringify(p.images),JSON.stringify(p.colors),JSON.stringify(p.versions),p.featured,p.published,p.sort_order,user.id,id).run();await log(env,user,'Cập nhật sản phẩm','product',id,p.name);return json({ok:true});}
+  if(prodMatch){const id=Number(prodMatch[1]);if(req.method==='PUT'){if(!can(user,'product:update'))return json({ok:false,error:'Bạn không có quyền sửa xe.'},403);const p=await productPayload(req);await validateProductCollection(env,p);const slug=await uniqueSlug(env,p.slug,id);await env.DB.prepare('UPDATE products SET slug=?,name=?,brand=?,category=?,collection_slug=?,status=?,price=?,old_price=?,year=?,mileage=?,engine=?,documents=?,description=?,installment_from=?,bad_debt_from=?,images_json=?,colors_json=?,versions_json=?,technical_specs_json=?,featured=?,published=?,sort_order=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(slug,p.name,p.brand,p.category,p.collection_slug,p.status,p.price,p.old_price,p.year,p.mileage,p.engine,p.documents,p.description,p.installment_from,p.bad_debt_from,JSON.stringify(p.images),JSON.stringify(p.colors),JSON.stringify(p.versions),JSON.stringify(p.technical_specs),p.featured,p.published,p.sort_order,user.id,id).run();await log(env,user,'Cập nhật sản phẩm','product',id,p.name);return json({ok:true});}
     if(req.method==='DELETE'){if(user.role!=='admin')return json({ok:false,error:'Chỉ chủ cửa hàng được xoá sản phẩm.'},403);await env.DB.prepare('DELETE FROM products WHERE id=?').bind(id).run();await log(env,user,'Xoá sản phẩm','product',id);return json({ok:true});}
   }
   if(url.pathname==='/api/admin/promotions'){
