@@ -667,6 +667,82 @@
     </article>`;
   }
 
+  function accessoryImages(accessory = {}) {
+    let images = accessory.images;
+    if (typeof images === 'string') { try { images = JSON.parse(images); } catch { images = []; } }
+    if (!Array.isArray(images)) images = [];
+    const fallback = accessory.image_url ? [accessory.image_url] : [];
+    return [...new Set([...images, ...fallback].map(item => String(item || '').trim()).filter(Boolean))].slice(0, 12);
+  }
+
+  function accessorySpecs(accessory = {}) {
+    let raw = accessory.specifications;
+    if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { raw = []; } }
+    if (!Array.isArray(raw)) raw = [];
+    return raw.map(item => ({
+      label: String(item?.label || item?.name || '').trim().slice(0, 120),
+      value: String(item?.value || '').trim().slice(0, 300)
+    })).filter(item => item.label && item.value).slice(0, 24);
+  }
+
+  function accessoryStock(accessory = {}) {
+    const value = String(accessory.stock_status || 'in_stock');
+    return {
+      in_stock: { label:'Còn hàng', className:'in-stock' },
+      incoming: { label:'Sắp về', className:'incoming' },
+      out_of_stock: { label:'Tạm hết', className:'out-of-stock' }
+    }[value] || { label:'Liên hệ', className:'in-stock' };
+  }
+
+  function accessoryCard(accessory = {}) {
+    const images = accessoryImages(accessory);
+    const stock = accessoryStock(accessory);
+    const subtitle = accessory.compatibility || accessory.warranty || accessory.description || 'Xem thông số và gửi yêu cầu tư vấn.';
+    return `<article class="accessory-card-pro">
+      <button type="button" class="accessory-card-media open-accessory" data-accessory-id="${Number(accessory.id)}" aria-label="Xem ${escapeHTML(accessory.name)}"><img src="${escapeHTML(images[0] || '/assets/logo.jpg')}" alt="${escapeHTML(accessory.name)}" loading="lazy"><span class="accessory-stock ${stock.className}"><i></i>${stock.label}</span></button>
+      <div class="accessory-card-body"><h3>${escapeHTML(accessory.name || '')}</h3>${accessory.price ? `<b class="price">${money(accessory.price)}</b>` : '<b class="price-hidden">Liên hệ nhận giá</b>'}<p>${escapeHTML(subtitle)}</p><div class="accessory-card-actions"><button type="button" class="accessory-detail-btn open-accessory" data-accessory-id="${Number(accessory.id)}">Xem thông số <span>→</span></button><button type="button" class="accessory-contact-btn accessory-contact" data-accessory-id="${Number(accessory.id)}">Liên hệ</button></div></div>
+    </article>`;
+  }
+
+  function bindAccessoryEvents() {
+    $$('.open-accessory').forEach(button => button.onclick = () => openAccessory(Number(button.dataset.accessoryId)));
+    $$('.accessory-contact').forEach(button => button.onclick = () => openAccessory(Number(button.dataset.accessoryId), true));
+    $('.accessory-scroll-btn')?.addEventListener('click', () => $('#accessories')?.scrollIntoView({ behavior:'smooth', block:'start' }));
+  }
+
+  function openAccessory(accessoryId, focusLead = false) {
+    const accessory = (state.accessories || []).find(item => Number(item.id) === Number(accessoryId));
+    if (!accessory) { notify('Không tìm thấy phụ kiện này.'); return; }
+    const images = accessoryImages(accessory);
+    const specs = accessorySpecs(accessory);
+    const stock = accessoryStock(accessory);
+    const modal = document.createElement('div');
+    modal.className = 'modal accessory-modal';
+    modal.innerHTML = `<div class="modal-card accessory-modal-card"><button class="modal-close">×</button><div class="accessory-modal-layout"><section class="accessory-gallery"><button type="button" class="accessory-gallery-main" aria-label="Phóng to ảnh"><img id="accessoryGalleryImage" src="${escapeHTML(images[0] || '/assets/logo.jpg')}" alt="${escapeHTML(accessory.name)}"></button>${images.length > 1 ? `<div class="thumb-row accessory-thumb-row">${images.map((url, index) => `<button type="button" class="thumb ${index === 0 ? 'active' : ''}" data-accessory-image="${escapeHTML(url)}"><img src="${escapeHTML(url)}" alt=""></button>`).join('')}</div>` : ''}</section><section class="accessory-detail-content"><div class="product-meta">PHỤ TÙNG & PHỤ KIỆN</div><div class="accessory-heading-row"><h2>${escapeHTML(accessory.name)}</h2><span class="accessory-stock ${stock.className}"><i></i>${stock.label}</span></div><div class="price-line accessory-price-line">${accessory.price ? `<span class="price">${money(accessory.price)}</span>` : '<span class="price-hidden">Liên hệ nhận giá</span>'}</div>${accessory.compatibility ? `<div class="accessory-fitment"><small>Dòng xe phù hợp</small><b>${escapeHTML(accessory.compatibility)}</b></div>` : ''}${accessory.warranty ? `<div class="accessory-warranty">✓ ${escapeHTML(accessory.warranty)}</div>` : ''}${specs.length ? `<section class="accessory-specs"><div class="product-description-head"><span>THÔNG SỐ SẢN PHẨM</span><h3>Thông tin chi tiết</h3></div><dl>${specs.map(spec => `<div><dt>${escapeHTML(spec.label)}</dt><dd>${escapeHTML(spec.value)}</dd></div>`).join('')}</dl></section>` : ''}${accessory.description ? `<section class="accessory-description"><div class="product-description-head"><span>GIỚI THIỆU</span><h3>Mô tả sản phẩm</h3></div><div class="product-description-body">${descriptionHTML(accessory.description)}</div></section>` : ''}<section id="accessoryLeadArea" class="consult-box accessory-consult-box"><h3>Nhận tư vấn phụ kiện</h3><p class="muted">Để lại số điện thoại, Tâm An sẽ kiểm tra hàng và tư vấn đúng xe của bạn.</p><form id="accessoryLeadForm" class="form-grid"><div class="field"><label>Họ và tên *</label><input name="name" required autocomplete="name"></div><div class="field"><label>Số điện thoại *</label><input name="phone" required inputmode="tel" autocomplete="tel"></div><div class="field full"><label>Nhu cầu</label><textarea name="note" placeholder="Ví dụ: lắp cho Vision 2025, muốn giao tận nhà…"></textarea></div>${locationConsentField()}${consultationConsentField()}<div class="field full"><button class="btn btn-primary">Gửi yêu cầu tư vấn</button></div></form></section></section></div></div>`;
+    document.body.appendChild(modal);
+    document.body.classList.add('modal-open');
+    const close = bindOverlayDismissal(modal);
+    const galleryImage = $('#accessoryGalleryImage', modal);
+    $$('.thumb[data-accessory-image]', modal).forEach(button => button.addEventListener('click', () => {
+      galleryImage.src = button.dataset.accessoryImage || galleryImage.src;
+      $$('.thumb[data-accessory-image]', modal).forEach(item => item.classList.toggle('active', item === button));
+    }));
+    $('.accessory-gallery-main', modal)?.addEventListener('click', () => openLightbox(images.length ? images : [galleryImage.src], galleryImage.src));
+    const form = $('#accessoryLeadForm', modal);
+    form.onsubmit = async event => {
+      event.preventDefault();
+      const data = new FormData(form);
+      try {
+        await request('/api/leads', { method:'POST', body:{ type:'accessory_consultation', accessory_id:Number(accessory.id), name:data.get('name'), phone:data.get('phone'), note:data.get('note'), location_text:await captureOptInLocation(form) } });
+        trackEvent('Lead', { content_name:accessory.name, content_category:'accessory' });
+        notify('Tâm An đã nhận yêu cầu. Nhân viên sẽ liên hệ sớm.');
+        close();
+      } catch (error) { notify(error.message); }
+    };
+    trackEvent('ViewContent', { content_name:accessory.name, content_category:'accessory' });
+    if (focusLead) window.setTimeout(() => $('#accessoryLeadArea', modal)?.scrollIntoView({ behavior:'smooth', block:'start' }), 80);
+  }
+
   function scrollToCurrentHash(behavior = 'auto') {
     const hash = decodeURIComponent(location.hash || '');
     if (!hash || hash === '#') return;
@@ -861,7 +937,7 @@
       ${categoryCards ? `<section class="section"><div class="container"><div class="section-head"><div><div class="section-kicker">Khám phá kho xe</div><h2>Chọn đúng dòng xe bạn cần.</h2><p class="section-lead">Danh mục chỉ xuất hiện khi đang có sản phẩm.</p></div></div><div class="category-grid">${categoryCards}</div></div></section>` : ''}
       <section id="inventory" class="section section-soft"><div class="container"><div class="section-head"><div><div class="section-kicker">Kho xe Tâm An</div><h2>Xe đang có & xe sắp về.</h2><p class="section-lead">Chọn nhóm xe, sau đó chọn dòng xe để xem kho nhanh hơn. Có thể gõ tên xe, hãng hoặc màu để tìm.</p></div><div class="search-box">⌕<input id="searchInput" placeholder="Tìm tên xe, hãng, màu xe…"></div></div><div class="chips" id="categoryChips"><button class="chip" data-category="">Tất cả nhóm</button>${Object.keys(CATEGORY).filter(key => counts[key] > 0).map(key => `<button class="chip" data-category="${key}">${CATEGORY[key]}</button>`).join('')}</div><div class="public-inventory-explorer"><div class="public-inventory-breadcrumb"><span>Kho xe</span><i>›</i><b id="inventoryCategoryName">Xe máy mới</b><i>›</i><strong id="inventoryFolderName">Tất cả dòng xe</strong></div><div class="public-folder-head"><div><span class="public-folder-overline">THƯ MỤC DÒNG XE</span><p id="inventoryFolderHint">Chọn Air Blade, Vision, Winner… để lọc đúng dòng xe.</p></div><a id="inventoryFolderLanding" class="public-folder-landing" href="/" hidden>Trang riêng <span>↗</span></a></div><div id="inventoryFolderRail" class="public-folder-rail" aria-label="Chọn thư mục dòng xe"></div></div><div class="section-head inventory-products-head"><p class="section-lead" id="productCount">${state.products.length} xe phù hợp</p><div class="slider-controls"><button class="icon-btn" id="slideLeft" aria-label="Xe trước">←</button><button class="icon-btn" id="slideRight" aria-label="Xe tiếp theo">→</button></div></div><div id="productRow" class="product-row">${state.products.map(card).join('') || '<div class="admin-empty">Kho xe đang được cập nhật.</div>'}</div></div></section>
       ${promoSlides ? `<section id="promo" class="section promo-section"><div class="container"><div class="section-head promo-section-head"><div><div class="section-kicker">Chương trình ưu đãi</div><h2>Nhiều ưu đãi. Chọn đúng thời điểm.</h2><p class="section-lead">Vuốt để xem từng chương trình đang áp dụng tại Tâm An.</p></div>${promotions.length > 1 ? `<div class="promo-controls"><button id="promoPrev" class="icon-btn" type="button" aria-label="Khuyến mại trước">←</button><button id="promoNext" class="icon-btn" type="button" aria-label="Khuyến mại tiếp theo">→</button></div>` : ''}</div><div class="promo-carousel" aria-label="Các chương trình khuyến mại"><div id="promoTrack" class="promo-track">${promoSlides}</div></div>${promotions.length > 1 ? `<div id="promoDots" class="promo-dots" aria-label="Chọn chương trình">${promotions.map((_, index) => `<button type="button" class="promo-dot ${index === 0 ? 'is-active' : ''}" data-promo-dot="${index}" aria-label="Xem chương trình ${index + 1}"></button>`).join('')}</div>` : ''}</div></section>` : ''}
-      ${state.accessories.length ? `<section id="accessories" class="section section-soft"><div class="container"><div class="section-head"><div><div class="section-kicker">Phụ tùng & phụ kiện</div><h2>Chọn thêm cho xe. Đi đường yên tâm hơn.</h2></div></div><div class="accessory-grid">${state.accessories.map(a => `<article class="accessory"><img src="${escapeHTML(a.image_url || '/assets/logo.jpg')}" alt="${escapeHTML(a.name)}"><div class="accessory-body"><h3>${escapeHTML(a.name)}</h3>${a.price ? `<b class="price">${money(a.price)}</b>` : '<b class="price-hidden">Liên hệ</b>'}${a.description ? `<p class="muted">${escapeHTML(a.description)}</p>` : ''}</div></article>`).join('')}</div></div></section>` : ''}
+      ${state.accessories.length ? `<section id="accessories" class="section section-soft accessory-section"><div class="container"><div class="section-head"><div><div class="section-kicker">Phụ tùng & phụ kiện</div><h2>Trang bị đúng. Đi đường yên tâm hơn.</h2><p class="section-lead">Xem ảnh, thông số, dòng xe phù hợp và gửi yêu cầu tư vấn ngay trên từng sản phẩm.</p></div><button type="button" class="text-link accessory-scroll-btn">Xem phụ kiện <span>→</span></button></div><div class="accessory-grid accessory-grid-pro">${state.accessories.map(accessoryCard).join('')}</div></div></section>` : ''}
       <section class="section"><div class="container delivery"><div class="delivery-img" style="background-image:url('${escapeHTML(s.delivery_image || s.showroom_image || '/assets/showroom.jpg')}')"></div><div class="delivery-copy"><div class="section-kicker">Dịch vụ Tâm An</div><h2>${escapeHTML(s.delivery_title || 'Hỗ trợ giao xe tận nơi')}</h2><p>${escapeHTML(s.delivery_text || '')}</p><button class="btn btn-primary lead-button" data-name="Giao xe tận nơi">Đăng ký tư vấn giao xe</button></div></div></section>
       <section id="showroom" class="section section-soft"><div class="container showroom-grid"><div class="showroom-photo"><img src="${escapeHTML(s.showroom_image || '/assets/showroom.jpg')}" alt="Showroom"></div><div class="showroom-info"><div class="section-kicker">Đến showroom</div><h2>Ghé Tâm An, xem xe thật.</h2><div class="info-list"><div class="info-item"><b>Địa chỉ</b><span>${escapeHTML(s.address || '')}</span></div><div class="info-item"><b>Hotline</b><span>${escapeHTML(s.hotline || '')}</span></div><div class="info-item"><b>Giờ làm việc</b><span>${escapeHTML(s.business_hours || '')}</span></div></div><iframe class="map-frame" src="${escapeHTML(s.map_embed_url || '')}" loading="lazy"></iframe></div></div></section>
     </main>${footer()}${noticeTicker()}${floatingButtons()}`;
@@ -1033,6 +1109,7 @@
     $$('.footer-links [data-policy]').forEach(link => link.addEventListener('click', event => { event.preventDefault(); openPolicy(link.dataset.policy); }));
 
     chooseCategory(activeCategory);
+    bindAccessoryEvents();
     initChat();
   }
 
@@ -1286,10 +1363,34 @@
     app.innerHTML = `<header class="admin-header"><div class="container admin-header-inner"><div class="admin-header-start"><button id="adminMobileMenu" type="button" class="admin-mobile-menu-button" aria-controls="adminSide" aria-expanded="false"><i aria-hidden="true">☰</i><span>Menu</span></button><a href="/" class="admin-brand"><img src="${escapeHTML(state.site.logo_url || '/assets/logo.jpg')}" alt=""><span>TÂM AN<small>KHU VỰC NỘI BỘ</small></span></a></div><div class="admin-user"><span>${escapeHTML(state.admin.name)} <em>${state.admin.role === 'admin' ? 'Chủ cửa hàng' : 'Nhân viên'}</em></span><button id="logoutButton" class="small-btn">Đăng xuất</button></div></div></header><button id="adminNavBackdrop" type="button" class="admin-mobile-backdrop" aria-label="Đóng menu quản trị" tabindex="-1"></button><div class="admin-shell"><aside id="adminSide" class="admin-side" aria-label="Điều hướng quản trị"><div class="admin-mobile-drawer-head"><span>QUẢN TRỊ TÂM AN</span><button id="adminMobileClose" type="button" aria-label="Đóng menu">×</button></div><div class="admin-side-title">Bảng điều khiển</div>${nav}</aside><main id="adminMain" class="admin-main"></main></div><nav class="admin-mobile-bottom-nav" aria-label="Điều hướng nhanh">${mobileTabs.map(([id, icon, label], index) => `<button type="button" data-tab="${id}" class="${index === 0 ? 'active' : ''}"><i aria-hidden="true">${icon}</i><span>${label}${id === 'leads' ? '<em class="admin-mobile-live" data-activity="leads" hidden></em>' : ''}${id === 'chats' ? '<em class="admin-mobile-live" data-activity="chats" hidden></em>' : ''}</span></button>`).join('')}<button id="adminMobileMore" type="button"><i aria-hidden="true">•••</i><span>Thêm</span></button></nav>`;
     const openAdminNav = () => { app.classList.add('admin-mobile-nav-open'); $('#adminMobileMenu')?.setAttribute('aria-expanded', 'true'); };
     const closeAdminNav = () => { app.classList.remove('admin-mobile-nav-open'); $('#adminMobileMenu')?.setAttribute('aria-expanded', 'false'); };
-    $('#adminMobileMenu')?.addEventListener('click', openAdminNav);
-    $('#adminMobileMore')?.addEventListener('click', openAdminNav);
-    $('#adminMobileClose')?.addEventListener('click', closeAdminNav);
-    $('#adminNavBackdrop')?.addEventListener('click', closeAdminNav);
+    // V14: Mobile admin drawer is intentionally controlled in the capture phase.
+    // This prevents older menu listeners from leaving an invisible overlay above the UI.
+    const bindAdminMobileControl = (selector, action) => {
+      const element = $(selector);
+      if (!element) return;
+      element.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        action();
+      }, true);
+    };
+    bindAdminMobileControl('#adminMobileMenu', () => {
+      app.classList.contains('admin-mobile-nav-open') ? closeAdminNav() : openAdminNav();
+    });
+    bindAdminMobileControl('#adminMobileMore', () => {
+      app.classList.contains('admin-mobile-nav-open') ? closeAdminNav() : openAdminNav();
+    });
+    bindAdminMobileControl('#adminMobileClose', closeAdminNav);
+    bindAdminMobileControl('#adminNavBackdrop', closeAdminNav);
+    // With the visual backdrop disabled on phones, tapping the visible page area closes the drawer.
+    document.addEventListener('pointerdown', event => {
+      if (!app.classList.contains('admin-mobile-nav-open')) return;
+      const side = $('#adminSide');
+      const opener = $('#adminMobileMenu');
+      const more = $('#adminMobileMore');
+      if (side?.contains(event.target) || opener?.contains(event.target) || more?.contains(event.target)) return;
+      closeAdminNav();
+    }, { capture:true });
     $$('[data-tab]').forEach(button => button.onclick = () => {
       const tab = button.dataset.tab;
       $$('[data-tab]').forEach(x => x.classList.toggle('active', x.dataset.tab === tab));
@@ -1445,204 +1546,43 @@
 
   async function adminAccessories(main) {
     const data = await request('/api/admin/accessories');
-    main.innerHTML = `<div class="admin-toolbar"><div><h1 class="admin-title">Phụ kiện</h1><p class="admin-sub">Giá có thể để trống để hiển thị “Liên hệ”.</p></div><button class="btn btn-primary" id="addAccessory">+ Thêm phụ kiện</button></div><div class="admin-card"><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Ảnh</th><th>Tên</th><th>Giá</th><th></th></tr></thead><tbody>${data.accessories.map(a => `<tr><td><img src="${escapeHTML(a.image_url || '/assets/logo.jpg')}"></td><td><b>${escapeHTML(a.name)}</b><br><span class="muted">${escapeHTML(a.description || '')}</span></td><td>${a.price ? money(a.price) : 'Liên hệ'}</td><td><button class="small-btn edit-accessory" data-id="${a.id}">Sửa</button>${state.admin.role === 'admin' ? `<button class="small-btn danger delete-accessory" data-id="${a.id}">Xoá</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="4" class="admin-empty">Chưa có phụ kiện.</td></tr>'}</tbody></table></div></div>`;
+    main.innerHTML = `<div class="admin-toolbar"><div><h1 class="admin-title">Phụ tùng & phụ kiện</h1><p class="admin-sub">Mỗi sản phẩm có thể có nhiều ảnh, tình trạng kho, dòng xe phù hợp, bảo hành, thông số và form liên hệ riêng.</p></div><button class="btn btn-primary" id="addAccessory">+ Thêm phụ kiện</button></div><div class="admin-card"><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Ảnh</th><th>Sản phẩm</th><th>Tình trạng</th><th>Giá</th><th></th></tr></thead><tbody>${data.accessories.map(a => { const stock = accessoryStock(a); const specs = accessorySpecs(a); return `<tr><td><img src="${escapeHTML(accessoryImages(a)[0] || '/assets/logo.jpg')}"></td><td><b>${escapeHTML(a.name)}</b><br><span class="muted">${escapeHTML(a.compatibility || 'Chưa đặt dòng xe phù hợp')}</span>${specs.length ? `<br><small class="muted">${specs.length} thông số</small>` : ''}</td><td><span class="accessory-stock ${stock.className}"><i></i>${stock.label}</span></td><td>${a.price ? money(a.price) : 'Liên hệ'}</td><td><button class="small-btn edit-accessory" data-id="${a.id}">Sửa</button>${state.admin.role === 'admin' ? `<button class="small-btn danger delete-accessory" data-id="${a.id}">Xoá</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="5" class="admin-empty">Chưa có phụ kiện.</td></tr>'}</tbody></table></div></div>`;
     $('#addAccessory').onclick = () => openAccessoryEditor();
     $$('.edit-accessory').forEach(button => button.onclick = () => openAccessoryEditor(data.accessories.find(a => a.id === Number(button.dataset.id))));
     $$('.delete-accessory').forEach(button => button.onclick = async () => { if (!confirm('Xoá phụ kiện?')) return; try { await request(`/api/admin/accessories/${button.dataset.id}`, { method:'DELETE' }); adminAccessories(main); } catch (error) { notify(error.message); } });
   }
+
   function openAccessoryEditor(accessory) {
-    const a = accessory || { published:true };
-    const modal = adminModal(accessory ? 'Sửa phụ kiện' : 'Thêm phụ kiện', `<form id="accessoryForm" class="admin-product-form"><div class="field"><label>Tên *</label><input name="name" required value="${escapeHTML(a.name || '')}"></div><div class="field"><label>Giá</label><input name="price" class="vnd-input" inputmode="numeric" value="${formatVndInput(a.price)}" placeholder="Ví dụ: 250.000"></div><div class="field"><label>Ảnh</label><input id="accessoryImageFile" type="file" accept="image/*"><input name="image_url" value="${escapeHTML(a.image_url || '')}"></div><div class="field"><label>Mô tả</label><textarea name="description">${escapeHTML(a.description || '')}</textarea></div><label><input name="published" type="checkbox" ${a.published !== 0 ? 'checked' : ''}> Hiển thị ngoài website</label><button class="btn btn-primary">Lưu</button></form>`);
+    const a = accessory || { published:true, stock_status:'in_stock' };
+    let images = accessoryImages(a);
+    let specs = accessorySpecs(a);
+    const modal = adminModal(accessory ? 'Sửa phụ kiện' : 'Thêm phụ kiện', `<form id="accessoryForm" class="admin-product-form admin-pro-form"><fieldset class="fieldset"><legend>Thông tin cơ bản</legend><div class="form-two"><div class="field"><label>Tên sản phẩm *</label><input name="name" required value="${escapeHTML(a.name || '')}" placeholder="Ví dụ: Thùng Givi 32L"></div><div class="field"><label>Giá</label><input name="price" class="vnd-input" inputmode="numeric" value="${formatVndInput(a.price)}" placeholder="Ví dụ: 1.250.000"></div><div class="field"><label>Tình trạng</label><select name="stock_status"><option value="in_stock" ${a.stock_status === 'in_stock' || !a.stock_status ? 'selected' : ''}>Còn hàng</option><option value="incoming" ${a.stock_status === 'incoming' ? 'selected' : ''}>Sắp về</option><option value="out_of_stock" ${a.stock_status === 'out_of_stock' ? 'selected' : ''}>Tạm hết</option></select></div><div class="field"><label>Thứ tự hiển thị</label><input name="sort_order" inputmode="numeric" value="${escapeHTML(a.sort_order || '')}" placeholder="0"></div></div></fieldset><fieldset class="fieldset"><legend>Ảnh sản phẩm</legend><div class="field"><label>Tải ảnh (có thể chọn nhiều ảnh)</label><input id="accessoryImagesFile" type="file" accept="image/*" multiple><small class="field-help">Ảnh đầu tiên là ảnh đại diện ngoài website.</small></div><div class="field"><label>Hoặc dán link ảnh</label><div class="image-url-add"><input id="accessoryImageUrl" placeholder="https://..."><button type="button" class="small-btn" id="addAccessoryImageUrl">Thêm ảnh</button></div></div><div id="accessoryImagesList" class="hero-images-admin-list"></div></fieldset><fieldset class="fieldset"><legend>Khả năng tương thích & bảo hành</legend><div class="form-two"><div class="field"><label>Dòng xe phù hợp</label><input name="compatibility" value="${escapeHTML(a.compatibility || '')}" placeholder="Ví dụ: Vision 2023–2026, Air Blade 125/160"></div><div class="field"><label>Bảo hành</label><input name="warranty" value="${escapeHTML(a.warranty || '')}" placeholder="Ví dụ: Bảo hành 12 tháng"></div></div></fieldset><fieldset class="fieldset"><legend>Thông số sản phẩm</legend><p class="field-help">Nhập từng thông số giống cách hiển thị thông số xe: Ví dụ “Chất liệu — Nhựa ABS cao cấp”.</p><div id="accessorySpecRows" class="accessory-spec-editor"></div><button type="button" class="small-btn" id="addAccessorySpec">+ Thêm thông số</button></fieldset><fieldset class="fieldset"><legend>Mô tả</legend><div class="field"><label>Giới thiệu / lưu ý lắp đặt</label><textarea name="description" style="min-height:160px" placeholder="Mô tả công dụng, hướng dẫn lắp, lưu ý sử dụng…">${escapeHTML(a.description || '')}</textarea></div></fieldset><label class="admin-check"><input name="published" type="checkbox" ${a.published !== 0 ? 'checked' : ''}><span>✓</span> Hiển thị ngoài website</label><button class="btn btn-primary">Lưu phụ kiện</button></form>`);
     const form = $('#accessoryForm', modal);
-    $('#accessoryImageFile', modal).onchange = async event => { try { form.image_url.value = await uploadFile(event.target.files[0]); } catch (error) { notify(error.message); } };
-    form.onsubmit = async event => { event.preventDefault(); const fd = new FormData(form); const body = Object.fromEntries(fd.entries()); body.published = fd.get('published') === 'on'; try { await request(accessory ? `/api/admin/accessories/${a.id}` : '/api/admin/accessories', { method:accessory ? 'PUT' : 'POST', body }); notify('Đã lưu phụ kiện'); modal.remove(); document.body.classList.remove('modal-open'); loadAdminTab('accessories'); } catch (error) { notify(error.message); } };
-  }
-
-  function imageField(label, name, value) {
-    return `<div class="field"><label>${label}</label><input class="site-image-file" data-field="${name}" type="file" accept="image/*"><input name="${name}" value="${escapeHTML(value || '')}" placeholder="Link ảnh"></div>`;
-  }
-  async function adminSite(main) {
-    const data = await request('/api/admin/site'); const s = data.site;
-    main.innerHTML = `<h1 class="admin-title">Nội dung website</h1><p class="admin-sub">Chỉnh logo, ảnh, chữ, hơn 50 font, màu sắc, kích cỡ, mạng xã hội, pixel và chatbot ngay từ Admin.</p>
-    <form id="siteForm" class="admin-product-form">
-      <fieldset class="fieldset"><legend>Thương hiệu & Theme Studio</legend>
-        <div class="form-three">
-          <div class="field"><label>Tên thương hiệu</label><input name="brand_name" value="${escapeHTML(s.brand_name || '')}"></div>
-          <div class="field"><label>Tiêu đề tab trình duyệt</label><input name="page_title" value="${escapeHTML(s.page_title || '')}"></div>
-          <div class="field"><label>Màu chủ đạo</label><input name="primary_color" type="color" value="${escapeHTML(s.primary_color || '#c81924')}"></div>
-          <div class="field"><label>Màu nhấn</label><input name="accent_color" type="color" value="${escapeHTML(s.accent_color || '#ff6b76')}"></div>
-          <div class="field"><label>Màu nền</label><input name="background_color" type="color" value="${escapeHTML(s.background_color || '#ffffff')}"></div>
-          <div class="field"><label>Màu chữ</label><input name="text_color" type="color" value="${escapeHTML(s.text_color || '#1b1214')}"></div>
-          <div class="field"><label>Font nội dung (65 lựa chọn)</label><select name="body_font">${fontOptions(s.body_font || 'Be Vietnam Pro')}</select></div>
-          <div class="field"><label>Font tiêu đề (65 lựa chọn)</label><select name="heading_font">${fontOptions(s.heading_font || 'Barlow Condensed')}</select></div>
-          <div class="field"><label>Cỡ chữ nội dung: <output id="bodySizeOut">${escapeHTML(s.body_font_size || 16)}px</output></label><input name="body_font_size" id="bodySize" type="range" min="14" max="20" step="1" value="${escapeHTML(s.body_font_size || 16)}"></div>
-          <div class="field"><label>Tỷ lệ tiêu đề: <output id="headingScaleOut">${escapeHTML(s.heading_scale || 1)}x</output></label><input name="heading_scale" id="headingScale" type="range" min="0.85" max="1.35" step="0.05" value="${escapeHTML(s.heading_scale || 1)}"></div>
-          <div class="field"><label>Giãn dòng: <output id="lineHeightOut">${escapeHTML(s.body_line_height || 1.55)}</output></label><input name="body_line_height" id="lineHeight" type="range" min="1.35" max="2" step="0.05" value="${escapeHTML(s.body_line_height || 1.55)}"></div>
-          <div class="field"><label>Bo góc: <output id="radiusOut">${escapeHTML(s.corner_radius || 22)}px</output></label><input name="corner_radius" id="cornerRadius" type="range" min="8" max="32" step="1" value="${escapeHTML(s.corner_radius || 22)}"></div>
-          <div class="field"><label>Logo</label><input id="logoFile" type="file" accept="image/*"><input name="logo_url" value="${escapeHTML(s.logo_url || '')}"></div>
-          <div class="field"><label>Favicon / icon tab</label><input id="faviconFile" type="file" accept="image/*"><input name="favicon_url" value="${escapeHTML(s.favicon_url || '')}"></div>
-        </div>
-        <div class="theme-preview"><span class="theme-preview-kicker">XEM TRƯỚC THEME</span><h3 id="themePreviewTitle">Chọn xe ưng ý. Lên đường an tâm.</h3><p id="themePreviewText">Font, màu sắc, cỡ chữ và bo góc sẽ áp dụng toàn website sau khi bấm Lưu.</p><button type="button" class="btn btn-primary">Nút hành động</button></div>
-      </fieldset>
-      <fieldset class="fieldset"><legend>Trang chủ & ảnh</legend>
-        <div class="field"><label>Tiêu đề Hero</label><textarea name="hero_title">${escapeHTML(s.hero_title || '')}</textarea></div>
-        <div class="field"><label>Mô tả Hero</label><textarea name="hero_subtitle">${escapeHTML(s.hero_subtitle || '')}</textarea></div>
-        ${imageField('Ảnh Hero (riêng)', 'hero_image', s.hero_image)}${imageField('Ảnh Showroom (riêng)', 'showroom_image', s.showroom_image)}${imageField('Ảnh Giao xe tận nơi (riêng)', 'delivery_image', s.delivery_image)}${imageField('Ảnh trang trả góp', 'installment_image', s.installment_image)}${imageField('Ảnh khuyến mại mặc định', 'promo_image', s.promo_image)}
-        <div class="form-two"><div class="field"><label>Tiêu đề giao xe</label><input name="delivery_title" value="${escapeHTML(s.delivery_title || '')}"></div><div class="field"><label>Nội dung giao xe</label><textarea name="delivery_text">${escapeHTML(s.delivery_text || '')}</textarea></div></div>
-      </fieldset>
-      <fieldset class="fieldset"><legend>Liên hệ, Map & mạng xã hội</legend>
-        <div class="form-three">
-          <div class="field"><label>Hotline</label><input name="hotline" value="${escapeHTML(s.hotline || '')}"></div><div class="field"><label>Email</label><input name="support_email" value="${escapeHTML(s.support_email || '')}"></div><div class="field"><label>Địa chỉ</label><input name="address" value="${escapeHTML(s.address || '')}"></div>
-          <div class="field"><label>Zalo URL</label><input name="zalo_url" placeholder="https://zalo.me/..." value="${escapeHTML(s.zalo_url || '')}"></div><div class="field"><label>Messenger URL</label><input name="messenger_url" placeholder="https://m.me/..." value="${escapeHTML(s.messenger_url || '')}"></div><div class="field"><label>Facebook URL</label><input name="facebook_url" placeholder="https://facebook.com/..." value="${escapeHTML(s.facebook_url || '')}"></div><div class="field"><label>TikTok URL</label><input name="tiktok_url" placeholder="https://tiktok.com/@..." value="${escapeHTML(s.tiktok_url || '')}"></div><div class="field"><label>YouTube URL</label><input name="youtube_url" placeholder="https://youtube.com/..." value="${escapeHTML(s.youtube_url || '')}"></div><div class="field"><label>Google Map embed URL</label><input name="map_embed_url" value="${escapeHTML(s.map_embed_url || '')}"></div><div class="field"><label>Nút nhấp nháy chính</label><select name="floating_primary_action"><option value="call" ${s.floating_primary_action === 'call' || !s.floating_primary_action ? 'selected' : ''}>Gọi ngay</option><option value="zalo" ${s.floating_primary_action === 'zalo' ? 'selected' : ''}>Zalo</option><option value="chat" ${s.floating_primary_action === 'chat' ? 'selected' : ''}>Chat trực tuyến</option></select></div>
-        </div><div class="check-row floating-settings"><label><input name="floating_show_zalo" type="checkbox" ${s.floating_show_zalo !== false ? 'checked' : ''}> Hiện nút Zalo</label><label><input name="floating_show_messenger" type="checkbox" ${s.floating_show_messenger !== false ? 'checked' : ''}> Hiện Messenger</label><label><input name="floating_show_facebook" type="checkbox" ${s.floating_show_facebook ? 'checked' : ''}> Hiện Facebook</label><label><input name="floating_show_tiktok" type="checkbox" ${s.floating_show_tiktok ? 'checked' : ''}> Hiện TikTok</label><label><input name="floating_show_chat" type="checkbox" ${s.floating_show_chat !== false ? 'checked' : ''}> Hiện Chat</label></div><p class="muted">Nút nào đang nhấp nháy được chọn ở “Nút nhấp nháy chính”. Zalo hiển thị đúng biểu tượng Zalo khi đã dán link.</p><div class="field"><label>Giờ làm việc</label><textarea name="business_hours">${escapeHTML(s.business_hours || '')}</textarea></div>
-      </fieldset>
-      <fieldset class="fieldset"><legend>Trang trả góp</legend>
-        <div class="field"><label>Tiêu đề trả góp</label><textarea name="installment_title">${escapeHTML(s.installment_title || '')}</textarea></div><div class="field"><label>Nội dung trả góp</label><textarea name="installment_text">${escapeHTML(s.installment_text || '')}</textarea></div><div class="field"><label>Giấy tờ / thủ tục</label><textarea name="installment_docs">${escapeHTML(s.installment_docs || '')}</textarea></div><div class="field"><label>Mức trả trước gợi ý (mỗi dòng một lựa chọn)</label><textarea name="installment_down_payments" placeholder="Từ 3 triệu&#10;Từ 5 triệu&#10;Từ 7 triệu&#10;Theo tư vấn">${escapeHTML(s.installment_down_payments || 'Từ 3 triệu\nTừ 5 triệu\nTừ 7 triệu\nTừ 10 triệu\nTheo tư vấn')}</textarea><small class="field-help">Chỉ hiện khi khách chọn Trả góp. Với từng xe, mức “Trả trước từ” của xe đó sẽ được thêm vào đầu danh sách.</small></div><div class="field"><label>Các bước thủ tục (mỗi dòng: Tiêu đề | Mô tả)</label><textarea name="installment_steps">${escapeHTML(s.installment_steps || '')}</textarea></div><div class="field"><label>Câu hỏi thường gặp (mỗi dòng: Câu hỏi | Trả lời)</label><textarea name="installment_faqs">${escapeHTML(s.installment_faqs || '')}</textarea></div>
-        <div class="admin-card" style="margin-top:18px;background:linear-gradient(135deg,#fff8f8,#fff);border-color:#efcfd2"><div class="section-kicker">Quảng cáo & tự động hoá</div><h3 style="margin:4px 0 8px">Pixel & Chatbot AI</h3><p class="muted" style="margin:0 0 14px">Phần Pixel, Gemini và nút kiểm tra kết nối đã được tách riêng để tránh nhầm với nội dung trang trả góp.</p><button type="button" id="openMarketingAi" class="btn btn-dark">Mở Pixel & Chatbot AI →</button></div>
-      </fieldset>
-      <button class="btn btn-primary">Lưu thay đổi website</button>
-    </form>`;
-    $$('.site-image-file', main).forEach(input => input.onchange = async () => { try { const url = await uploadFile(input.files[0]); $(`[name="${input.dataset.field}"]`, main).value = url; notify('Đã tải ảnh'); } catch (error) { notify(error.message); } });
-    $('#logoFile', main).onchange = async event => { try { const url = await uploadFile(event.target.files[0]); $('[name="logo_url"]', main).value = url; $('[name="favicon_url"]', main).value = url; notify('Đã tải logo'); } catch (error) { notify(error.message); } };
-    $('#faviconFile', main).onchange = async event => { try { $('[name="favicon_url"]', main).value = await uploadFile(event.target.files[0]); notify('Đã tải favicon'); } catch (error) { notify(error.message); } };
-    const preview = () => {
-      const form = $('#siteForm', main); const fd = new FormData(form); const draft = Object.fromEntries(fd.entries()); setSiteTheme({ ...state.site, ...draft });
-      $('#bodySizeOut').value = `${draft.body_font_size}px`; $('#headingScaleOut').value = `${draft.heading_scale}x`; $('#lineHeightOut').value = draft.body_line_height; $('#radiusOut').value = `${draft.corner_radius}px`;
-      $('#themePreviewTitle').style.fontFamily = `'${draft.heading_font}', Arial, sans-serif`; $('#themePreviewText').style.fontFamily = `'${draft.body_font}', Arial, sans-serif`;
+    const normalizeImages = () => { images = [...new Set(images.map(item => String(item || '').trim()).filter(Boolean))].slice(0, 12); };
+    const renderImages = () => {
+      normalizeImages();
+      $('#accessoryImagesList', modal).innerHTML = images.map((url, index) => `<article class="hero-image-admin-item"><img src="${escapeHTML(url)}" alt=""><div><b>${index === 0 ? 'Ảnh đại diện' : `Ảnh ${index + 1}`}</b><small>${index === 0 ? 'Hiển thị ngoài website' : 'Ảnh xem chi tiết'}</small></div><div class="hero-image-admin-actions"><button type="button" class="small-btn accessory-image-move" data-index="${index}" data-dir="-1" ${index === 0 ? 'disabled' : ''}>←</button><button type="button" class="small-btn accessory-image-move" data-index="${index}" data-dir="1" ${index === images.length - 1 ? 'disabled' : ''}>→</button><button type="button" class="small-btn danger accessory-image-remove" data-index="${index}">×</button></div></article>`).join('') || '<p class="muted">Chưa có ảnh. Website sẽ dùng logo làm ảnh dự phòng.</p>';
+      $$('.accessory-image-move', modal).forEach(button => button.onclick = () => { const from = Number(button.dataset.index), to = from + Number(button.dataset.dir); if (to < 0 || to >= images.length) return; [images[from], images[to]] = [images[to], images[from]]; renderImages(); });
+      $$('.accessory-image-remove', modal).forEach(button => button.onclick = () => { images.splice(Number(button.dataset.index), 1); renderImages(); });
     };
-    ['bodySize','headingScale','lineHeight','cornerRadius'].forEach(id => $(`#${id}`, main).addEventListener('input', preview));
-    ['body_font','heading_font','primary_color','accent_color','background_color','text_color'].forEach(name => $(`[name="${name}"]`, main).addEventListener('change', preview));
-    preview();
-    $('#siteForm', main).onsubmit = async event => { event.preventDefault(); const fd = new FormData(event.target); const body = Object.fromEntries(fd.entries()); ['floating_show_zalo','floating_show_messenger','floating_show_facebook','floating_show_tiktok','floating_show_chat'].forEach(key => body[key] = fd.get(key) === 'on'); try { const out = await request('/api/admin/site', { method:'PUT', body }); state.site = out.site; setSiteTheme(state.site); notify('Đã lưu giao diện và nội dung website'); } catch (error) { notify(error.message); } };
-    $('#openMarketingAi', main)?.addEventListener('click', () => { const target = $('[data-tab="marketing_ai"]'); if (target) target.click(); });
-  }
-
-  function sitePayload(form, checkboxes = []) {
-    const fd = new FormData(form);
-    const body = Object.fromEntries(fd.entries());
-    checkboxes.forEach(key => body[key] = fd.get(key) === 'on');
-    return body;
-  }
-  async function saveSiteForm(form, checkboxes, successMessage) {
-    const out = await request('/api/admin/site', { method:'PUT', body:sitePayload(form, checkboxes) });
-    state.site = out.site;
-    setSiteTheme(state.site);
-    notify(successMessage || 'Đã lưu thay đổi.');
-    return out.site;
-  }
-  function iconConfigCard(type, title, note, site) {
-    const key = `floating_${type}`;
-    const selected = site[`${key}_icon`] || (type === 'call' ? 'phone' : type);
-    const color = site[`${key}_color`] || '';
-    const shape = site[`${key}_shape`] || 'rounded';
-    const image = site[`${key}_icon_url`] || '';
-    return `<section class="dock-config-card"><div class="dock-config-head"><div><b>${escapeHTML(title)}</b><span>${escapeHTML(note)}</span></div><span class="dock-preview-icon">${image ? `<img src="${escapeHTML(image)}" alt="">` : socialIcon(selected)}</span></div><div class="form-two"><div class="field"><label>Biểu tượng mặc định</label><select name="${key}_icon">${iconOptionsFor(type, selected)}</select></div><div class="field"><label>Kiểu bo góc</label><select name="${key}_shape"><option value="rounded" ${shape==='rounded'?'selected':''}>Bo tròn</option><option value="circle" ${shape==='circle'?'selected':''}>Tròn</option><option value="square" ${shape==='square'?'selected':''}>Vuông mềm</option></select></div><div class="field"><label>Màu nút</label><input name="${key}_color" type="color" value="${escapeHTML(/^#[0-9a-fA-F]{6}$/.test(color)?color:'#c81924')}"></div><div class="field"><label>Ảnh icon riêng (không bắt buộc)</label><input class="floating-icon-upload" data-field="${key}_icon_url" type="file" accept="image/*"><input name="${key}_icon_url" value="${escapeHTML(image)}" placeholder="Link ảnh icon"></div></div></section>`;
-  }
-  async function adminSite(main) {
-    const data = await request('/api/admin/site'); const s = data.site;
-    main.innerHTML = `<div class="admin-page-head"><div><span>Giao diện website</span><h1 class="admin-title">Theme Studio</h1><p class="admin-sub">Chỉnh font, màu sắc, chữ và ảnh chính. Liên hệ, nút nổi, Pixel và AI được đặt ở các mục riêng để dễ quản lý.</p></div><div class="admin-page-badge">65+ font tiếng Việt</div></div>
-    <form id="siteForm" class="admin-product-form admin-pro-form">
-      <fieldset class="fieldset"><legend>Thương hiệu & Theme</legend><div class="form-three">
-        <div class="field"><label>Tên thương hiệu</label><input name="brand_name" value="${escapeHTML(s.brand_name || '')}"></div><div class="field"><label>Tiêu đề tab trình duyệt</label><input name="page_title" value="${escapeHTML(s.page_title || '')}"></div><div class="field"><label>Logo</label><input id="logoFile" type="file" accept="image/*"><input name="logo_url" value="${escapeHTML(s.logo_url || '')}"></div><div class="field"><label>Favicon / icon tab</label><input id="faviconFile" type="file" accept="image/*"><input name="favicon_url" value="${escapeHTML(s.favicon_url || '')}"></div>
-        <div class="field"><label>Màu chủ đạo</label><input name="primary_color" type="color" value="${escapeHTML(s.primary_color || '#c81924')}"></div><div class="field"><label>Màu nhấn</label><input name="accent_color" type="color" value="${escapeHTML(s.accent_color || '#ff6b76')}"></div><div class="field"><label>Màu nền</label><input name="background_color" type="color" value="${escapeHTML(s.background_color || '#ffffff')}"></div><div class="field"><label>Màu chữ</label><input name="text_color" type="color" value="${escapeHTML(s.text_color || '#1b1214')}"></div>
-        <div class="field"><label>Font nội dung</label><select name="body_font">${fontOptions(s.body_font || 'Be Vietnam Pro')}</select></div><div class="field"><label>Font tiêu đề</label><select name="heading_font">${fontOptions(s.heading_font || 'Barlow Condensed')}</select></div>
-        <div class="field"><label>Cỡ chữ nội dung <output id="bodySizeOut">${escapeHTML(s.body_font_size || 16)}px</output></label><input name="body_font_size" id="bodySize" type="range" min="14" max="20" step="1" value="${escapeHTML(s.body_font_size || 16)}"></div><div class="field"><label>Tỷ lệ tiêu đề <output id="headingScaleOut">${escapeHTML(s.heading_scale || 1)}x</output></label><input name="heading_scale" id="headingScale" type="range" min="0.85" max="1.35" step="0.05" value="${escapeHTML(s.heading_scale || 1)}"></div><div class="field"><label>Giãn dòng <output id="lineHeightOut">${escapeHTML(s.body_line_height || 1.55)}</output></label><input name="body_line_height" id="lineHeight" type="range" min="1.35" max="2" step="0.05" value="${escapeHTML(s.body_line_height || 1.55)}"></div><div class="field"><label>Bo góc <output id="radiusOut">${escapeHTML(s.corner_radius || 22)}px</output></label><input name="corner_radius" id="cornerRadius" type="range" min="8" max="32" step="1" value="${escapeHTML(s.corner_radius || 22)}"></div>
-      </div><div class="theme-preview"><span class="theme-preview-kicker">XEM TRƯỚC THEME</span><h3 id="themePreviewTitle">Chọn xe ưng ý. Lên đường an tâm.</h3><p id="themePreviewText">Thay đổi màu, font và kích cỡ sẽ áp dụng khi bấm lưu.</p><button type="button" class="btn btn-primary">Nút hành động</button></div></fieldset>
-      <fieldset class="fieldset share-settings"><legend>Ảnh xem trước khi gửi link</legend><p class="muted">Khi dán link website vào Facebook, Zalo, Messenger hoặc TikTok, nền tảng sẽ dùng ảnh, tiêu đề và mô tả ở đây. Nên dùng ảnh ngang <b>1200 × 630 px</b>.</p><div class="form-two"><div class="field"><label>Tiêu đề khi chia sẻ</label><input name="share_title" value="${escapeHTML(s.share_title || s.page_title || '')}" maxlength="120"></div><div class="field"><label>Mô tả khi chia sẻ</label><textarea name="share_description" maxlength="280">${escapeHTML(s.share_description || s.hero_subtitle || '')}</textarea></div></div>${imageField('Ảnh preview link (1200 × 630 px)', 'share_image', s.share_image)}<div class="share-preview-card"><div class="share-preview-image" id="sharePreviewImage" style="background-image:url('${escapeHTML(s.share_image || s.hero_image || s.showroom_image || s.logo_url || '')}')"></div><div><small>XEM TRƯỚC KHI CHIA SẺ</small><b id="sharePreviewTitle">${escapeHTML(s.share_title || s.page_title || s.brand_name || '')}</b><p id="sharePreviewDescription">${escapeHTML(s.share_description || s.hero_subtitle || '')}</p></div></div></fieldset>
-      <fieldset class="fieldset"><legend>Trang chủ & nội dung</legend><div class="field"><label>Tiêu đề Hero</label><textarea name="hero_title">${escapeHTML(s.hero_title || '')}</textarea></div><div class="field"><label>Mô tả Hero</label><textarea name="hero_subtitle">${escapeHTML(s.hero_subtitle || '')}</textarea></div>${heroSliderField(s)}${imageField('Ảnh Showroom (riêng)', 'showroom_image', s.showroom_image)}${imageField('Ảnh Giao xe tận nơi (riêng)', 'delivery_image', s.delivery_image)}${imageField('Ảnh trang trả góp', 'installment_image', s.installment_image)}${imageField('Ảnh khuyến mại mặc định', 'promo_image', s.promo_image)}<div class="form-two"><div class="field"><label>Tiêu đề giao xe</label><input name="delivery_title" value="${escapeHTML(s.delivery_title || '')}"></div><div class="field"><label>Nội dung giao xe</label><textarea name="delivery_text">${escapeHTML(s.delivery_text || '')}</textarea></div></div></fieldset>
-      <fieldset class="fieldset"><legend>Trang trả góp</legend><div class="field"><label>Tiêu đề trả góp</label><textarea name="installment_title">${escapeHTML(s.installment_title || '')}</textarea></div><div class="field"><label>Nội dung trả góp</label><textarea name="installment_text">${escapeHTML(s.installment_text || '')}</textarea></div><div class="field"><label>Giấy tờ / thủ tục</label><textarea name="installment_docs">${escapeHTML(s.installment_docs || '')}</textarea></div><div class="field"><label>Mức trả trước gợi ý (mỗi dòng một lựa chọn)</label><textarea name="installment_down_payments">${escapeHTML(s.installment_down_payments || '')}</textarea></div><div class="field"><label>Các bước thủ tục (mỗi dòng: Tiêu đề | Mô tả)</label><textarea name="installment_steps">${escapeHTML(s.installment_steps || '')}</textarea></div><div class="field"><label>Câu hỏi thường gặp (mỗi dòng: Câu hỏi | Trả lời)</label><textarea name="installment_faqs">${escapeHTML(s.installment_faqs || '')}</textarea></div></fieldset>
-      <button class="btn btn-primary">Lưu giao diện & nội dung</button></form>`;
-    $$('.site-image-file', main).forEach(input => input.onchange = async () => { try { const url = await uploadFile(input.files[0]); $(`[name="${input.dataset.field}"]`, main).value = url; if (input.dataset.field === 'share_image') { const preview=$('#sharePreviewImage', main); if(preview) preview.style.backgroundImage=`url("${url.replace(/"/g,'%22')}")`; } notify('Đã tải ảnh'); } catch (error) { notify(error.message); } });
-    bindHeroSliderAdmin(main, s);
-    $('#logoFile', main).onchange = async event => { try { const url = await uploadFile(event.target.files[0]); $('[name="logo_url"]', main).value = url; $('[name="favicon_url"]', main).value = url; notify('Đã tải logo'); } catch (error) { notify(error.message); } };
-    $('#faviconFile', main).onchange = async event => { try { $('[name="favicon_url"]', main).value = await uploadFile(event.target.files[0]); notify('Đã tải favicon'); } catch (error) { notify(error.message); } };
-    const preview = () => { const draft = Object.fromEntries(new FormData($('#siteForm', main)).entries()); setSiteTheme({ ...state.site, ...draft }); $('#bodySizeOut').value = `${draft.body_font_size}px`; $('#headingScaleOut').value = `${draft.heading_scale}x`; $('#lineHeightOut').value = draft.body_line_height; $('#radiusOut').value = `${draft.corner_radius}px`; };
-    ['bodySize','headingScale','lineHeight','cornerRadius'].forEach(id => $(`#${id}`, main).addEventListener('input', preview)); ['body_font','heading_font','primary_color','accent_color','background_color','text_color'].forEach(name => $(`[name="${name}"]`, main).addEventListener('change', preview)); preview();
-    const updateSharePreview = () => { const title=$('[name="share_title"]',main)?.value || $('[name="page_title"]',main)?.value || ''; const desc=$('[name="share_description"]',main)?.value || ''; const image=$('[name="share_image"]',main)?.value || $('[name="hero_image"]',main)?.value || ''; const t=$('#sharePreviewTitle',main), d=$('#sharePreviewDescription',main), i=$('#sharePreviewImage',main); if(t)t.textContent=title; if(d)d.textContent=desc; if(i&&image)i.style.backgroundImage=`url("${image.replace(/"/g,'%22')}")`; };
-    ['share_title','share_description','share_image'].forEach(name => $(`[name="${name}"]`,main)?.addEventListener('input', updateSharePreview)); updateSharePreview();
-    $('#siteForm', main).onsubmit = async event => { event.preventDefault(); try { await saveSiteForm(event.target, [], 'Đã lưu giao diện và nội dung website.'); } catch (error) { notify(error.message); } };
-  }
-  async function adminContacts(main) {
-    const data = await request('/api/admin/site'); const s = data.site;
-    main.innerHTML = `<div class="admin-page-head"><div><span>Thông tin liên hệ</span><h1 class="admin-title">Liên hệ & nút nổi</h1><p class="admin-sub">Tự chọn icon mặc định, tải icon riêng, màu nút, kiểu bo góc và nút nào được nhấp nháy.</p></div><div class="admin-page-badge">Nút nổi thực tế</div></div>
-      <form id="contactsForm" class="admin-product-form admin-pro-form"><fieldset class="fieldset"><legend>Liên hệ & mạng xã hội</legend><div class="form-three"><div class="field"><label>Hotline</label><input name="hotline" value="${escapeHTML(s.hotline || '')}"></div><div class="field"><label>Email</label><input name="support_email" value="${escapeHTML(s.support_email || '')}"></div><div class="field"><label>Địa chỉ</label><input name="address" value="${escapeHTML(s.address || '')}"></div><div class="field"><label>Zalo URL</label><input name="zalo_url" value="${escapeHTML(s.zalo_url || '')}" placeholder="https://zalo.me/..."></div><div class="field"><label>Messenger URL</label><input name="messenger_url" value="${escapeHTML(s.messenger_url || '')}" placeholder="https://m.me/..."></div><div class="field"><label>Facebook URL</label><input name="facebook_url" value="${escapeHTML(s.facebook_url || '')}" placeholder="https://facebook.com/..."></div><div class="field"><label>TikTok URL</label><input name="tiktok_url" value="${escapeHTML(s.tiktok_url || '')}" placeholder="https://tiktok.com/@..."></div><div class="field"><label>YouTube URL</label><input name="youtube_url" value="${escapeHTML(s.youtube_url || '')}" placeholder="https://youtube.com/..."></div><div class="field"><label>Google Map embed URL</label><input name="map_embed_url" value="${escapeHTML(s.map_embed_url || '')}"></div><div class="field full"><label>Giờ làm việc</label><textarea name="business_hours">${escapeHTML(s.business_hours || '')}</textarea></div></div></fieldset>
-      <fieldset class="fieldset"><legend>Nút nổi & hiệu ứng nhấp nháy</legend><div class="form-three"><div class="field"><label>Nút nhấp nháy chính</label><select name="floating_primary_action"><option value="call" ${s.floating_primary_action==='call'||!s.floating_primary_action?'selected':''}>Gọi ngay</option><option value="zalo" ${s.floating_primary_action==='zalo'?'selected':''}>Zalo</option><option value="chat" ${s.floating_primary_action==='chat'?'selected':''}>Chat trực tuyến</option></select></div><div class="field"><label>Tốc độ nhấp nháy</label><select name="floating_pulse_speed"><option value="slow" ${s.floating_pulse_speed==='slow'?'selected':''}>Chậm, nhẹ</option><option value="normal" ${!s.floating_pulse_speed||s.floating_pulse_speed==='normal'?'selected':''}>Vừa</option><option value="fast" ${s.floating_pulse_speed==='fast'?'selected':''}>Nhanh</option></select></div><div class="field"><label>Hiệu ứng</label><label class="switch-row"><input name="floating_pulse_enabled" type="checkbox" ${s.floating_pulse_enabled!==false?'checked':''}><span> Bật nhấp nháy thật</span></label></div></div><div class="check-row floating-settings"><label><input name="floating_show_zalo" type="checkbox" ${s.floating_show_zalo!==false?'checked':''}> Hiện Zalo</label><label><input name="floating_show_messenger" type="checkbox" ${s.floating_show_messenger!==false?'checked':''}> Hiện Messenger</label><label><input name="floating_show_facebook" type="checkbox" ${s.floating_show_facebook?'checked':''}> Hiện Facebook</label><label><input name="floating_show_tiktok" type="checkbox" ${s.floating_show_tiktok?'checked':''}> Hiện TikTok</label><label><input name="floating_show_chat" type="checkbox" ${s.floating_show_chat!==false?'checked':''}> Hiện Chat</label></div><div class="dock-config-grid">${iconConfigCard('call','Gọi ngay','Hotline trên thiết bị khách',s)}${iconConfigCard('zalo','Zalo','Mở trực tiếp Zalo',s)}${iconConfigCard('messenger','Messenger','Mở hội thoại Messenger',s)}${iconConfigCard('facebook','Facebook','Đi đến Fanpage',s)}${iconConfigCard('tiktok','TikTok','Đi đến TikTok',s)}${iconConfigCard('chat','Chat tư vấn','Mở chat ngay trên website',s)}</div><div class="form-two"><div class="field"><label>Nhãn nút gọi</label><input name="floating_call_label" value="${escapeHTML(s.floating_call_label || 'Gọi ngay')}"></div><div class="field"><label>Nhãn nút chat</label><input name="floating_chat_label" value="${escapeHTML(s.floating_chat_label || 'Tư vấn')}"></div></div></fieldset><button class="btn btn-primary">Lưu liên hệ & nút nổi</button></form>`;
-    $$('.floating-icon-upload', main).forEach(input => input.onchange = async () => { try { const url=await uploadFile(input.files[0]); $(`[name="${input.dataset.field}"]`, main).value=url; const preview=$(`[data-preview="${input.dataset.field}"]`, main); if(preview) preview.src=url; notify('Đã tải icon riêng.'); } catch(error){ notify(error.message); } });
-    $('#contactsForm', main).onsubmit = async event => { event.preventDefault(); try { await saveSiteForm(event.target, ['floating_show_zalo','floating_show_messenger','floating_show_facebook','floating_show_tiktok','floating_show_chat','floating_pulse_enabled'], 'Đã lưu liên hệ và nút nổi.'); } catch(error) { notify(error.message); } };
-  }
-  async function adminNotices(main) {
-    const data = await request('/api/admin/site');
-    const s = data.site;
-    const examples = String(s.notice_items || 'Tâm An|Khám phá {xe} tại showroom hôm nay.\nƯu đãi|Liên hệ để nhận tư vấn trả góp và quà tặng hiện hành.');
-    main.innerHTML = `<div class="admin-page-head"><div><span>Nội dung nổi bật</span><h1 class="admin-title">Thông báo luân phiên</h1><p class="admin-sub">Tạo các thông báo chạy tự động trên website. Mục này hiển thị dưới nhãn “Thông báo nổi bật”; dùng nội dung đúng với chương trình và thông tin showroom của bạn.</p></div><div class="admin-page-badge">Tự động luân phiên</div></div>
-      <form id="noticeForm" class="admin-product-form admin-pro-form">
-        <fieldset class="fieldset"><legend>Bật và hiển thị</legend><div class="form-three">
-          <div class="field"><label class="admin-check"><input name="notice_enabled" type="checkbox" ${s.notice_enabled ? 'checked' : ''}><span>✓</span> Hiện thông báo ngoài website</label></div>
-          <div class="field"><label>Tiêu đề nhãn</label><input name="notice_title" value="${escapeHTML(s.notice_title || 'Thông báo nổi bật')}" maxlength="48"></div>
-          <div class="field"><label>Vị trí</label><select name="notice_position"><option value="left" ${(!s.notice_position || s.notice_position === 'left') ? 'selected' : ''}>Góc trái phía dưới</option><option value="right" ${s.notice_position === 'right' ? 'selected' : ''}>Góc phải phía dưới</option><option value="center" ${s.notice_position === 'center' ? 'selected' : ''}>Giữa đáy màn hình</option></select></div>
-          <div class="field"><label>Tốc độ chuyển (giây)</label><input name="notice_interval_seconds" type="number" min="3" max="30" value="${Math.round(Number(s.notice_interval || 6000) / 1000)}"></div>
-        </div></fieldset>
-        <fieldset class="fieldset"><legend>Nội dung thông báo</legend>
-          <div class="field"><label>Mỗi dòng một thông báo</label><textarea name="notice_items" rows="8" placeholder="Nhãn | Nội dung">${escapeHTML(examples)}</textarea><small class="field-help">Cú pháp: <b>Nhãn | Nội dung</b>. Có thể dùng <code>{xe}</code> để tự chèn tên xe đang có trong kho. Ví dụ: <code>Ưu đãi | {xe} đang có hỗ trợ tư vấn trả góp.</code></small></div>
-          <div class="notice-admin-preview"><span>HIỂN THỊ MẪU</span><div class="notice-preview-card"><i>✦</i><div><b id="noticePreviewTitle">${escapeHTML(s.notice_title || 'Thông báo nổi bật')}</b><p id="noticePreviewContent"></p></div></div></div>
-        </fieldset>
-        <button class="btn btn-primary">Lưu thông báo nổi bật</button>
-      </form>`;
-    const form = $('#noticeForm', main);
-    const content = $('#noticePreviewContent', main);
-    const title = $('#noticePreviewTitle', main);
-    const preview = () => {
-      const rows = String($('[name="notice_items"]', form).value || '').split('\n').map(v => v.trim()).filter(Boolean);
-      const first = rows[0] || 'Tâm An | Chưa có nội dung thông báo.';
-      const parts = first.split('|').map(v => v.trim());
-      const label = parts.length > 1 ? parts.shift() : 'Tâm An';
-      const body = parts.join('|') || first;
-      title.textContent = $('[name="notice_title"]', form).value || 'Thông báo nổi bật';
-      content.textContent = `${label}: ${body.replace(/\{xe\}/gi, 'Tên xe trong kho')}`;
+    const renderSpecs = () => {
+      $('#accessorySpecRows', modal).innerHTML = specs.map((spec, index) => `<div class="accessory-spec-row"><input class="accessory-spec-label" data-index="${index}" value="${escapeHTML(spec.label)}" placeholder="Tên thông số"><input class="accessory-spec-value" data-index="${index}" value="${escapeHTML(spec.value)}" placeholder="Giá trị"><button type="button" class="small-btn danger remove-accessory-spec" data-index="${index}">×</button></div>`).join('') || '<p class="muted">Chưa có thông số. Nhấn “Thêm thông số” để bắt đầu.</p>';
+      $$('.remove-accessory-spec', modal).forEach(button => button.onclick = () => { specs.splice(Number(button.dataset.index), 1); renderSpecs(); });
     };
-    $('[name="notice_items"]', form).addEventListener('input', preview);
-    $('[name="notice_title"]', form).addEventListener('input', preview);
-    preview();
+    $('#accessoryImagesFile', modal).onchange = async event => { const files = Array.from(event.target.files || []); if (!files.length) return; event.target.disabled = true; try { for (const file of files) images.push(await uploadFile(file)); renderImages(); } catch (error) { notify(error.message); } finally { event.target.disabled = false; event.target.value = ''; } };
+    $('#addAccessoryImageUrl', modal).onclick = () => { const input = $('#accessoryImageUrl', modal); const url = input.value.trim(); if (!url) return; images.push(url); input.value = ''; renderImages(); };
+    $('#addAccessorySpec', modal).onclick = () => { specs.push({ label:'', value:'' }); renderSpecs(); };
+    renderImages(); renderSpecs();
     form.onsubmit = async event => {
       event.preventDefault();
       const fd = new FormData(form);
       const body = Object.fromEntries(fd.entries());
-      body.notice_enabled = fd.get('notice_enabled') === 'on';
-      body.notice_interval = Math.max(3, Math.min(30, Number(body.notice_interval_seconds || 6))) * 1000;
-      delete body.notice_interval_seconds;
-      try {
-        const out = await request('/api/admin/site', { method:'PUT', body });
-        state.site = out.site;
-        notify('Đã lưu thông báo nổi bật.');
-      } catch (error) { notify(error.message); }
+      body.published = fd.get('published') === 'on';
+      body.images = images;
+      body.image_url = images[0] || '';
+      body.specifications = $$('.accessory-spec-row', modal).map(row => ({ label:$('.accessory-spec-label', row)?.value || '', value:$('.accessory-spec-value', row)?.value || '' })).filter(spec => spec.label.trim() && spec.value.trim());
+      try { await request(accessory ? `/api/admin/accessories/${a.id}` : '/api/admin/accessories', { method:accessory ? 'PUT' : 'POST', body }); notify('Đã lưu phụ kiện'); modal.remove(); document.body.classList.remove('modal-open'); loadAdminTab('accessories'); } catch (error) { notify(error.message); }
     };
-  }
-
-  async function adminMarketingAi(main) {
-    const [siteData, aiData] = await Promise.all([request('/api/admin/site'), request('/api/admin/ai/status').catch(error => ({ error:error.message }))]); const s=siteData.site;
-    const legacyModels = ['gemini-2.0-flash-lite', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'];
-    const provider = s.ai_provider || 'cloudflare';
-    const displayAiModel = provider === 'cloudflare'
-      ? (String(s.ai_model || '').startsWith('@cf/') ? s.ai_model : '@cf/aisingapore/gemma-sea-lion-v4-27b-it')
-      : (legacyModels.includes(String(s.ai_model || '').trim()) || !s.ai_model ? 'gemini-3.1-flash-lite' : s.ai_model);
-    const modelLabel = provider === 'cloudflare' ? 'Model Cloudflare Workers AI' : provider === 'webhook' ? 'Tên model/ghi chú webhook' : 'Model Gemini';
-    const status = aiData.error ? `<div class="ai-health ai-health-error"><b>Không đọc được trạng thái AI</b><span>${escapeHTML(aiData.error)}</span></div>` : `<div class="ai-health ${aiData.key_configured ? 'ai-health-ready' : 'ai-health-warn'}"><b>${aiData.key_configured ? 'AI đã được cấu hình' : 'AI chưa được cấu hình'}</b><span>Nhà cung cấp: ${escapeHTML(aiData.provider || 'cloudflare')} • Model: ${escapeHTML(aiData.model || '')} • Chatbot: ${aiData.enabled ? 'đang bật' : 'đang tắt'}</span></div>`;
-    main.innerHTML = `<div class="admin-page-head"><div><span>Quảng cáo & tự động hoá</span><h1 class="admin-title">Pixel & Chatbot AI</h1><p class="admin-sub">Đặt Meta Pixel, TikTok Pixel và cấu hình AI ở một nơi riêng. API key luôn đặt trong Cloudflare Secret, không dán vào website.</p></div><div class="admin-page-badge">Bảo mật key</div></div>${status}<form id="marketingForm" class="admin-product-form admin-pro-form"><fieldset class="fieldset"><legend>Đo lường quảng cáo</legend><div class="form-two"><div class="field"><label>Meta / Facebook Pixel ID</label><input name="meta_pixel_id" value="${escapeHTML(s.meta_pixel_id || '')}" placeholder="Ví dụ: 123456789..."><small class="field-help">Website ghi PageView, xem xe và gửi form sau khi Pixel được cấu hình.</small></div><div class="field"><label>TikTok Pixel ID</label><input name="tiktok_pixel_id" value="${escapeHTML(s.tiktok_pixel_id || '')}" placeholder="Ví dụ: CXXXX..."><small class="field-help">Chỉ nhập Pixel ID, không nhập access token.</small></div></div></fieldset><fieldset class="fieldset"><legend>Chatbot AI</legend><div class="form-three"><div class="field"><label>Tên chatbot</label><input name="ai_name" value="${escapeHTML(s.ai_name || 'Tâm An AI')}"></div><div class="field"><label>Nhà cung cấp</label><select name="ai_provider"><option value="cloudflare" ${provider==='cloudflare'?'selected':''}>Cloudflare Workers AI</option><option value="gemini" ${provider==='gemini'?'selected':''}>Gemini API</option><option value="webhook" ${provider==='webhook'?'selected':''}>Webhook / chatbot bên khác</option></select></div><div class="field"><label>${modelLabel}</label><input name="ai_model" value="${escapeHTML(displayAiModel)}" placeholder="@cf/aisingapore/gemma-sea-lion-v4-27b-it"></div></div><label class="admin-check"><input name="ai_enabled" type="checkbox" ${s.ai_enabled?'checked':''}><span>✓</span> Bật chatbot tự động khi chưa có nhân viên nhận chat</label><div class="field"><label>Lời chào chatbot</label><textarea name="ai_greeting">${escapeHTML(s.ai_greeting || '')}</textarea></div><div class="field"><label>Kiến thức chatbot</label><textarea name="ai_knowledge">${escapeHTML(s.ai_knowledge || '')}</textarea></div><div class="field"><label>Từ khoá chuyển nhân viên (ngăn cách bằng dấu phẩy)</label><input name="ai_handoff_words" value="${escapeHTML(s.ai_handoff_words || '')}"></div><div class="ai-action-row"><button type="button" id="aiTestButton" class="btn btn-dark">Kiểm tra kết nối AI</button><span id="aiTestResult" class="muted">Cloudflare Workers AI không cần Gemini key. Cần có binding AI trong wrangler.jsonc.</span></div><p class="muted">Cloudflare Workers AI dùng binding <code>AI</code> trong <code>wrangler.jsonc</code>. Gemini dùng Secret <code>GEMINI_API_KEY</code>. Chatbot bên khác dùng Secret <code>AI_WEBHOOK_URL</code>.</p></fieldset><button class="btn btn-primary">Lưu Pixel & Chatbot AI</button></form>`;
-    $('#marketingForm',main).onsubmit = async event => { event.preventDefault(); try { await saveSiteForm(event.target,['ai_enabled'],'Đã lưu Pixel & Chatbot AI.'); } catch(error){ notify(error.message); } };
-    $('#aiTestButton',main).onclick = async () => { const button=$('#aiTestButton',main), result=$('#aiTestResult',main); button.disabled=true; button.textContent='Đang kiểm tra…'; result.textContent='Worker đang gửi một câu thử tới nhà cung cấp AI.'; try { const out=await request('/api/admin/ai/test',{method:'POST'}); result.textContent=`Kết nối thành công (${out.model}): ${String(out.reply || '').slice(0,160)}`; result.className='ai-test-success'; } catch(error) { result.textContent=`Chưa kết nối được: ${error.message}`; result.className='ai-test-error'; } finally { button.disabled=false; button.textContent='Kiểm tra kết nối AI'; } };
-  }
-
-  async function adminPolicies(main) {
-    const data = await request('/api/admin/policies');
-    main.innerHTML = `<div class="admin-toolbar"><div><h1 class="admin-title">Chính sách & bài viết</h1><p class="admin-sub">Viết nội dung chính sách hiển thị tại website.</p></div><button class="btn btn-primary" id="addPolicy">+ Viết bài</button></div><div class="admin-card"><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Tiêu đề</th><th>Slug</th><th>Hiển thị</th><th></th></tr></thead><tbody>${data.policies.map(p => `<tr><td><b>${escapeHTML(p.title)}</b></td><td>${escapeHTML(p.slug)}</td><td>${p.published ? 'Có' : 'Ẩn'}</td><td><button class="small-btn edit-policy" data-id="${p.id}">Sửa</button><button class="small-btn danger delete-policy" data-id="${p.id}">Xoá</button></td></tr>`).join('')}</tbody></table></div></div>`;
-    $('#addPolicy').onclick = () => openPolicyEditor();
-    $$('.edit-policy').forEach(button => button.onclick = () => openPolicyEditor(data.policies.find(p => p.id === Number(button.dataset.id))));
-    $$('.delete-policy').forEach(button => button.onclick = async () => { if (!confirm('Xoá bài này?')) return; try { await request(`/api/admin/policies/${button.dataset.id}`, { method:'DELETE' }); adminPolicies(main); } catch (error) { notify(error.message); } });
-  }
-  function openPolicyEditor(policy) {
-    const p = policy || { published:true };
-    const modal = adminModal(policy ? 'Sửa bài chính sách' : 'Viết bài chính sách', `<form id="policyForm" class="admin-product-form"><div class="field"><label>Tiêu đề</label><input name="title" required value="${escapeHTML(p.title || '')}"></div><div class="field"><label>Slug</label><input name="slug" value="${escapeHTML(p.slug || '')}"></div><div class="field"><label>Nội dung</label><textarea name="content" style="min-height:260px">${escapeHTML(p.content || '')}</textarea></div><label><input name="published" type="checkbox" ${p.published !== 0 ? 'checked' : ''}> Hiển thị</label><button class="btn btn-primary">Lưu bài viết</button></form>`);
-    $('#policyForm', modal).onsubmit = async event => { event.preventDefault(); const fd = new FormData(event.target); const body = Object.fromEntries(fd.entries()); body.published = fd.get('published') === 'on'; try { await request(policy ? `/api/admin/policies/${p.id}` : '/api/admin/policies', { method:policy ? 'PUT' : 'POST', body }); notify('Đã lưu bài viết'); modal.remove(); document.body.classList.remove('modal-open'); loadAdminTab('policies'); } catch (error) { notify(error.message); } };
   }
 
   async function adminLeads(main) {
@@ -1651,7 +1591,7 @@
     async function load() {
       const qs = new URLSearchParams(); if ($('#leadStatus').value) qs.set('status', $('#leadStatus').value); if ($('#leadFrom').value) qs.set('from', $('#leadFrom').value); if ($('#leadTo').value) qs.set('to', $('#leadTo').value);
       const data = await request(`/api/admin/leads?${qs}`);
-      $('#leadRows').innerHTML = `<div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Khách</th><th>Nội dung</th><th>Ngày</th><th>Nhân viên</th><th>Trạng thái</th><th></th></tr></thead><tbody>${data.leads.map(lead => `<tr><td><b>${escapeHTML(lead.name)}</b><br><a href="tel:${escapeHTML(lead.phone)}">${escapeHTML(lead.phone)}</a></td><td><b>${escapeHTML(lead.type)}</b><br><span class="lead-payment">${escapeHTML(paymentPlanLabel(lead.payment_plan))}${lead.down_payment ? ` • ${escapeHTML(lead.down_payment)}` : ''}</span>${lead.note ? `<br><span class="muted">${escapeHTML(lead.note)}</span>` : ''}</td><td>${escapeHTML(vietnamTime(lead.created_at))}</td><td>${state.admin.role === 'admin' ? `<select class="lead-assignee" data-id="${lead.id}"><option value="">Chưa gán</option>${users.filter(u => u.role === 'employee').map(u => `<option value="${u.id}" ${lead.assigned_to === u.id ? 'selected' : ''}>${escapeHTML(u.full_name)}</option>`).join('')}</select>` : escapeHTML(lead.assigned_name || '')}</td><td><div class="status-editor"><select class="lead-state" data-id="${lead.id}"><option value="new" ${lead.status === 'new' ? 'selected' : ''}>Chưa xử lý</option><option value="in_progress" ${lead.status === 'in_progress' ? 'selected' : ''}>Đang xử lý</option><option value="done" ${lead.status === 'done' ? 'selected' : ''}>✓ Đã xong</option></select>${lead.status === 'done' ? `<button class="small-btn reopen-lead" data-id="${lead.id}">↻ Mở lại</button>` : ''}</div></td><td>${state.admin.role === 'admin' ? `<button class="small-btn danger delete-lead" data-id="${lead.id}">Xoá</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="admin-empty">Chưa có form phù hợp.</td></tr>'}</tbody></table></div>`;
+      $('#leadRows').innerHTML = `<div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Khách</th><th>Nội dung</th><th>Ngày</th><th>Nhân viên</th><th>Trạng thái</th><th></th></tr></thead><tbody>${data.leads.map(lead => `<tr><td><b>${escapeHTML(lead.name)}</b><br><a href="tel:${escapeHTML(lead.phone)}">${escapeHTML(lead.phone)}</a></td><td><b>${escapeHTML(lead.accessory_name ? `Phụ kiện: ${lead.accessory_name}` : (lead.product_name ? `Xe: ${lead.product_name}` : lead.type))}</b>${lead.type === 'accessory_consultation' ? '<br><span class="lead-payment">Yêu cầu phụ kiện</span>' : `<br><span class="lead-payment">${escapeHTML(paymentPlanLabel(lead.payment_plan))}${lead.down_payment ? ` • ${escapeHTML(lead.down_payment)}` : ''}</span>`}${lead.note ? `<br><span class="muted">${escapeHTML(lead.note)}</span>` : ''}</td><td>${escapeHTML(vietnamTime(lead.created_at))}</td><td>${state.admin.role === 'admin' ? `<select class="lead-assignee" data-id="${lead.id}"><option value="">Chưa gán</option>${users.filter(u => u.role === 'employee').map(u => `<option value="${u.id}" ${lead.assigned_to === u.id ? 'selected' : ''}>${escapeHTML(u.full_name)}</option>`).join('')}</select>` : escapeHTML(lead.assigned_name || '')}</td><td><div class="status-editor"><select class="lead-state" data-id="${lead.id}"><option value="new" ${lead.status === 'new' ? 'selected' : ''}>Chưa xử lý</option><option value="in_progress" ${lead.status === 'in_progress' ? 'selected' : ''}>Đang xử lý</option><option value="done" ${lead.status === 'done' ? 'selected' : ''}>✓ Đã xong</option></select>${lead.status === 'done' ? `<button class="small-btn reopen-lead" data-id="${lead.id}">↻ Mở lại</button>` : ''}</div></td><td>${state.admin.role === 'admin' ? `<button class="small-btn danger delete-lead" data-id="${lead.id}">Xoá</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="admin-empty">Chưa có form phù hợp.</td></tr>'}</tbody></table></div>`;
       $$('.lead-state').forEach(select => select.onchange = async () => { const row = select.closest('tr'); const payload = { status:select.value }; if (state.admin.role === 'admin') payload.assigned_to = $('.lead-assignee', row)?.value || null; try { await request(`/api/admin/leads/${select.dataset.id}`, { method:'PUT', body:payload }); notify('Đã cập nhật'); } catch (error) { notify(error.message); } });
       $$('.lead-assignee').forEach(select => select.onchange = async () => { const row = select.closest('tr'); const status = $('.lead-state', row).value; try { await request(`/api/admin/leads/${select.dataset.id}`, { method:'PUT', body:{ status, assigned_to:select.value || null } }); notify('Đã gán nhân viên'); } catch (error) { notify(error.message); } });
       $$('.reopen-lead').forEach(button => button.onclick = async () => { try { await request(`/api/admin/leads/${button.dataset.id}`, { method:'PUT', body:{ status:'in_progress' } }); notify('Đã mở lại form để xử lý'); load(); } catch (error) { notify(error.message); } });
@@ -2277,6 +2217,29 @@
     return groups;
   };
 
+  // V14: related landing cards. Each card is a real landing URL so its own Pixel
+  // receives ViewContent / Lead data when the visitor continues to another model.
+  function landingRelatedCollectionsMarkup(currentCollection) {
+    const all = publicCollections().filter(item => item.slug !== currentCollection.slug);
+    const sameCategory = all.filter(item => item.category === currentCollection.category);
+    const otherCategory = all.filter(item => item.category !== currentCollection.category);
+    const related = [...sameCategory, ...otherCategory].slice(0, 6);
+    if (!related.length) return '';
+    const cards = related.map(item => {
+      const items = productsInCollection(item);
+      const image = item.image_url || productImage(items[0] || {}) || '';
+      const count = items.length;
+      return `<a class="landing-related-card" href="${escapeHTML(collectionUrl(item))}">
+        <span class="landing-related-image"><img src="${escapeHTML(image)}" alt="${escapeHTML(item.title)}"></span>
+        <span class="landing-related-copy"><small>${escapeHTML(categoryLabel(item.category))}</small><b>${escapeHTML(item.title)}</b><em>${count ? `${count} mẫu đang hiển thị` : 'Khám phá mẫu xe'} <i aria-hidden="true">→</i></em></span>
+      </a>`;
+    }).join('');
+    return `<section class="landing-related-models"><div class="container">
+      <div class="landing-related-head"><div><span>KHÁM PHÁ THÊM</span><h2>Xem thêm các mẫu xe khác</h2><p>Khám phá thêm các dòng xe đang có. Mỗi mẫu có trang riêng để xem xe, màu và gửi yêu cầu tư vấn.</p></div><a href="/#inventory" class="landing-related-all">Xem toàn bộ kho xe <i aria-hidden="true">→</i></a></div>
+      <div class="landing-related-grid">${cards}</div>
+    </div></section>`;
+  }
+
   renderCollectionPage = function(collection) {
     document.body.classList.remove('ta-admin-active');
     const products = state.products.filter(product => product.published !== 0 && product.collection_slug === collection.slug && product.category === collection.category);
@@ -2305,6 +2268,7 @@
           <form id="collectionLandingLead" class="form-grid landing-lead-form"><input type="hidden" name="collection_name" value="${escapeHTML(collection.title)}"><div class="landing-contact-row"><div class="field"><label>Họ và tên *</label><input name="name" autocomplete="name" required placeholder="Họ và tên"></div><div class="field"><label>Số điện thoại *</label><input name="phone" required inputmode="tel" autocomplete="tel" placeholder="Số điện thoại"></div></div>${products.length ? `<div class="field full"><label>Mẫu xe đang quan tâm</label><select name="product_id"><option value="">Chưa chọn mẫu cụ thể</option>${productOptions}</select></div>` : ''}${paymentIntentFields()}<div class="field full landing-note-field"><label>Nhu cầu cần tư vấn <span class="muted">(không bắt buộc)</span></label><textarea name="note" placeholder="Màu xe, giá lăn bánh, trả góp…"></textarea></div>${locationConsentField()}${consultationConsentField()}<div class="field full landing-submit-wrap"><button class="btn btn-primary landing-submit">Gửi yêu cầu tư vấn</button><small class="landing-form-note">Tâm An chỉ dùng thông tin để phản hồi yêu cầu của bạn.</small></div></form>
         </aside>
       </div></section>
+      ${landingRelatedCollectionsMarkup(collection)}
       <section class="landing-reassurance"><div class="container"><div><b>Thông tin theo kho thực tế</b><span>Màu và tình trạng xe được cập nhật theo từng mẫu.</span></div><div><b>Không bỏ lỡ ưu đãi</b><span>Nhân viên báo giá, quà tặng và hồ sơ trả góp hiện hành.</span></div><div><b>Hỗ trợ khu vực</b><span>Có thể nhập khu vực hoặc chủ động chia sẻ vị trí gần đúng.</span></div></div></section>
     </main>${footer()}${floatingButtons()}`;
     $('#menuBtn')?.addEventListener('click', () => $('#mainNav')?.classList.toggle('mobile-open'));
