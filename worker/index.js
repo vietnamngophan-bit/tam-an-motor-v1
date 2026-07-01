@@ -104,10 +104,10 @@ CREATE TABLE IF NOT EXISTS site_settings (id INTEGER PRIMARY KEY CHECK (id=1), d
 CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, full_name TEXT NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'employee', active INTEGER NOT NULL DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL, name TEXT NOT NULL, brand TEXT, category TEXT NOT NULL, collection_slug TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'in_stock', price INTEGER, old_price INTEGER, year INTEGER, mileage INTEGER, engine TEXT, documents TEXT, description TEXT, installment_from INTEGER, bad_debt_from INTEGER, images_json TEXT NOT NULL DEFAULT '[]', colors_json TEXT NOT NULL DEFAULT '[]', versions_json TEXT NOT NULL DEFAULT '[]', featured INTEGER NOT NULL DEFAULT 0, published INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_by INTEGER, updated_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS promotions (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, content TEXT, image_url TEXT, active INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS accessories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, price INTEGER, image_url TEXT, description TEXT, published INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS accessories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, price INTEGER, image_url TEXT, images_json TEXT NOT NULL DEFAULT '[]', description TEXT, specifications_json TEXT NOT NULL DEFAULT '[]', compatibility TEXT, warranty TEXT, stock_status TEXT NOT NULL DEFAULT 'in_stock', published INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS landing_collections (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL, title TEXT NOT NULL, category TEXT NOT NULL DEFAULT 'motor_new', description TEXT, image_url TEXT, meta_pixel_id TEXT NOT NULL DEFAULT '', tiktok_pixel_id TEXT NOT NULL DEFAULT '', pixel_mode TEXT NOT NULL DEFAULT 'inherit', visible INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS policies (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL, published INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS leads (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL DEFAULT 'consultation', name TEXT NOT NULL, phone TEXT NOT NULL, note TEXT, payment_plan TEXT, down_payment TEXT, location_text TEXT, product_id INTEGER, status TEXT NOT NULL DEFAULT 'new', assigned_to INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS leads (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL DEFAULT 'consultation', name TEXT NOT NULL, phone TEXT NOT NULL, note TEXT, payment_plan TEXT, down_payment TEXT, location_text TEXT, product_id INTEGER, accessory_id INTEGER, status TEXT NOT NULL DEFAULT 'new', assigned_to INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS conversations (id INTEGER PRIMARY KEY AUTOINCREMENT, visitor_key TEXT UNIQUE NOT NULL, visitor_name TEXT, status TEXT NOT NULL DEFAULT 'open', assigned_to INTEGER, ai_count INTEGER NOT NULL DEFAULT 0, ai_day TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS chat_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id INTEGER NOT NULL, sender_type TEXT NOT NULL, sender_name TEXT, body TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, actor_id INTEGER, actor_name TEXT, action TEXT NOT NULL, entity_type TEXT, entity_id TEXT, detail TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -150,6 +150,16 @@ async function ensureLeadColumns(env) {
   if (!cols.has('payment_plan')) await env.DB.exec('ALTER TABLE leads ADD COLUMN payment_plan TEXT');
   if (!cols.has('down_payment')) await env.DB.exec('ALTER TABLE leads ADD COLUMN down_payment TEXT');
   if (!cols.has('location_text')) await env.DB.exec('ALTER TABLE leads ADD COLUMN location_text TEXT');
+  if (!cols.has('accessory_id')) await env.DB.exec('ALTER TABLE leads ADD COLUMN accessory_id INTEGER');
+}
+async function ensureAccessoryColumns(env) {
+  const info = await env.DB.prepare('PRAGMA table_info(accessories)').all();
+  const cols = new Set((info.results || []).map(row => row.name));
+  if (!cols.has('images_json')) await env.DB.exec("ALTER TABLE accessories ADD COLUMN images_json TEXT NOT NULL DEFAULT '[]'");
+  if (!cols.has('specifications_json')) await env.DB.exec("ALTER TABLE accessories ADD COLUMN specifications_json TEXT NOT NULL DEFAULT '[]'");
+  if (!cols.has('compatibility')) await env.DB.exec('ALTER TABLE accessories ADD COLUMN compatibility TEXT');
+  if (!cols.has('warranty')) await env.DB.exec('ALTER TABLE accessories ADD COLUMN warranty TEXT');
+  if (!cols.has('stock_status')) await env.DB.exec("ALTER TABLE accessories ADD COLUMN stock_status TEXT NOT NULL DEFAULT 'in_stock'");
 }
 async function ensureProductColumns(env) {
   const info = await env.DB.prepare('PRAGMA table_info(products)').all();
@@ -169,6 +179,7 @@ async function ensureSchema(env) {
   if (!initPromise) initPromise = (async () => {
     await env.DB.exec(SCHEMA);
     await ensureLeadColumns(env);
+    await ensureAccessoryColumns(env);
     await ensureProductColumns(env);
     await ensureCollectionColumns(env);
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_products_collection ON products(collection_slug, published, status)');
@@ -272,6 +283,35 @@ function productOut(row) {
     versions:parseJSON(row.versions_json,[]).map(normalizeInventoryVersion),
   };
 }
+function accessoryOut(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    price: row.price == null ? null : Number(row.price),
+    images: parseJSON(row.images_json, []),
+    specifications: parseJSON(row.specifications_json, []).map(item => ({
+      label: safeStr(item?.label || item?.name, 120),
+      value: safeStr(item?.value, 300)
+    })).filter(item => item.label && item.value),
+    compatibility: safeStr(row.compatibility, 500),
+    warranty: safeStr(row.warranty, 300),
+    stock_status: ['in_stock','incoming','out_of_stock'].includes(row.stock_status) ? row.stock_status : 'in_stock'
+  };
+}
+function accessoryPayload(raw = {}) {
+  const name = safeStr(raw.name, 160); if (!name) throw new Error('Tên phụ kiện là bắt buộc.');
+  const images = Array.isArray(raw.images) ? raw.images.filter(item => typeof item === 'string' && item.trim()).map(item => safeStr(item, 1000)).slice(0, 12) : [];
+  const specifications = Array.isArray(raw.specifications) ? raw.specifications.map(item => ({ label:safeStr(item?.label || item?.name,120), value:safeStr(item?.value,300) })).filter(item => item.label && item.value).slice(0, 24) : [];
+  const image_url = safeStr(raw.image_url, 1000) || images[0] || '';
+  if (image_url && !images.includes(image_url)) images.unshift(image_url);
+  return {
+    name, price:asNumber(raw.price), image_url:images[0] || image_url, images,
+    description:safeStr(raw.description, 12000), specifications,
+    compatibility:safeStr(raw.compatibility,500), warranty:safeStr(raw.warranty,300),
+    stock_status:['in_stock','incoming','out_of_stock'].includes(raw.stock_status) ? raw.stock_status : 'in_stock',
+    published:raw.published === false ? 0 : 1, sort_order:asNumber(raw.sort_order) || 0
+  };
+}
 async function productPayload(req) {
   const b = await req.json();
   const name = safeStr(b.name,160); if (!name) throw new Error('Tên xe là bắt buộc.');
@@ -328,7 +368,7 @@ async function sendNotificationEmail(env, subject, html) {
 async function sendLeadEmail(env, site, lead) {
   const subject = `[Tâm An] Form mới: ${lead.type}`;
   const planName = {cash:'Trả thẳng',installment:'Trả góp',bad_debt:'Hồ sơ có nợ xấu / cần kiểm tra'}[lead.payment_plan] || 'Chưa chọn';
-  const html = `<h2>Khách để lại form tư vấn</h2><p><b>Họ tên:</b> ${escapeHtml(lead.name)}</p><p><b>SĐT:</b> ${escapeHtml(lead.phone)}</p><p><b>Dự kiến thanh toán:</b> ${escapeHtml(planName)}${lead.down_payment ? ` — ${escapeHtml(lead.down_payment)}` : ''}</p>${lead.location_text ? `<p><b>Khu vực / vị trí:</b> ${escapeHtml(lead.location_text)}</p>` : ''}<p><b>Nội dung:</b> ${escapeHtml(lead.note||'')}</p>`;
+  const html = `<h2>Khách để lại form tư vấn</h2><p><b>Họ tên:</b> ${escapeHtml(lead.name)}</p><p><b>SĐT:</b> ${escapeHtml(lead.phone)}</p>${lead.item_name ? `<p><b>Phụ kiện quan tâm:</b> ${escapeHtml(lead.item_name)}</p>` : ''}${lead.type === 'accessory_consultation' ? '' : `<p><b>Dự kiến thanh toán:</b> ${escapeHtml(planName)}${lead.down_payment ? ` — ${escapeHtml(lead.down_payment)}` : ''}</p>`}${lead.location_text ? `<p><b>Khu vực / vị trí:</b> ${escapeHtml(lead.location_text)}</p>` : ''}<p><b>Nội dung:</b> ${escapeHtml(lead.note||'')}</p>`;
   await sendNotificationEmail(env, subject, html);
 }
 async function sendChatEmail(env, conversation, body) {
@@ -351,7 +391,7 @@ async function publicApi(req, env, url) {
       env.DB.prepare('SELECT id,slug,title,sort_order FROM policies WHERE published=1 ORDER BY sort_order,id').all(),
       env.DB.prepare("SELECT c.*,COUNT(p.id) product_count FROM landing_collections c LEFT JOIN products p ON p.collection_slug=c.slug AND p.category=c.category AND p.published=1 WHERE c.visible=1 GROUP BY c.id ORDER BY c.sort_order,c.id").all(),
     ]);
-    return json({ok:true,site,categories:cats.results||[],promotions:promos.results||[],accessories:accessories.results||[],policies:policies.results||[],collections:collections.results||[]});
+    return json({ok:true,site,categories:cats.results||[],promotions:promos.results||[],accessories:(accessories.results||[]).map(accessoryOut),policies:policies.results||[],collections:collections.results||[]});
   }
   if (url.pathname === '/api/products') {
     const category=q(url,'category'); const collection=q(url,'collection'); const search=safeStr(q(url,'search'),100).toLowerCase(); const status=q(url,'status');
@@ -385,15 +425,19 @@ async function publicApi(req, env, url) {
   }
   if (url.pathname === '/api/leads' && req.method==='POST') {
     const b=await req.json(); const name=safeStr(b.name,120), phone=safeStr(b.phone,40); if(!name||!phone)return json({ok:false,error:'Vui lòng nhập họ tên và số điện thoại.'},400);
-    const note=safeStr(b.note,3000); const type=safeStr(b.type,80)||'consultation'; const productId=asNumber(b.product_id);
+    const note=safeStr(b.note,3000); const type=safeStr(b.type,80)||'consultation'; const productId=asNumber(b.product_id); const accessoryId=asNumber(b.accessory_id);
     const paymentPlan=['cash','installment','bad_debt'].includes(b.payment_plan) ? b.payment_plan : '';
     const downPayment=paymentPlan==='installment' ? safeStr(b.down_payment,120) : '';
     const locationText=safeStr(b.location_text,500);
-    if (!paymentPlan) return json({ok:false,error:'Vui lòng chọn dự kiến thanh toán.'},400);
-    if (paymentPlan==='installment' && !downPayment) return json({ok:false,error:'Vui lòng chọn mức trả trước dự kiến.'},400);
-    const r=await env.DB.prepare('INSERT INTO leads(type,name,phone,note,payment_plan,down_payment,location_text,product_id) VALUES (?,?,?,?,?,?,?,?)').bind(type,name,phone,note,paymentPlan,downPayment,locationText,productId).run();
-    await log(env,{name:'Khách'},'Khách gửi form tư vấn','lead',r.meta.last_row_id,`${name} • ${phone}${locationText ? ` • ${locationText}` : ''}`);
-    const site=await getSite(env); await sendLeadEmail(env,site,{type,name,phone,note,payment_plan:paymentPlan,down_payment:downPayment,location_text:locationText});
+    let accessoryName='';
+    if (accessoryId) { const accessory=await env.DB.prepare('SELECT name FROM accessories WHERE id=?').bind(accessoryId).first(); if (!accessory) return json({ok:false,error:'Phụ kiện này không còn tồn tại.'},404); accessoryName=safeStr(accessory.name,160); }
+    const isAccessory = type === 'accessory_consultation' || Boolean(accessoryId);
+    if (!isAccessory && !paymentPlan) return json({ok:false,error:'Vui lòng chọn dự kiến thanh toán.'},400);
+    if (!isAccessory && paymentPlan==='installment' && !downPayment) return json({ok:false,error:'Vui lòng chọn mức trả trước dự kiến.'},400);
+    const r=await env.DB.prepare('INSERT INTO leads(type,name,phone,note,payment_plan,down_payment,location_text,product_id,accessory_id) VALUES (?,?,?,?,?,?,?,?,?)').bind(type,name,phone,note,paymentPlan,downPayment,locationText,productId,accessoryId).run();
+    const detail=`${name} • ${phone}${accessoryName ? ` • Phụ kiện: ${accessoryName}` : ''}${locationText ? ` • ${locationText}` : ''}`;
+    await log(env,{name:'Khách'},'Khách gửi form tư vấn','lead',r.meta.last_row_id,detail);
+    const site=await getSite(env); await sendLeadEmail(env,site,{type,name,phone,note,payment_plan:paymentPlan,down_payment:downPayment,location_text:locationText,item_name:accessoryName});
     return json({ok:true,id:r.meta.last_row_id,message:'Tâm An đã nhận thông tin. Nhân viên sẽ liên hệ sớm.'});
   }
   if (url.pathname === '/api/chat/start' && req.method==='POST') {
@@ -756,18 +800,18 @@ async function adminApi(req, env, url, user) {
   const promoMatch=url.pathname.match(/^\/api\/admin\/promotions\/(\d+)$/);
   if(promoMatch){if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được quản lý khuyến mại.'},403);const id=Number(promoMatch[1]);if(req.method==='PUT'){const b=await req.json();await env.DB.prepare('UPDATE promotions SET title=?,content=?,image_url=?,active=?,sort_order=? WHERE id=?').bind(safeStr(b.title,160),safeStr(b.content,4000),safeStr(b.image_url,1000),b.active?1:0,asNumber(b.sort_order)||0,id).run();await log(env,user,'Cập nhật khuyến mại','promotion',id);return json({ok:true});}if(req.method==='DELETE'){await env.DB.prepare('DELETE FROM promotions WHERE id=?').bind(id).run();await log(env,user,'Xoá khuyến mại','promotion',id);return json({ok:true});}}
   if(url.pathname==='/api/admin/accessories'){
-    if(req.method==='GET')return json({ok:true,accessories:(await env.DB.prepare('SELECT * FROM accessories ORDER BY sort_order,id DESC').all()).results||[]});
-    if(req.method==='POST'){if(!can(user,'product:create'))return json({ok:false,error:'Bạn không có quyền.'},403);const b=await req.json();const r=await env.DB.prepare('INSERT INTO accessories(name,price,image_url,description,published,sort_order) VALUES (?,?,?,?,?,?)').bind(safeStr(b.name,160),asNumber(b.price),safeStr(b.image_url,1000),safeStr(b.description,3000),b.published===false?0:1,asNumber(b.sort_order)||0).run();await log(env,user,'Thêm phụ kiện','accessory',r.meta.last_row_id);return json({ok:true,id:r.meta.last_row_id});}
+    if(req.method==='GET'){const rows=(await env.DB.prepare('SELECT * FROM accessories ORDER BY sort_order,id DESC').all()).results||[];return json({ok:true,accessories:rows.map(accessoryOut)});}
+    if(req.method==='POST'){if(!can(user,'product:create'))return json({ok:false,error:'Bạn không có quyền.'},403);const b=await req.json();let a;try{a=accessoryPayload(b);}catch(error){return json({ok:false,error:error.message},400);}const r=await env.DB.prepare('INSERT INTO accessories(name,price,image_url,images_json,description,specifications_json,compatibility,warranty,stock_status,published,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)').bind(a.name,a.price,a.image_url,JSON.stringify(a.images),a.description,JSON.stringify(a.specifications),a.compatibility,a.warranty,a.stock_status,a.published,a.sort_order).run();await log(env,user,'Thêm phụ kiện','accessory',r.meta.last_row_id,a.name);return json({ok:true,id:r.meta.last_row_id});}
   }
   const accMatch=url.pathname.match(/^\/api\/admin\/accessories\/(\d+)$/);
-  if(accMatch){const id=Number(accMatch[1]);if(req.method==='PUT'){if(!can(user,'product:update'))return json({ok:false,error:'Bạn không có quyền.'},403);const b=await req.json();await env.DB.prepare('UPDATE accessories SET name=?,price=?,image_url=?,description=?,published=?,sort_order=? WHERE id=?').bind(safeStr(b.name,160),asNumber(b.price),safeStr(b.image_url,1000),safeStr(b.description,3000),b.published===false?0:1,asNumber(b.sort_order)||0,id).run();await log(env,user,'Cập nhật phụ kiện','accessory',id);return json({ok:true});}if(req.method==='DELETE'){if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được xoá.'},403);await env.DB.prepare('DELETE FROM accessories WHERE id=?').bind(id).run();await log(env,user,'Xoá phụ kiện','accessory',id);return json({ok:true});}}
+  if(accMatch){const id=Number(accMatch[1]);if(req.method==='PUT'){if(!can(user,'product:update'))return json({ok:false,error:'Bạn không có quyền.'},403);const b=await req.json();let a;try{a=accessoryPayload(b);}catch(error){return json({ok:false,error:error.message},400);}await env.DB.prepare('UPDATE accessories SET name=?,price=?,image_url=?,images_json=?,description=?,specifications_json=?,compatibility=?,warranty=?,stock_status=?,published=?,sort_order=? WHERE id=?').bind(a.name,a.price,a.image_url,JSON.stringify(a.images),a.description,JSON.stringify(a.specifications),a.compatibility,a.warranty,a.stock_status,a.published,a.sort_order,id).run();await log(env,user,'Cập nhật phụ kiện','accessory',id,a.name);return json({ok:true});}if(req.method==='DELETE'){if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được xoá.'},403);await env.DB.prepare('DELETE FROM accessories WHERE id=?').bind(id).run();await log(env,user,'Xoá phụ kiện','accessory',id);return json({ok:true});}}
   if(url.pathname==='/api/admin/policies'){
     if(req.method==='GET')return json({ok:true,policies:(await env.DB.prepare('SELECT * FROM policies ORDER BY sort_order,id').all()).results||[]});
     if(req.method==='POST'){if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được quản lý chính sách.'},403);const b=await req.json();const title=safeStr(b.title,160);if(!title)return json({ok:false,error:'Nhập tiêu đề.'},400);const r=await env.DB.prepare('INSERT INTO policies(slug,title,content,published,sort_order) VALUES (?,?,?,?,?)').bind(await uniquePolicySlug(env,slugify(b.slug||title)),title,safeStr(b.content,10000),b.published===false?0:1,asNumber(b.sort_order)||0).run();await log(env,user,'Thêm bài chính sách','policy',r.meta.last_row_id,title);return json({ok:true,id:r.meta.last_row_id});}
   }
   const polMatch=url.pathname.match(/^\/api\/admin\/policies\/(\d+)$/);
   if(polMatch){if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được quản lý chính sách.'},403);const id=Number(polMatch[1]);if(req.method==='PUT'){const b=await req.json();const title=safeStr(b.title,160);await env.DB.prepare('UPDATE policies SET slug=?,title=?,content=?,published=?,sort_order=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(await uniquePolicySlug(env,slugify(b.slug||title),id),title,safeStr(b.content,10000),b.published===false?0:1,asNumber(b.sort_order)||0,id).run();await log(env,user,'Cập nhật bài chính sách','policy',id,title);return json({ok:true});}if(req.method==='DELETE'){await env.DB.prepare('DELETE FROM policies WHERE id=?').bind(id).run();await log(env,user,'Xoá bài chính sách','policy',id);return json({ok:true});}}
-  if(url.pathname==='/api/admin/leads'&&req.method==='GET'){const params=[];let sql='SELECT l.*,u.full_name assigned_name FROM leads l LEFT JOIN users u ON u.id=l.assigned_to WHERE 1=1';if(q(url,'status')){sql+=' AND l.status=?';params.push(q(url,'status'));}if(q(url,'from')){sql+=" AND date(l.created_at, '+7 hours')>=date(?)";params.push(q(url,'from'));}if(q(url,'to')){sql+=" AND date(l.created_at, '+7 hours')<=date(?)";params.push(q(url,'to'));}if(q(url,'assigned_to')){sql+=' AND l.assigned_to=?';params.push(Number(q(url,'assigned_to')));}sql+=' ORDER BY l.updated_at DESC,l.id DESC';return json({ok:true,leads:(await env.DB.prepare(sql).bind(...params).all()).results||[]});}
+  if(url.pathname==='/api/admin/leads'&&req.method==='GET'){const params=[];let sql='SELECT l.*,u.full_name assigned_name,p.name product_name,a.name accessory_name FROM leads l LEFT JOIN users u ON u.id=l.assigned_to LEFT JOIN products p ON p.id=l.product_id LEFT JOIN accessories a ON a.id=l.accessory_id WHERE 1=1';if(q(url,'status')){sql+=' AND l.status=?';params.push(q(url,'status'));}if(q(url,'from')){sql+=" AND date(l.created_at, '+7 hours')>=date(?)";params.push(q(url,'from'));}if(q(url,'to')){sql+=" AND date(l.created_at, '+7 hours')<=date(?)";params.push(q(url,'to'));}if(q(url,'assigned_to')){sql+=' AND l.assigned_to=?';params.push(Number(q(url,'assigned_to')));}sql+=' ORDER BY l.updated_at DESC,l.id DESC';return json({ok:true,leads:(await env.DB.prepare(sql).bind(...params).all()).results||[]});}
   const leadMatch=url.pathname.match(/^\/api\/admin\/leads\/(\d+)$/);
   if(leadMatch){const id=Number(leadMatch[1]);if(req.method==='PUT'){if(!can(user,'lead:update'))return json({ok:false,error:'Bạn không có quyền.'},403);const b=await req.json();const existing=await env.DB.prepare('SELECT assigned_to,status FROM leads WHERE id=?').bind(id).first();if(!existing)return json({ok:false,error:'Không tìm thấy form.'},404);if(existing.status==='done')return json({ok:false,error:'Form đã hoàn tất và chỉ có thể xem lại.'},409);const assigned=Object.prototype.hasOwnProperty.call(b,'assigned_to')?asNumber(b.assigned_to):existing.assigned_to??null;const status=['new','in_progress','done'].includes(b.status)?b.status:'new';await env.DB.prepare('UPDATE leads SET status=?,assigned_to=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(status,assigned,id).run();await log(env,user,'Cập nhật form khách','lead',id,status);return json({ok:true});}if(req.method==='DELETE'){if(user.role!=='admin')return json({ok:false,error:'Chỉ admin được xoá form.'},403);await env.DB.prepare('DELETE FROM leads WHERE id=?').bind(id).run();await log(env,user,'Xoá form khách','lead',id);return json({ok:true});}}
   if(url.pathname==='/api/admin/conversations'&&req.method==='GET'){const params=[];let sql='SELECT c.*,u.full_name assigned_name,(SELECT body FROM chat_messages m WHERE m.conversation_id=c.id ORDER BY id DESC LIMIT 1) last_message FROM conversations c LEFT JOIN users u ON u.id=c.assigned_to WHERE 1=1';if(q(url,'status')){sql+=' AND c.status=?';params.push(q(url,'status'));}if(q(url,'from')){sql+=" AND date(c.updated_at, '+7 hours')>=date(?)";params.push(q(url,'from'));}if(q(url,'to')){sql+=" AND date(c.updated_at, '+7 hours')<=date(?)";params.push(q(url,'to'));}if(q(url,'assigned_to')){sql+=' AND c.assigned_to=?';params.push(Number(q(url,'assigned_to')));}sql+=' ORDER BY c.updated_at DESC';return json({ok:true,conversations:(await env.DB.prepare(sql).bind(...params).all()).results||[]});}
