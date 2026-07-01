@@ -3013,3 +3013,102 @@ body.v11-menu-open { overflow: hidden !important; }
   .accessory-catalog-head h2{font-size:38px;}
   .accessory-catalog-head>b{display:none;}
 }
+
+
+/* ==================================================================
+   V21 — mobile product browsing: compact colour icons + swipe-all rail
+   ================================================================== */
+@media (max-width:640px){
+  /* Whole inventory: one polished card at a time, swiped horizontally. */
+  #inventory #productRow.mobile-carousel{
+    display:flex!important;
+    grid-template-columns:none!important;
+    grid-auto-flow:initial!important;
+    align-items:stretch!important;
+    gap:12px!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+    padding:2px 3px 16px!important;
+    scroll-snap-type:x mandatory!important;
+    scroll-padding-inline:3px;
+    overscroll-behavior-x:contain;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+  }
+  #inventory #productRow.mobile-carousel::-webkit-scrollbar{display:none;}
+  #inventory #productRow.mobile-carousel .product-card{
+    flex:0 0 min(82vw,330px)!important;
+    inline-size:min(82vw,330px)!important;
+    min-inline-size:min(82vw,330px)!important;
+    max-inline-size:min(82vw,330px)!important;
+    scroll-snap-align:start;
+    scroll-snap-stop:always;
+  }
+
+  /* A chosen model folder is comparison mode: clean, full-width cards. */
+  #inventory #productRow.mobile-folder-list{
+    display:grid!important;
+    grid-template-columns:1fr!important;
+    gap:12px!important;
+    overflow:visible!important;
+    padding:2px 0 0!important;
+    scroll-snap-type:none!important;
+  }
+  #inventory #productRow.mobile-folder-list .product-card{
+    inline-size:100%!important;
+    min-inline-size:0!important;
+    max-inline-size:none!important;
+  }
+
+  /* Colours are intentionally icon-only on phones. Their full names/statuses
+     remain in the accessible aria-label/title and the selected colour still
+     switches the product image. */
+  .product-card .paint-preview-row{
+    display:flex!important;
+    flex-wrap:wrap!important;
+    align-items:center!important;
+    gap:8px!important;
+    min-block-size:40px!important;
+    margin-top:12px!important;
+  }
+  .product-card .paint-preview-row .paint-preview,
+  .product-card .paint-preview-row .paint-preview:only-child{
+    display:grid!important;
+    place-items:center!important;
+    grid-template-columns:none!important;
+    inline-size:34px!important;
+    min-inline-size:34px!important;
+    block-size:34px!important;
+    min-block-size:34px!important;
+    padding:4px!important;
+    margin:0!important;
+    border:1px solid #eadfe0!important;
+    border-radius:999px!important;
+    background:#fff!important;
+    box-shadow:0 1px 2px rgba(44,15,19,.04)!important;
+  }
+  .product-card .paint-preview-row .paint-preview-copy{display:none!important;}
+  .product-card .paint-preview-row .paint-strip{
+    inline-size:22px!important;
+    min-inline-size:22px!important;
+    block-size:22px!important;
+    min-block-size:22px!important;
+    overflow:hidden!important;
+    border:1px solid rgba(25,19,20,.18)!important;
+    border-radius:999px!important;
+  }
+  .product-card .paint-preview-row .paint-strip i{min-inline-size:7px!important;}
+  .product-card .paint-preview-row .paint-preview.active{
+    border:2px solid var(--red)!important;
+    padding:3px!important;
+    box-shadow:0 0 0 3px rgba(200,25,36,.12)!important;
+  }
+  .product-card .paint-preview-row .paint-preview.stock-incoming{
+    border-color:#dba64f!important;
+    background:#fffaf0!important;
+  }
+  .product-card .paint-preview-row .paint-preview.stock-out_of_stock{
+    opacity:.38!important;
+    filter:grayscale(.2);
+  }
+}
