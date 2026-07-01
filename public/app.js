@@ -657,9 +657,11 @@
   function card(product) {
     const colors = allProductColors(product).slice(0, 8);
     const discount = product.old_price && product.price ? Math.round((1 - product.price / product.old_price) * 100) : 0;
+    const rawName = String(product.name || '').trim();
+    const nameClass = rawName.length > 34 ? 'product-name product-name-xl' : rawName.length > 24 ? 'product-name product-name-long' : 'product-name';
     return `<article class="product-card">
       <button class="product-media open-product" data-slug="${escapeHTML(product.slug)}"><img src="${escapeHTML(productImage(product))}" alt="${escapeHTML(product.name)}"><span class="status-badge">${statusName(product.status)}</span>${discount > 0 ? `<span class="discount-badge">-${discount}%</span>` : ''}</button>
-      <div class="product-body"><div class="product-meta">${escapeHTML(product.brand || 'TÂM AN')} • ${escapeHTML(categoryLabel(product.category))}</div><h3>${escapeHTML(product.name)}</h3>
+      <div class="product-body"><div class="product-meta">${escapeHTML(product.brand || 'TÂM AN')} • ${escapeHTML(categoryLabel(product.category))}</div><h3 class="${nameClass}" title="${escapeHTML(product.name)}">${escapeHTML(product.name)}</h3>
       <div class="product-details">${product.year ? `<span class="mini-tag">${product.year}</span>` : ''}${product.engine ? `<span class="mini-tag">${escapeHTML(product.engine)}</span>` : ''}</div>
       <div class="price-line">${product.price ? `<span class="price">${money(product.price)}</span>${product.old_price ? `<span class="old-price">${money(product.old_price)}</span>` : ''}` : `<span class="price-hidden">Liên hệ nhận giá</span>`}</div>
       ${colors.length ? `<div class="color-dots paint-preview-row" aria-label="Chọn màu xe">${colors.map((c, index) => `<button type="button" class="paint-preview preview-color ${colorStockClass(c)} ${index === 0 ? 'active' : ''}" data-image="${escapeHTML(c.images?.[0] || productImage(product))}" data-color-name="${escapeHTML(c.name || '')}" aria-pressed="${index === 0 ? 'true' : 'false'}" aria-label="${escapeHTML(`${c.name || 'Màu xe'} — ${colorCardStockText(c)}`)}" title="${escapeHTML(`${c.name || 'Màu xe'} — ${colorCardStockText(c)}`)}">${paletteStrip(c)}<span class="paint-preview-copy"><b>${escapeHTML(c.name)}</b><small>${escapeHTML(colorCardStockText(c))}</small></span></button>`).join('')}</div>` : ''}
@@ -1034,7 +1036,7 @@
       <section class="hero hero-slider"><div class="hero-slides" aria-hidden="true">${heroImages(s).map((url, index) => `<div class="hero-slide ${index === 0 ? 'is-active' : ''}" style="background-image:url('${escapeHTML(url)}')"></div>`).join('')}</div><div class="container hero-inner"><div class="hero-copy"><div class="eyebrow">${escapeHTML(s.brand_name)}</div><h1>${multiline(s.hero_title || 'Chọn xe ưng ý.\nLên đường an tâm.')}</h1><p>${escapeHTML(s.hero_subtitle || '')}</p><div class="hero-actions"><a class="btn btn-primary" href="/#inventory">Xem xe đang có</a><a class="btn btn-light" href="/tra-gop">Tư vấn trả góp</a></div></div></div>${heroImages(s).length > 1 ? `<div class="hero-slider-ui"><div class="hero-slider-arrows"><button id="heroPrev" class="hero-arrow" type="button" aria-label="Ảnh Hero trước">←</button><button id="heroNext" class="hero-arrow" type="button" aria-label="Ảnh Hero tiếp theo">→</button></div><div class="hero-dots">${heroImages(s).map((_, index) => `<button type="button" class="hero-dot ${index === 0 ? 'is-active' : ''}" data-hero-dot="${index}" aria-label="Xem ảnh Hero ${index + 1}"></button>`).join('')}</div></div>` : ''}</section>
       <div class="trust-strip"><div class="container"><div class="trust-grid"><div class="trust-item"><i class="trust-icon">✓</i><div><b>Thông tin rõ ràng</b><span>Giá hiển thị theo cài đặt cửa hàng.</span></div></div><div class="trust-item"><i class="trust-icon">✦</i><div><b>Hỗ trợ trả góp</b><span>Kiểm tra hồ sơ trước khi xác nhận.</span></div></div><div class="trust-item"><i class="trust-icon">⌁</i><div><b>Tình trạng cập nhật</b><span>Còn hàng, sắp về, đang giữ xe.</span></div></div><div class="trust-item"><i class="trust-icon">☎</i><div><b>Tư vấn nhanh</b><span>Gọi điện hoặc chat trực tiếp.</span></div></div></div></div></div>
       ${categoryCards ? `<section class="section"><div class="container"><div class="section-head"><div><div class="section-kicker">Khám phá kho xe</div><h2>Chọn đúng dòng xe bạn cần.</h2><p class="section-lead">Danh mục chỉ xuất hiện khi đang có sản phẩm.</p></div></div><div class="category-grid">${categoryCards}</div></div></section>` : ''}
-      <section id="inventory" class="section section-soft"><div class="container"><div class="section-head"><div><div class="section-kicker">Kho xe Tâm An</div><h2>Xe đang có & xe sắp về.</h2><p class="section-lead">Chọn nhóm xe, sau đó chọn dòng xe để xem kho nhanh hơn. Có thể gõ tên xe, hãng hoặc màu để tìm.</p></div><div class="search-box">⌕<input id="searchInput" placeholder="Tìm tên xe, hãng, màu xe…"></div></div><div class="chips" id="categoryChips"><button class="chip" data-category="">Tất cả nhóm</button>${Object.keys(CATEGORY).filter(key => counts[key] > 0).map(key => `<button class="chip" data-category="${key}">${CATEGORY[key]}</button>`).join('')}</div><div class="public-inventory-explorer"><div class="public-inventory-breadcrumb"><span>Kho xe</span><i>›</i><b id="inventoryCategoryName">Xe máy mới</b><i>›</i><strong id="inventoryFolderName">Tất cả dòng xe</strong></div><div class="public-folder-head"><div><span class="public-folder-overline">THƯ MỤC DÒNG XE</span><p id="inventoryFolderHint">Chọn Air Blade, Vision, Winner… để lọc đúng dòng xe.</p></div><a id="inventoryFolderLanding" class="public-folder-landing" href="/" hidden>Trang riêng <span>↗</span></a></div><div id="inventoryFolderRail" class="public-folder-rail" aria-label="Chọn thư mục dòng xe"></div></div><div class="section-head inventory-products-head"><p class="section-lead" id="productCount">${state.products.length} xe phù hợp</p><div class="slider-controls"><button class="icon-btn" id="slideLeft" aria-label="Xe trước">←</button><button class="icon-btn" id="slideRight" aria-label="Xe tiếp theo">→</button></div></div><div id="productRow" class="product-row">${state.products.map(card).join('') || '<div class="admin-empty">Kho xe đang được cập nhật.</div>'}</div></div></section>
+      <section id="inventory" class="section section-soft"><div class="container"><div class="section-head"><div><div class="section-kicker">Kho xe Tâm An</div><h2>Xe đang có & xe sắp về.</h2><p class="section-lead">Chọn nhóm xe, sau đó chọn dòng xe để xem kho nhanh hơn. Có thể gõ tên xe, hãng hoặc màu để tìm.</p></div><form class="search-box" id="inventorySearchForm" role="search"><button type="submit" id="inventorySearchButton" class="inventory-search-trigger" aria-label="Tìm xe">⌕</button><input id="searchInput" type="search" inputmode="search" enterkeyhint="search" autocomplete="off" placeholder="Tìm tên xe, hãng, màu xe…" aria-label="Tìm tên xe, hãng hoặc màu xe"><button type="button" id="clearInventorySearch" class="inventory-search-clear" aria-label="Xóa từ khóa" hidden>×</button></form></div><div class="chips" id="categoryChips"><button class="chip" data-category="">Tất cả nhóm</button>${Object.keys(CATEGORY).filter(key => counts[key] > 0).map(key => `<button class="chip" data-category="${key}">${CATEGORY[key]}</button>`).join('')}</div><div class="public-inventory-explorer"><div class="public-inventory-breadcrumb"><span>Kho xe</span><i>›</i><b id="inventoryCategoryName">Xe máy mới</b><i>›</i><strong id="inventoryFolderName">Tất cả dòng xe</strong></div><div class="public-folder-head"><div><span class="public-folder-overline">THƯ MỤC DÒNG XE</span><p id="inventoryFolderHint">Chọn Air Blade, Vision, Winner… để lọc đúng dòng xe.</p></div><a id="inventoryFolderLanding" class="public-folder-landing" href="/" hidden>Trang riêng <span>↗</span></a></div><div id="inventoryFolderRail" class="public-folder-rail" aria-label="Chọn thư mục dòng xe"></div></div><div class="section-head inventory-products-head"><p class="section-lead" id="productCount">${state.products.length} xe phù hợp</p><div class="slider-controls"><button class="icon-btn" id="slideLeft" aria-label="Xe trước">←</button><button class="icon-btn" id="slideRight" aria-label="Xe tiếp theo">→</button></div></div><div id="productRow" class="product-row">${state.products.map(card).join('') || '<div class="admin-empty">Kho xe đang được cập nhật.</div>'}</div></div></section>
       ${promoSlides ? `<section id="promo" class="section promo-section"><div class="container"><div class="section-head promo-section-head"><div><div class="section-kicker">Chương trình ưu đãi</div><h2>Nhiều ưu đãi. Chọn đúng thời điểm.</h2><p class="section-lead">Vuốt để xem từng chương trình đang áp dụng tại Tâm An.</p></div>${promotions.length > 1 ? `<div class="promo-controls"><button id="promoPrev" class="icon-btn" type="button" aria-label="Khuyến mại trước">←</button><button id="promoNext" class="icon-btn" type="button" aria-label="Khuyến mại tiếp theo">→</button></div>` : ''}</div><div class="promo-carousel" aria-label="Các chương trình khuyến mại"><div id="promoTrack" class="promo-track">${promoSlides}</div></div>${promotions.length > 1 ? `<div id="promoDots" class="promo-dots" aria-label="Chọn chương trình">${promotions.map((_, index) => `<button type="button" class="promo-dot ${index === 0 ? 'is-active' : ''}" data-promo-dot="${index}" aria-label="Xem chương trình ${index + 1}"></button>`).join('')}</div>` : ''}</div></section>` : ''}
       ${state.accessories.length ? `<section id="accessories" class="section section-soft accessory-section"><div class="container"><div class="section-head"><div><div class="section-kicker">Phụ tùng & phụ kiện</div><h2>Trang bị đúng. Đi đường yên tâm hơn.</h2><p class="section-lead">Xem ảnh, thông số, dòng xe phù hợp và gửi yêu cầu tư vấn ngay trên từng sản phẩm.</p></div><button type="button" class="text-link accessory-scroll-btn">Xem phụ kiện <span>→</span></button></div><div class="accessory-grid accessory-grid-pro">${state.accessories.map(accessoryCard).join('')}</div></div></section>` : ''}
       <section class="section"><div class="container delivery"><div class="delivery-img" style="background-image:url('${escapeHTML(s.delivery_image || s.showroom_image || '/assets/showroom.jpg')}')"></div><div class="delivery-copy"><div class="section-kicker">Dịch vụ Tâm An</div><h2>${escapeHTML(s.delivery_title || 'Hỗ trợ giao xe tận nơi')}</h2><p>${escapeHTML(s.delivery_text || '')}</p><button class="btn btn-primary lead-button" data-name="Giao xe tận nơi">Đăng ký tư vấn giao xe</button></div></div></section>
@@ -1130,7 +1132,8 @@
 
     const categoryButtons = $$('#categoryChips .chip');
     const availableCategories = Object.keys(CATEGORY).filter(key => (state.products || []).some(product => product.category === key));
-    let activeCategory = availableCategories[0] || '';
+    // Mặc định mở toàn bộ kho: khách có thể vuốt ngang tất cả xe rồi lọc theo dòng xe khi cần.
+    let activeCategory = '';
     let activeFolder = '';
 
     const folderRail = $('#inventoryFolderRail');
@@ -1185,8 +1188,18 @@
 
     const renderProducts = () => {
       const items = filteredProducts();
-      $('#productRow').innerHTML = items.map(card).join('') || '<div class="admin-empty">Không tìm thấy xe phù hợp trong mục đang chọn.</div>';
+      const row = $('#productRow');
+      if (!row) return;
+      // V22 đã có CSS rail nhưng bản trước chưa gán class này khi render, khiến
+      // điện thoại vẫn dính lưới 2 cột. Gán ngay tại đây theo trạng thái thư mục.
+      row.classList.toggle('mobile-carousel', !activeFolder);
+      row.classList.toggle('mobile-folder-list', Boolean(activeFolder));
+      row.dataset.inventoryView = activeFolder ? 'folder' : 'all';
+      row.innerHTML = items.map(card).join('') || '<div class="admin-empty">Không tìm thấy xe phù hợp trong mục đang chọn.</div>';
+      row.scrollLeft = 0;
       $('#productCount').textContent = `${items.length} xe phù hợp`;
+      const controls = $('#inventory .slider-controls');
+      if (controls) controls.hidden = Boolean(activeFolder) || items.length < 2;
       bindProductEvents();
     };
 
@@ -1198,7 +1211,22 @@
       renderProducts();
     };
 
-    $('#searchInput')?.addEventListener('input', renderProducts);
+    // Mobile keyboards do not always dispatch `input` before the visitor taps
+    // their Search key. Handle every relevant path: typing, clear icon, keyboard
+    // search action and the visible magnifying-glass button.
+    const searchInput = $('#searchInput');
+    const searchForm = $('#inventorySearchForm');
+    const clearSearch = $('#clearInventorySearch');
+    const applySearch = () => {
+      if (clearSearch) clearSearch.hidden = !String(searchInput?.value || '').trim();
+      renderProducts();
+    };
+    searchInput?.addEventListener('input', applySearch);
+    searchInput?.addEventListener('search', applySearch);
+    searchInput?.addEventListener('change', applySearch);
+    searchInput?.addEventListener('keyup', event => { if (event.key === 'Enter') applySearch(); });
+    searchForm?.addEventListener('submit', event => { event.preventDefault(); applySearch(); searchInput?.blur(); });
+    clearSearch?.addEventListener('click', () => { if (searchInput) searchInput.value = ''; applySearch(); searchInput?.focus(); });
     categoryButtons.forEach(button => button.addEventListener('click', () => chooseCategory(button.dataset.category || '')));
     $$('.filter-category').forEach(link => link.addEventListener('click', () => setTimeout(() => chooseCategory(link.dataset.category || ''), 30)));
     $('#slideLeft')?.addEventListener('click', () => $('#productRow').scrollBy({ left:-340, behavior:'smooth' }));
@@ -2676,12 +2704,33 @@
       const items = productFilter();
       const row = $('#productRow');
       if (row) {
-        // Mobile behaviour: browsing the whole inventory is a swipeable rail.
-        // Once a visitor chooses a specific folder (Air Blade, Vision, Winner…),
-        // products become full-width cards for easier comparison.
-        row.classList.toggle('mobile-carousel', !activeFolder);
-        row.classList.toggle('mobile-folder-list', Boolean(activeFolder));
+        // Mobile behaviour: browsing the whole inventory is a true swipe rail.
+        // A selected line (Air Blade, Vision, Winner…) deliberately switches
+        // back to one full-width product per row for focused comparison.
+        const isPhone = window.matchMedia('(max-width: 760px)').matches;
+        const useMobileRail = isPhone && !activeFolder;
+        row.classList.toggle('mobile-carousel', useMobileRail);
+        row.classList.toggle('mobile-folder-list', isPhone && Boolean(activeFolder));
+        row.classList.toggle('mobile-desktop-grid', !isPhone);
         row.innerHTML = items.map(card).join('') || '<div class="admin-empty">Không tìm thấy xe phù hợp.</div>';
+
+        // Last safety net for customers who still have an old cached stylesheet.
+        // It forces the All Vehicles mode out of the previous two-column layout.
+        if (useMobileRail) {
+          row.style.setProperty('display', 'flex', 'important');
+          row.style.setProperty('overflow-x', 'auto', 'important');
+          row.style.setProperty('overflow-y', 'hidden', 'important');
+          row.style.setProperty('grid-template-columns', 'none', 'important');
+          row.style.setProperty('grid-auto-flow', 'initial', 'important');
+        } else {
+          ['display','overflow-x','overflow-y','grid-template-columns','grid-auto-flow'].forEach(prop => row.style.removeProperty(prop));
+        }
+      }
+      const controls = $('#inventory .slider-controls');
+      if (controls) {
+        const showRailControls = window.matchMedia('(max-width: 760px)').matches && !activeFolder;
+        controls.hidden = !showRailControls;
+        controls.setAttribute('aria-hidden', showRailControls ? 'false' : 'true');
       }
       const count = $('#productCount');
       if (count) count.textContent = `${items.length} xe phù hợp`;
@@ -2729,8 +2778,24 @@
       inventory?.scrollIntoView({ behavior:'smooth', block:'start' });
     }));
     $('#clearInventoryFolder')?.addEventListener('click', () => selectCategory(activeCategory));
-    $('#slideLeft')?.addEventListener('click', () => $('#productRow')?.scrollBy({ left:-340, behavior:'smooth' }));
-    $('#slideRight')?.addEventListener('click', () => $('#productRow')?.scrollBy({ left:340, behavior:'smooth' }));
+    const scrollProductRail = direction => {
+      const row = $('#productRow');
+      if (!row) return;
+      const cardWidth = $('.product-card', row)?.getBoundingClientRect().width || 280;
+      row.scrollBy({ left: direction * (cardWidth + 14), behavior:'smooth' });
+    };
+    $('#slideLeft')?.addEventListener('click', () => scrollProductRail(-1));
+    $('#slideRight')?.addEventListener('click', () => scrollProductRail(1));
+    // Re-evaluate when a phone rotates; All Vehicles must never return to a grid.
+    window.__tamAnInventoryRender = renderProducts;
+    if (!window.__tamAnInventoryResizeBound) {
+      let resizeTimer;
+      window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => window.__tamAnInventoryRender?.(), 120);
+      }, { passive:true });
+      window.__tamAnInventoryResizeBound = true;
+    }
     $('#backTop')?.addEventListener('click', () => window.scrollTo({ top:0, behavior:'smooth' }));
     window.addEventListener('scroll', () => $('#backTop')?.classList.toggle('show', window.scrollY > 400), { passive:true });
     $$('.footer-links [data-policy]').forEach(link => link.addEventListener('click', event => { event.preventDefault(); openPolicy(link.dataset.policy); }));
