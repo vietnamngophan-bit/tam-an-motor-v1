@@ -3264,3 +3264,54 @@
 
   boot();
 })();
+
+/* ==================================================================
+   V18 — stronger public image deterrence
+   Stops the browser context menu at WINDOW capture phase on every
+   public page (Admin is intentionally excluded), and makes all public
+   <img> nodes non-interactive so browser image menus / long-press menus
+   do not target the raw image element.
+   ================================================================== */
+(function initTamAnStrongPublicImageGuard(){
+  if (window.__tamAnStrongPublicImageGuardV18) return;
+  window.__tamAnStrongPublicImageGuardV18 = true;
+
+  const isPublicPage = () => {
+    const app = document.querySelector('#app');
+    return Boolean(app) && !app.classList.contains('admin-wrap');
+  };
+
+  const stopNativeMenu = (event) => {
+    if (!isPublicPage()) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    return false;
+  };
+
+  // Window capture runs before document/element handlers. This is broader
+  // than V17's selector-only guard, so it also covers product photos,
+  // banners, gallery images and newly rendered images.
+  window.addEventListener('contextmenu', stopNativeMenu, true);
+  document.addEventListener('contextmenu', stopNativeMenu, true);
+
+  // Block image dragging and image-only long press / selection in every
+  // dynamically rendered public section without affecting Admin uploads.
+  const stopIfPublicMedia = (event) => {
+    if (!isPublicPage()) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest('img, picture, source, .public-image-shield')) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  };
+  window.addEventListener('dragstart', stopIfPublicMedia, true);
+  window.addEventListener('selectstart', stopIfPublicMedia, true);
+
+  // Some older mobile browsers inspect these legacy properties directly.
+  // Assigning them keeps the normal admin workflow untouched.
+  document.addEventListener('DOMContentLoaded', () => {
+    if (!isPublicPage()) return;
+    document.oncontextmenu = stopNativeMenu;
+    document.body && (document.body.oncontextmenu = stopNativeMenu);
+  }, { once:true });
+})();
